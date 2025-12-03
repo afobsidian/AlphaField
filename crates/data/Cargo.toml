@@ -1,0 +1,23 @@
+[package]
+name = "alphafield-data"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+alphafield-core = { path = "../core" }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+dotenvy = "0.15"
+hmac = "0.12"
+sha2 = "0.10"
+hex = "0.4"
+
+[[bin]]
+name = "data-demo"
+path = "src/bin/demo.rs"

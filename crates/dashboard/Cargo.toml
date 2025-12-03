@@ -1,0 +1,7 @@
+[package]
+name = "alphafield-dashboard"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+alphafield-core = { path = "../core" }

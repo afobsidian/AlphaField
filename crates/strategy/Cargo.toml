@@ -1,0 +1,14 @@
+[package]
+name = "alphafield-strategy"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+alphafield-core = { path = "../core" }
+alphafield-data = { path = "../data" }
+serde = { workspace = true }
+thiserror = { workspace = true }
+log = "0.4"
+tokio = { workspace = true }
+dotenvy = "0.15"
+chrono = { workspace = true }

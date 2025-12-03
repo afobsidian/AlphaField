@@ -1,0 +1,10 @@
+[package]
+name = "alphafield-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = "0.1.89"
+chrono = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
