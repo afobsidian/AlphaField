@@ -37,9 +37,10 @@ Contains trading logic.
 
 ### 4. Backtest (`crates/backtest`)
 Simulates strategy performance.
-- **Engine**: Replays historical data.
-- **Portfolio**: Tracks virtual account state.
-- **Matcher**: Simulates order fills.
+- **Engine**: Replays historical data (`Bar`s) and triggers strategy updates.
+- **Portfolio**: Tracks virtual account state (Cash, Positions, Equity).
+- **Matcher**: Simulates order fills with configurable slippage and fees.
+- **StrategyAdapter**: Bridges `alphafield_core::Strategy` (Signal-based) to the engine's Order-based interface.
 
 ## 🔄 Data Flow (Unified Data Layer)
 

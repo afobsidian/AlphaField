@@ -75,19 +75,19 @@ pub type Result<T> = std::result::Result<T, QuantError>;
 pub struct Bar {
     /// Timestamp of the bar (typically the opening time)
     pub timestamp: DateTime<Utc>,
-    
+
     /// Opening price
     pub open: f64,
-    
+
     /// Highest price during the period
     pub high: f64,
-    
+
     /// Lowest price during the period
     pub low: f64,
-    
+
     /// Closing price
     pub close: f64,
-    
+
     /// Trading volume during the period
     pub volume: f64,
 }
@@ -106,34 +106,35 @@ impl Bar {
     /// `Ok(())` if valid, `Err(QuantError::DataValidation)` otherwise
     pub fn validate(&self) -> Result<()> {
         if self.high < self.low {
-            return Err(QuantError::DataValidation(
-                format!("High ({}) cannot be less than Low ({})", self.high, self.low)
-            ));
+            return Err(QuantError::DataValidation(format!(
+                "High ({}) cannot be less than Low ({})",
+                self.high, self.low
+            )));
         }
 
         if self.high < self.open || self.high < self.close {
-            return Err(QuantError::DataValidation(
-                format!("High ({}) must be >= Open ({}) and Close ({})", 
-                    self.high, self.open, self.close)
-            ));
+            return Err(QuantError::DataValidation(format!(
+                "High ({}) must be >= Open ({}) and Close ({})",
+                self.high, self.open, self.close
+            )));
         }
 
         if self.low > self.open || self.low > self.close {
-            return Err(QuantError::DataValidation(
-                format!("Low ({}) must be <= Open ({}) and Close ({})", 
-                    self.low, self.open, self.close)
-            ));
+            return Err(QuantError::DataValidation(format!(
+                "Low ({}) must be <= Open ({}) and Close ({})",
+                self.low, self.open, self.close
+            )));
         }
 
         if self.open <= 0.0 || self.high <= 0.0 || self.low <= 0.0 || self.close <= 0.0 {
             return Err(QuantError::DataValidation(
-                "All prices must be positive".to_string()
+                "All prices must be positive".to_string(),
             ));
         }
 
         if self.volume < 0.0 {
             return Err(QuantError::DataValidation(
-                "Volume cannot be negative".to_string()
+                "Volume cannot be negative".to_string(),
             ));
         }
 
@@ -193,13 +194,13 @@ impl fmt::Display for Bar {
 pub struct Tick {
     /// Timestamp of the trade execution
     pub timestamp: DateTime<Utc>,
-    
+
     /// Execution price
     pub price: f64,
-    
+
     /// Trade quantity/size
     pub quantity: f64,
-    
+
     /// True if the buyer was the maker (sell-side aggressor)
     pub is_buyer_maker: bool,
 }
@@ -209,13 +210,13 @@ impl Tick {
     pub fn validate(&self) -> Result<()> {
         if self.price <= 0.0 {
             return Err(QuantError::DataValidation(
-                "Price must be positive".to_string()
+                "Price must be positive".to_string(),
             ));
         }
 
         if self.quantity <= 0.0 {
             return Err(QuantError::DataValidation(
-                "Quantity must be positive".to_string()
+                "Quantity must be positive".to_string(),
             ));
         }
 
@@ -254,16 +255,16 @@ impl fmt::Display for Tick {
 pub struct Quote {
     /// Timestamp of the quote
     pub timestamp: DateTime<Utc>,
-    
+
     /// Best bid price
     pub bid_price: f64,
-    
+
     /// Bid size/quantity
     pub bid_size: f64,
-    
+
     /// Best ask price
     pub ask_price: f64,
-    
+
     /// Ask size/quantity
     pub ask_size: f64,
 }
@@ -273,20 +274,21 @@ impl Quote {
     pub fn validate(&self) -> Result<()> {
         if self.bid_price <= 0.0 || self.ask_price <= 0.0 {
             return Err(QuantError::DataValidation(
-                "Prices must be positive".to_string()
+                "Prices must be positive".to_string(),
             ));
         }
 
         if self.bid_size < 0.0 || self.ask_size < 0.0 {
             return Err(QuantError::DataValidation(
-                "Sizes cannot be negative".to_string()
+                "Sizes cannot be negative".to_string(),
             ));
         }
 
         if self.bid_price >= self.ask_price {
-            return Err(QuantError::DataValidation(
-                format!("Bid ({}) must be less than Ask ({})", self.bid_price, self.ask_price)
-            ));
+            return Err(QuantError::DataValidation(format!(
+                "Bid ({}) must be less than Ask ({})",
+                self.bid_price, self.ask_price
+            )));
         }
 
         Ok(())
@@ -337,16 +339,16 @@ impl fmt::Display for Quote {
 pub trait FinancialInstrument {
     /// Returns the instrument's symbol/identifier
     fn symbol(&self) -> &str;
-    
+
     /// Returns the timestamp of this data point
     fn timestamp(&self) -> DateTime<Utc>;
-    
+
     /// Returns a representative price for this instrument
     /// - For bars: typically the close price
     /// - For ticks: the trade price
     /// - For quotes: the mid price
     fn price(&self) -> f64;
-    
+
     /// Validates the data integrity
     fn validate(&self) -> Result<()>;
 }
@@ -371,16 +373,16 @@ pub enum SignalType {
 pub struct Signal {
     /// Time the signal was generated
     pub timestamp: DateTime<Utc>,
-    
+
     /// Symbol the signal is for
     pub symbol: String,
-    
+
     /// Type of signal (Buy/Sell/Hold)
     pub signal_type: SignalType,
-    
+
     /// Strength/Confidence of the signal (0.0 to 1.0)
     pub strength: f64,
-    
+
     /// Optional metadata or reason for the signal
     pub metadata: Option<String>,
 }
@@ -389,15 +391,15 @@ pub struct Signal {
 pub trait Strategy {
     /// Returns the name of the strategy
     fn name(&self) -> &str;
-    
+
     /// Process a new bar and potentially return a signal
     fn on_bar(&mut self, bar: &Bar) -> Option<Signal>;
-    
+
     /// Process a new tick (optional)
     fn on_tick(&mut self, _tick: &Tick) -> Option<Signal> {
         None
     }
-    
+
     /// Process a new quote (optional)
     fn on_quote(&mut self, _quote: &Quote) -> Option<Signal> {
         None
@@ -437,25 +439,25 @@ pub enum OrderStatus {
 pub struct Order {
     /// Unique identifier for the order
     pub id: String,
-    
+
     /// Symbol to trade (e.g., "BTCUSDT")
     pub symbol: String,
-    
+
     /// Side (Buy/Sell)
     pub side: OrderSide,
-    
+
     /// Type (Market/Limit)
     pub order_type: OrderType,
-    
+
     /// Quantity to trade
     pub quantity: f64,
-    
+
     /// Limit price (None for Market orders)
     pub price: Option<f64>,
-    
+
     /// Current status
     pub status: OrderStatus,
-    
+
     /// Creation timestamp
     pub timestamp: DateTime<Utc>,
 }
@@ -465,28 +467,28 @@ pub struct Order {
 pub struct Trade {
     /// Unique trade identifier
     pub id: String,
-    
+
     /// ID of the order this trade belongs to
     pub order_id: String,
-    
+
     /// Symbol traded
     pub symbol: String,
-    
+
     /// Side (Buy/Sell)
     pub side: OrderSide,
-    
+
     /// Quantity executed
     pub quantity: f64,
-    
+
     /// Execution price
     pub price: f64,
-    
+
     /// Commission/Fee paid
     pub fee: f64,
-    
+
     /// Asset the fee was paid in
     pub fee_asset: String,
-    
+
     /// Execution timestamp
     pub timestamp: DateTime<Utc>,
 }
@@ -496,10 +498,10 @@ pub struct Trade {
 pub trait ExecutionService: Send + Sync {
     /// Submit a new order
     async fn submit_order(&self, order: &Order) -> Result<String>;
-    
+
     /// Cancel an existing order
     async fn cancel_order(&self, order_id: &str, symbol: &str) -> Result<()>;
-    
+
     /// Get current order status
     async fn get_order(&self, order_id: &str, symbol: &str) -> Result<Order>;
 }
@@ -534,7 +536,7 @@ mod tests {
         let bar = Bar {
             timestamp: Utc::now(),
             open: 50000.0,
-            high: 49000.0,  // Invalid: high < low
+            high: 49000.0, // Invalid: high < low
             low: 49500.0,
             close: 50500.0,
             volume: 1250.5,
@@ -575,7 +577,7 @@ mod tests {
     fn test_invalid_quote_crossed() {
         let quote = Quote {
             timestamp: Utc::now(),
-            bid_price: 50001.0,  // Invalid: bid >= ask
+            bid_price: 50001.0, // Invalid: bid >= ask
             bid_size: 2.5,
             ask_price: 50000.0,
             ask_size: 3.0,

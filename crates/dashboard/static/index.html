@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AlphaField Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 AlphaField Dashboard</h1>
+            <div id="status-indicator" class="status-online">Online</div>
+        </header>
+
+        <!-- Portfolio Summary -->
+        <section class="summary-cards">
+            <div class="card">
+                <h3>Total Value</h3>
+                <div class="value" id="total-value">$0.00</div>
+            </div>
+            <div class="card">
+                <h3>Cash Balance</h3>
+                <div class="value" id="cash-balance">$0.00</div>
+            </div>
+            <div class="card">
+                <h3>Total P&L</h3>
+                <div class="value" id="total-pnl">$0.00</div>
+                <div class="sub-value" id="pnl-percent">0.00%</div>
+            </div>
+            <div class="card">
+                <h3>Sharpe Ratio</h3>
+                <div class="value" id="sharpe-ratio">0.00</div>
+            </div>
+        </section>
+
+        <div class="main-grid">
+            <!-- Equity Curve Chart -->
+            <div class="card chart-card">
+                <h3>Equity Curve</h3>
+                <canvas id="equityChart"></canvas>
+            </div>
+
+            <!-- Performance Metrics -->
+            <div class="card metrics-card">
+                <h3>Performance Metrics</h3>
+                <div class="metric-row">
+                    <span>Win Rate</span>
+                    <span id="win-rate">0%</span>
+                </div>
+                <div class="metric-row">
+                    <span>Max Drawdown</span>
+                    <span id="max-drawdown">0%</span>
+                </div>
+                <div class="metric-row">
+                    <span>Total Trades</span>
+                    <span id="total-trades">0</span>
+                </div>
+                <div class="metric-row">
+                    <span>Profit Factor</span>
+                    <span id="profit-factor">0.00</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Active Positions -->
+        <section class="card">
+            <h3>Active Positions</h3>
+            <table id="positions-table">
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Quantity</th>
+                        <th>Entry Price</th>
+                        <th>Current Price</th>
+                        <th>P&L</th>
+                        <th>%</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </section>
+
+        <!-- Recent Orders -->
+        <section class="card">
+            <h3>Recent Orders</h3>
+            <table id="orders-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>ID</th>
+                        <th>Symbol</th>
+                        <th>Side</th>
+                        <th>Type</th>
+                        <th>Qty</th>
+                        <th>Price</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- Populated by JS -->
+                </tbody>
+            </table>
+        </section>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

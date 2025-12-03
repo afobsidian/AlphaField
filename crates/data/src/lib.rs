@@ -11,12 +11,15 @@
 //! - Binance: True OHLC candlesticks, volume data, multiple intervals
 
 use alphafield_core::{Bar, QuantError, Result};
-use chrono::{DateTime, NaiveDate, TimeZone, Utc};
+use chrono::{NaiveDate, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
+
+pub mod storage;
+pub use storage::HistoricalDataStorage;
 
 // ============================================================================
 // COINLAYER API CLIENT
@@ -70,10 +73,12 @@ impl CoinlayerClient {
     /// # Errors
     /// Returns an error if the environment variable is not set
     pub fn new_from_env() -> Result<Self> {
-        let api_key = std::env::var("COINLAYER_API_KEY")
-            .map_err(|_| QuantError::Api(
-                "COINLAYER_API_KEY environment variable not set. Please add it to your .env file".to_string()
-            ))?;
+        let api_key = std::env::var("COINLAYER_API_KEY").map_err(|_| {
+            QuantError::Api(
+                "COINLAYER_API_KEY environment variable not set. Please add it to your .env file"
+                    .to_string(),
+            )
+        })?;
         Ok(Self::new(api_key))
     }
 
@@ -91,13 +96,13 @@ impl CoinlayerClient {
         symbols: Option<&str>,
     ) -> Result<LiveRatesResponse> {
         let url = format!("{}/live", self.base_url);
-        
+
         let mut params = vec![("access_key", self.api_key.as_str())];
-        
+
         if let Some(t) = target {
             params.push(("target", t));
         }
-        
+
         if let Some(s) = symbols {
             params.push(("symbols", s));
         }
@@ -123,10 +128,7 @@ impl CoinlayerClient {
             .map_err(|e| QuantError::Parse(format!("Failed to parse response: {}", e)))?;
 
         if !data.success {
-            return Err(QuantError::Api(format!(
-                "API error: {:?}",
-                data.error
-            )));
+            return Err(QuantError::Api(format!("API error: {:?}", data.error)));
         }
 
         Ok(data)
@@ -148,13 +150,13 @@ impl CoinlayerClient {
         symbols: Option<&str>,
     ) -> Result<HistoricalRatesResponse> {
         let url = format!("{}/{}", self.base_url, date);
-        
+
         let mut params = vec![("access_key", self.api_key.as_str())];
-        
+
         if let Some(t) = target {
             params.push(("target", t));
         }
-        
+
         if let Some(s) = symbols {
             params.push(("symbols", s));
         }
@@ -180,10 +182,7 @@ impl CoinlayerClient {
             .map_err(|e| QuantError::Parse(format!("Failed to parse response: {}", e)))?;
 
         if !data.success {
-            return Err(QuantError::Api(format!(
-                "API error: {:?}",
-                data.error
-            )));
+            return Err(QuantError::Api(format!("API error: {:?}", data.error)));
         }
 
         Ok(data)
@@ -207,7 +206,7 @@ impl CoinlayerClient {
         date: Option<&str>,
     ) -> Result<ConversionResponse> {
         let url = format!("{}/convert", self.base_url);
-        
+
         let amount_str = amount.to_string();
         let mut params = vec![
             ("access_key", self.api_key.as_str()),
@@ -215,7 +214,7 @@ impl CoinlayerClient {
             ("to", to),
             ("amount", amount_str.as_str()),
         ];
-        
+
         if let Some(d) = date {
             params.push(("date", d));
         }
@@ -241,10 +240,7 @@ impl CoinlayerClient {
             .map_err(|e| QuantError::Parse(format!("Failed to parse response: {}", e)))?;
 
         if !data.success {
-            return Err(QuantError::Api(format!(
-                "API error: {:?}",
-                data.error
-            )));
+            return Err(QuantError::Api(format!("API error: {:?}", data.error)));
         }
 
         Ok(data)
@@ -256,7 +252,7 @@ impl CoinlayerClient {
     /// ListResponse with crypto and fiat currency information
     pub async fn get_list(&self) -> Result<ListResponse> {
         let url = format!("{}/list", self.base_url);
-        
+
         let params = vec![("access_key", self.api_key.as_str())];
 
         let response = self
@@ -280,10 +276,7 @@ impl CoinlayerClient {
             .map_err(|e| QuantError::Parse(format!("Failed to parse response: {}", e)))?;
 
         if !data.success {
-            return Err(QuantError::Api(format!(
-                "API error: {:?}",
-                data.error
-            )));
+            return Err(QuantError::Api(format!("API error: {:?}", data.error)));
         }
 
         Ok(data)
@@ -317,11 +310,14 @@ impl CoinlayerClient {
             let date = start_date + chrono::Duration::days(i as i64);
             let date_str = date.format("%Y-%m-%d").to_string();
 
-            match self.get_historical_rates(&date_str, Some(target), Some(symbol)).await {
+            match self
+                .get_historical_rates(&date_str, Some(target), Some(symbol))
+                .await
+            {
                 Ok(response) => {
                     if let Some(rate) = response.rates.get(symbol) {
                         let timestamp = Utc.from_utc_datetime(&date.and_hms_opt(0, 0, 0).unwrap());
-                        
+
                         let bar = Bar {
                             timestamp,
                             open: *rate,
@@ -330,7 +326,7 @@ impl CoinlayerClient {
                             close: *rate,
                             volume: 0.0, // Coinlayer doesn't provide volume
                         };
-                        
+
                         bars.push(bar);
                     }
                 }
@@ -451,6 +447,8 @@ pub struct CryptoInfo {
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
+/// HMAC-SHA256 type alias for signing authenticated requests
+#[allow(dead_code)]
 type HmacSha256 = Hmac<Sha256>;
 
 /// Binance API client for fetching OHLC candlestick data
@@ -475,6 +473,8 @@ pub struct BinanceClient {
     client: reqwest::Client,
     base_url: String,
     api_key: Option<String>,
+    /// Secret key for signing authenticated requests (reserved for future use)
+    #[allow(dead_code)]
     secret_key: Option<String>,
 }
 
@@ -509,14 +509,17 @@ impl BinanceClient {
         Self::new(api_key, secret_key)
     }
 
-    /// Signs a query string with HMAC-SHA256
+    /// Signs a query string with HMAC-SHA256 (reserved for authenticated endpoints)
+    #[allow(dead_code)]
     fn sign_request(&self, query: &str) -> Result<String> {
-        let secret = self.secret_key.as_ref()
+        let secret = self
+            .secret_key
+            .as_ref()
             .ok_or_else(|| QuantError::Api("Secret key required for signing".to_string()))?;
 
         let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
             .map_err(|e| QuantError::Api(format!("Failed to create HMAC: {}", e)))?;
-        
+
         mac.update(query.as_bytes());
         let result = mac.finalize();
         Ok(hex::encode(result.into_bytes()))
@@ -554,7 +557,7 @@ impl BinanceClient {
         limit: Option<u32>,
     ) -> Result<Vec<Bar>> {
         let url = format!("{}/api/v3/klines", self.base_url);
-        
+
         let mut params = vec![
             ("symbol", symbol.to_string()),
             ("interval", interval.to_string()),
@@ -608,31 +611,39 @@ impl BinanceClient {
                     )));
                 }
 
-                let open_time = kline[0].as_i64()
+                let open_time = kline[0]
+                    .as_i64()
                     .ok_or_else(|| QuantError::Parse("Invalid openTime".to_string()))?;
-                
+
                 let timestamp = Utc
                     .timestamp_millis_opt(open_time)
                     .single()
-                    .ok_or_else(|| QuantError::Parse(format!("Invalid timestamp: {}", open_time)))?;
+                    .ok_or_else(|| {
+                        QuantError::Parse(format!("Invalid timestamp: {}", open_time))
+                    })?;
 
-                let open = kline[1].as_str()
+                let open = kline[1]
+                    .as_str()
                     .and_then(|s| s.parse::<f64>().ok())
                     .ok_or_else(|| QuantError::Parse("Invalid open price".to_string()))?;
 
-                let high = kline[2].as_str()
+                let high = kline[2]
+                    .as_str()
                     .and_then(|s| s.parse::<f64>().ok())
                     .ok_or_else(|| QuantError::Parse("Invalid high price".to_string()))?;
 
-                let low = kline[3].as_str()
+                let low = kline[3]
+                    .as_str()
                     .and_then(|s| s.parse::<f64>().ok())
                     .ok_or_else(|| QuantError::Parse("Invalid low price".to_string()))?;
 
-                let close = kline[4].as_str()
+                let close = kline[4]
+                    .as_str()
                     .and_then(|s| s.parse::<f64>().ok())
                     .ok_or_else(|| QuantError::Parse("Invalid close price".to_string()))?;
 
-                let volume = kline[5].as_str()
+                let volume = kline[5]
+                    .as_str()
                     .and_then(|s| s.parse::<f64>().ok())
                     .ok_or_else(|| QuantError::Parse("Invalid volume".to_string()))?;
 
@@ -662,7 +673,7 @@ impl BinanceClient {
     /// Ticker24hrResponse with price statistics
     pub async fn get_ticker_24hr(&self, symbol: Option<&str>) -> Result<Ticker24hrResponse> {
         let url = format!("{}/api/v3/ticker/24hr", self.base_url);
-        
+
         let mut request = self.client.get(&url);
 
         if let Some(sym) = symbol {
@@ -691,15 +702,15 @@ impl BinanceClient {
                 .json::<Ticker24hr>()
                 .await
                 .map_err(|e| QuantError::Parse(format!("Failed to parse ticker: {}", e)))?;
-            
-            Ok(Ticker24hrResponse::Single(data))
+
+            Ok(Ticker24hrResponse::Single(Box::new(data)))
         } else {
             // All symbols returns array
             let data = response
                 .json::<Vec<Ticker24hr>>()
                 .await
                 .map_err(|e| QuantError::Parse(format!("Failed to parse tickers: {}", e)))?;
-            
+
             Ok(Ticker24hrResponse::Multiple(data))
         }
     }
@@ -710,7 +721,7 @@ impl BinanceClient {
     /// ExchangeInfo with all trading pairs and their details
     pub async fn get_exchange_info(&self) -> Result<ExchangeInfo> {
         let url = format!("{}/api/v3/exchangeInfo", self.base_url);
-        
+
         let mut request = self.client.get(&url);
 
         if let Some(ref key) = self.api_key {
@@ -772,7 +783,7 @@ pub struct Ticker24hr {
 /// Response from ticker/24hr endpoint
 #[derive(Debug, Clone)]
 pub enum Ticker24hrResponse {
-    Single(Ticker24hr),
+    Single(Box<Ticker24hr>),
     Multiple(Vec<Ticker24hr>),
 }
 
@@ -877,12 +888,11 @@ impl CoinGeckoClient {
     /// Fetches current price for a coin
     pub async fn get_price(&self, coin_id: &str, vs_currency: &str) -> Result<f64> {
         let url = format!("{}/simple/price", self.base_url);
-        
-        let mut request = self.client.get(&url)
-            .query(&[
-                ("ids", coin_id),
-                ("vs_currencies", vs_currency),
-            ]);
+
+        let mut request = self
+            .client
+            .get(&url)
+            .query(&[("ids", coin_id), ("vs_currencies", vs_currency)]);
 
         if let Some(ref key) = self.api_key {
             request = request.header("x-cg-pro-api-key", key);
@@ -894,7 +904,10 @@ impl CoinGeckoClient {
             .map_err(|e| QuantError::Api(format!("Request failed: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(QuantError::Api(format!("API returned status: {}", response.status())));
+            return Err(QuantError::Api(format!(
+                "API returned status: {}",
+                response.status()
+            )));
         }
 
         let data: HashMap<String, HashMap<String, f64>> = response
@@ -905,19 +918,23 @@ impl CoinGeckoClient {
         data.get(coin_id)
             .and_then(|prices| prices.get(vs_currency))
             .copied()
-            .ok_or_else(|| QuantError::Api(format!("Price not found for {} in {}", coin_id, vs_currency)))
+            .ok_or_else(|| {
+                QuantError::Api(format!(
+                    "Price not found for {} in {}",
+                    coin_id, vs_currency
+                ))
+            })
     }
 
     /// Fetches OHLC data
     /// Note: CoinGecko OHLC does not include volume
     pub async fn get_ohlc(&self, coin_id: &str, vs_currency: &str, days: u32) -> Result<Vec<Bar>> {
         let url = format!("{}/coins/{}/ohlc", self.base_url, coin_id);
-        
-        let mut request = self.client.get(&url)
-            .query(&[
-                ("vs_currency", vs_currency),
-                ("days", &days.to_string()),
-            ]);
+
+        let mut request = self
+            .client
+            .get(&url)
+            .query(&[("vs_currency", vs_currency), ("days", &days.to_string())]);
 
         if let Some(ref key) = self.api_key {
             request = request.header("x-cg-pro-api-key", key);
@@ -929,7 +946,10 @@ impl CoinGeckoClient {
             .map_err(|e| QuantError::Api(format!("Request failed: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(QuantError::Api(format!("API returned status: {}", response.status())));
+            return Err(QuantError::Api(format!(
+                "API returned status: {}",
+                response.status()
+            )));
         }
 
         // Response: [[time, open, high, low, close], ...]
@@ -948,7 +968,9 @@ impl CoinGeckoClient {
                 let timestamp = Utc
                     .timestamp_millis_opt(candle[0] as i64)
                     .single()
-                    .ok_or_else(|| QuantError::Parse(format!("Invalid timestamp: {}", candle[0])))?;
+                    .ok_or_else(|| {
+                        QuantError::Parse(format!("Invalid timestamp: {}", candle[0]))
+                    })?;
 
                 let bar = Bar {
                     timestamp,
@@ -969,7 +991,7 @@ impl CoinGeckoClient {
     /// Fetches list of all supported coins
     pub async fn get_coins_list(&self) -> Result<Vec<CoinGeckoCoin>> {
         let url = format!("{}/coins/list", self.base_url);
-        
+
         let mut request = self.client.get(&url);
 
         if let Some(ref key) = self.api_key {
@@ -982,7 +1004,10 @@ impl CoinGeckoClient {
             .map_err(|e| QuantError::Api(format!("Request failed: {}", e)))?;
 
         if !response.status().is_success() {
-            return Err(QuantError::Api(format!("API returned status: {}", response.status())));
+            return Err(QuantError::Api(format!(
+                "API returned status: {}",
+                response.status()
+            )));
         }
 
         let coins: Vec<CoinGeckoCoin> = response
@@ -1064,7 +1089,8 @@ impl ApiKeyPool {
                 }
 
                 // Update current index for round-robin
-                self.current_index.store((index + 1) % self.keys.len(), Ordering::Relaxed);
+                self.current_index
+                    .store((index + 1) % self.keys.len(), Ordering::Relaxed);
                 return Some(key.clone());
             }
 
@@ -1090,7 +1116,11 @@ pub struct RoutingConfig {
 impl Default for RoutingConfig {
     fn default() -> Self {
         Self {
-            ohlc_priority: vec![DataSource::Binance, DataSource::CoinGecko, DataSource::Coinlayer],
+            ohlc_priority: vec![
+                DataSource::Binance,
+                DataSource::CoinGecko,
+                DataSource::Coinlayer,
+            ],
             market_data_priority: vec![DataSource::CoinGecko, DataSource::Binance],
             max_retries: 3,
         }
@@ -1130,12 +1160,16 @@ impl UnifiedDataClient {
 
     fn get_keys(singular: &str, plural: &str) -> Vec<String> {
         let mut keys = Vec::new();
-        
+
         // Try plural first
         if let Ok(val) = std::env::var(plural) {
-            keys.extend(val.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()));
+            keys.extend(
+                val.split(',')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty()),
+            );
         }
-        
+
         // Try singular if empty
         if keys.is_empty() {
             if let Ok(val) = std::env::var(singular) {
@@ -1144,7 +1178,7 @@ impl UnifiedDataClient {
                 }
             }
         }
-        
+
         keys
     }
 
@@ -1164,7 +1198,7 @@ impl UnifiedDataClient {
                     let key = self.binance_keys.get_next_key();
                     // Even if no key (public API), we can try
                     let client = BinanceClient::new(key.clone(), None); // Secret not needed for public endpoints
-                    
+
                     // Map symbol (e.g., "BTC" -> "BTCUSDT") - simplified logic
                     let pair = if !symbol.contains("USDT") {
                         format!("{}USDT", symbol.to_uppercase())
@@ -1178,7 +1212,8 @@ impl UnifiedDataClient {
                             // If rate limited, mark key
                             if e.to_string().contains("429") || e.to_string().contains("418") {
                                 if let Some(k) = key {
-                                    self.binance_keys.mark_rate_limited(&k, Duration::from_secs(60));
+                                    self.binance_keys
+                                        .mark_rate_limited(&k, Duration::from_secs(60));
                                 }
                             }
                             last_error = Some(e);
@@ -1188,7 +1223,7 @@ impl UnifiedDataClient {
                 DataSource::CoinGecko => {
                     let key = self.coingecko_keys.get_next_key();
                     let client = CoinGeckoClient::new(key.clone());
-                    
+
                     // Map symbol to ID (simplified - in real app need a map)
                     let symbol_lower = symbol.to_lowercase();
                     let coin_id = match symbol_lower.as_str() {
@@ -1210,7 +1245,8 @@ impl UnifiedDataClient {
                         Err(e) => {
                             if e.to_string().contains("429") {
                                 if let Some(k) = key {
-                                    self.coingecko_keys.mark_rate_limited(&k, Duration::from_secs(60));
+                                    self.coingecko_keys
+                                        .mark_rate_limited(&k, Duration::from_secs(60));
                                 }
                             }
                             last_error = Some(e);
@@ -1220,19 +1256,23 @@ impl UnifiedDataClient {
                 DataSource::Coinlayer => {
                     if let Some(key) = self.coinlayer_keys.get_next_key() {
                         let client = CoinlayerClient::new(key);
-                        
+
                         // Coinlayer only supports daily data via historical endpoint
                         // We need to fetch multiple days. For now, let's just fetch today's rate
                         // and return it as a single bar if interval is 1d.
                         // This is a limitation of Coinlayer.
                         // For true OHLC, we need get_historical_bars which makes multiple requests.
-                        
+
                         if interval == "1d" {
                             // Calculate start date based on limit
                             let days = limit.unwrap_or(1);
-                            let start_date = Utc::now().date_naive() - chrono::Duration::days(days as i64);
-                            
-                            match client.get_historical_bars(symbol, "USD", start_date, days).await {
+                            let start_date =
+                                Utc::now().date_naive() - chrono::Duration::days(days as i64);
+
+                            match client
+                                .get_historical_bars(symbol, "USD", start_date, days)
+                                .await
+                            {
                                 Ok(bars) => return Ok(bars),
                                 Err(e) => last_error = Some(e),
                             }
@@ -1247,11 +1287,11 @@ impl UnifiedDataClient {
 
         Err(last_error.unwrap_or_else(|| QuantError::Api("All data sources failed".to_string())))
     }
-    
+
     /// Fetches current price using smart routing
     pub async fn get_price(&self, symbol: &str) -> Result<f64> {
         let mut last_error = None;
-        
+
         for source in &self.config.market_data_priority {
             match source {
                 DataSource::CoinGecko => {
@@ -1263,7 +1303,7 @@ impl UnifiedDataClient {
                         "eth" | "ethusdt" => "ethereum",
                         _ => symbol_lower.as_str(),
                     };
-                    
+
                     match client.get_price(coin_id, "usd").await {
                         Ok(price) => return Ok(price),
                         Err(e) => last_error = Some(e),
@@ -1273,7 +1313,7 @@ impl UnifiedDataClient {
                     let key = self.binance_keys.get_next_key();
                     let client = BinanceClient::new(key, None);
                     let pair = format!("{}USDT", symbol.to_uppercase());
-                    
+
                     match client.get_ticker_24hr(Some(&pair)).await {
                         Ok(Ticker24hrResponse::Single(ticker)) => {
                             if let Ok(price) = ticker.last_price.parse::<f64>() {
@@ -1289,7 +1329,8 @@ impl UnifiedDataClient {
                         let client = CoinlayerClient::new(key);
                         match client.get_live_rates(Some("USD"), Some(symbol)).await {
                             Ok(rates) => {
-                                if let Some(rate) = rates.rates.get(symbol.to_uppercase().as_str()) {
+                                if let Some(rate) = rates.rates.get(symbol.to_uppercase().as_str())
+                                {
                                     return Ok(*rate);
                                 }
                             }
@@ -1299,7 +1340,7 @@ impl UnifiedDataClient {
                 }
             }
         }
-        
+
         Err(last_error.unwrap_or_else(|| QuantError::Api("All data sources failed".to_string())))
     }
 }

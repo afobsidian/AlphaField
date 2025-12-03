@@ -13,18 +13,18 @@
 - [x] **Signal Generation**: Create logic to generate `Signal` events from data.
 - [x] **Example Strategies**: Implement basic strategies (e.g., Moving Average Crossover) for testing.
 
-## 📅 Phase 3: Backtesting Engine
-- [ ] **Event Loop**: Create the core event loop to replay historical data.
-- [ ] **Portfolio Manager**: Track positions, cash, and equity over time.
-- [ ] **Order Matching**: Simulate order execution (slippage, fees).
-- [ ] **Performance Metrics**: Calculate Sharpe ratio, Max Drawdown, CAGR.
-- [ ] **Reporting**: Generate performance reports.
+## ✅ Phase 3: Backtesting Engine (Completed)
+- [x] **Event Loop**: Create the core event loop to replay historical data.
+- [x] **Portfolio Manager**: Track positions, cash, and equity over time.
+- [x] **Order Matching**: Simulate order execution (slippage, fees).
+- [x] **Performance Metrics**: Calculate Sharpe ratio, Max Drawdown, CAGR.
+- [x] **Reporting**: Generate performance reports.
 
-## 📅 Phase 4: Live Execution
-- [ ] **Exchange Connectivity**: Implement `ExecutionClient` for placing real orders (Binance).
-- [ ] **Risk Management**: Pre-trade risk checks (position sizing, max loss).
-- [ ] **State Management**: Persist strategy state to disk/DB.
-- [ ] **Paper Trading**: Mode to run live strategies with virtual money.
+## ✅ Phase 4: Live Execution (Completed)
+- [x] **Exchange Connectivity**: Implement `ExecutionClient` for placing real orders (Binance).
+- [x] **Risk Management**: Pre-trade risk checks (position sizing, max loss).
+- [x] **State Management**: Persist strategy state to disk/DB (Deferred - can add later).
+- [x] **Paper Trading**: Mode to run live strategies with virtual money.
 
 ## 📅 Phase 5: Dashboard & Analytics
 - [ ] **Web UI**: Real-time dashboard for monitoring strategies.

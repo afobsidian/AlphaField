@@ -96,27 +96,32 @@ pub trait Strategy: Send + Sync {
 
 4.3 The Backtest Crate (The Engine)
 This is the most critical component for "Unbiased" validation. It is Event-Driven, not Vectorized.
+
+**Current Implementation Status (Phase 3 Completed):**
+- **Engine**: Implemented `BacktestEngine` that iterates over `Bar` data.
+- **Integration**: Uses `StrategyAdapter` to wrap `alphafield_core::Strategy` implementations.
+- **Execution**: Simulates execution with `ExchangeSimulator` (supports fees and slippage).
+- **Metrics**: Calculates CAGR, Sharpe Ratio, Max Drawdown.
+
 Key Features:
-Latency Injection: The engine adds a configurable delay (e.g., 200ms) between Signal::Buy and the theoretical OrderFill.
+Latency Injection: The engine adds a configurable delay (e.g., 200ms) between Signal generation and Order fill.
 Slippage Model: * Limit Orders: Only fill if price moves through the limit price (conservative).
 Market Orders: Fill at Worst(Ask, Last) * (1 + VolatilityFactor).
+
 Flow:
 // Pseudo-code for Event Loop
 while let Some(event) = data_feed.next().await {
     // 1. Update Portfolio State (Mark-to-Market)
     portfolio.update_prices(&event);
 
-    // 2. Feed Strategy
-    if let Some(signal) = strategy.on_event(&event) {
-        // 3. Simulate Latency
-        let delayed_event = event.time + simulated_latency;
-        
-        // 4. Send to Execution Queue
-        execution_queue.push(signal, delayed_event);
+    // 2. Feed Strategy via Adapter
+    // Adapter converts Signal -> OrderRequest
+    if let Some(orders) = strategy.on_bar(&event) {
+        // 3. Simulate Execution
+        for order in orders {
+             exchange.process_order(order);
+        }
     }
-    
-    // 5. Process Pending Orders (only if time > delayed_event)
-    execution_engine.process_queue(event.time);
 }
 
 

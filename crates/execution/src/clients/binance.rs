@@ -1,4 +1,6 @@
-use alphafield_core::{ExecutionService, Order, OrderSide, OrderStatus, OrderType, QuantError, Result};
+use alphafield_core::{
+    ExecutionService, Order, OrderSide, OrderStatus, OrderType, QuantError, Result,
+};
 use async_trait::async_trait;
 use chrono::Utc;
 use hmac::{Hmac, Mac};
@@ -12,6 +14,7 @@ type HmacSha256 = Hmac<Sha256>;
 pub struct BinanceExecutionClient {
     client: reqwest::Client,
     base_url: String,
+    #[allow(dead_code)] // May be needed for debugging/logging
     api_key: String,
     secret_key: String,
 }
@@ -50,17 +53,25 @@ impl BinanceExecutionClient {
 }
 
 #[derive(Deserialize)]
+#[allow(dead_code)] // Some fields are part of API contract but not used yet
 struct BinanceOrderResponse {
     symbol: String,
-    orderId: u64,
-    clientOrderId: String,
-    transactTime: u64,
+    #[serde(rename = "orderId")]
+    order_id: u64,
+    #[serde(rename = "clientOrderId")]
+    client_order_id: String,
+    #[serde(rename = "transactTime")]
+    transact_time: u64,
     price: String,
-    origQty: String,
-    executedQty: String,
-    cummulativeQuoteQty: String,
+    #[serde(rename = "origQty")]
+    orig_qty: String,
+    #[serde(rename = "executedQty")]
+    executed_qty: String,
+    #[serde(rename = "cummulativeQuoteQty")]
+    cummulative_quote_qty: String,
     status: String,
-    timeInForce: String,
+    #[serde(rename = "timeInForce")]
+    time_in_force: String,
     #[serde(rename = "type")]
     order_type: String,
     side: String,
@@ -71,12 +82,12 @@ impl ExecutionService for BinanceExecutionClient {
     async fn submit_order(&self, order: &Order) -> Result<String> {
         let endpoint = "/api/v3/order";
         let timestamp = self.get_timestamp();
-        
+
         let side = match order.side {
             OrderSide::Buy => "BUY",
             OrderSide::Sell => "SELL",
         };
-        
+
         let type_ = match order.order_type {
             OrderType::Market => "MARKET",
             OrderType::Limit => "LIMIT",
@@ -91,14 +102,21 @@ impl ExecutionService for BinanceExecutionClient {
             if let Some(price) = order.price {
                 query.push_str(&format!("&price={}&timeInForce=GTC", price));
             } else {
-                return Err(QuantError::DataValidation("Limit order must have price".to_string()));
+                return Err(QuantError::DataValidation(
+                    "Limit order must have price".to_string(),
+                ));
             }
         }
 
         let signature = self.sign_query(&query);
-        let url = format!("{}{}{}?{}&signature={}", self.base_url, endpoint, "", query, signature);
+        let url = format!(
+            "{}{}{}?{}&signature={}",
+            self.base_url, endpoint, "", query, signature
+        );
 
-        let response = self.client.post(&url)
+        let response = self
+            .client
+            .post(&url)
             .send()
             .await
             .map_err(|e| QuantError::Api(format!("Request failed: {}", e)))?;
@@ -108,25 +126,32 @@ impl ExecutionService for BinanceExecutionClient {
             return Err(QuantError::Api(format!("Binance API error: {}", text)));
         }
 
-        let data: BinanceOrderResponse = response.json().await
+        let data: BinanceOrderResponse = response
+            .json()
+            .await
             .map_err(|e| QuantError::Parse(format!("Failed to parse response: {}", e)))?;
 
-        Ok(data.orderId.to_string())
+        Ok(data.order_id.to_string())
     }
 
     async fn cancel_order(&self, order_id: &str, symbol: &str) -> Result<()> {
         let endpoint = "/api/v3/order";
         let timestamp = self.get_timestamp();
-        
+
         let query = format!(
             "symbol={}&orderId={}&timestamp={}",
             symbol, order_id, timestamp
         );
 
         let signature = self.sign_query(&query);
-        let url = format!("{}{}{}?{}&signature={}", self.base_url, endpoint, "", query, signature);
+        let url = format!(
+            "{}{}{}?{}&signature={}",
+            self.base_url, endpoint, "", query, signature
+        );
 
-        let response = self.client.delete(&url)
+        let response = self
+            .client
+            .delete(&url)
             .send()
             .await
             .map_err(|e| QuantError::Api(format!("Request failed: {}", e)))?;
@@ -142,16 +167,21 @@ impl ExecutionService for BinanceExecutionClient {
     async fn get_order(&self, order_id: &str, symbol: &str) -> Result<Order> {
         let endpoint = "/api/v3/order";
         let timestamp = self.get_timestamp();
-        
+
         let query = format!(
             "symbol={}&orderId={}&timestamp={}",
             symbol, order_id, timestamp
         );
 
         let signature = self.sign_query(&query);
-        let url = format!("{}{}{}?{}&signature={}", self.base_url, endpoint, "", query, signature);
+        let url = format!(
+            "{}{}{}?{}&signature={}",
+            self.base_url, endpoint, "", query, signature
+        );
 
-        let response = self.client.get(&url)
+        let response = self
+            .client
+            .get(&url)
             .send()
             .await
             .map_err(|e| QuantError::Api(format!("Request failed: {}", e)))?;
@@ -161,7 +191,9 @@ impl ExecutionService for BinanceExecutionClient {
             return Err(QuantError::Api(format!("Binance API error: {}", text)));
         }
 
-        let data: BinanceOrderResponse = response.json().await
+        let data: BinanceOrderResponse = response
+            .json()
+            .await
             .map_err(|e| QuantError::Parse(format!("Failed to parse response: {}", e)))?;
 
         // Convert Binance response to core::Order
@@ -187,14 +219,14 @@ impl ExecutionService for BinanceExecutionClient {
         };
 
         Ok(Order {
-            id: data.orderId.to_string(),
+            id: data.order_id.to_string(),
             symbol: data.symbol,
             side,
             order_type,
-            quantity: data.origQty.parse().unwrap_or(0.0),
+            quantity: data.orig_qty.parse().unwrap_or(0.0),
             price: data.price.parse().ok(),
             status,
-            timestamp: Utc::now(), // Note: Binance gives transactTime, but we use now() for simplicity or parse it
+            timestamp: Utc::now(), // Note: Binance gives transact_time, but we use now() for simplicity or parse it
         })
     }
 }

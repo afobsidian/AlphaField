@@ -1,6 +1,3 @@
-use alphafield_core::{Tick, Quote};
-use crate::error::{BacktestError, Result};
-
 #[derive(Debug, Clone)]
 pub struct ExchangeSimulator {
     pub fee_rate: f64,

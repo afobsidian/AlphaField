@@ -1,8 +1,10 @@
 //! Demo binary for testing Strategy Engine
 
-use alphafield_core::{Bar, Strategy};
+use alphafield_core::Strategy;
 use alphafield_data::UnifiedDataClient;
-use alphafield_strategy::{GoldenCrossStrategy, RsiStrategy};
+use alphafield_strategy::{
+    GoldenCrossStrategy, MeanReversionStrategy, MomentumStrategy, RsiStrategy,
+};
 use std::error::Error;
 
 #[tokio::main]
@@ -15,7 +17,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // 1. Fetch Data
     let client = UnifiedDataClient::new_from_env();
     println!("Fetching BTC 1h data...");
-    
+
     // Fetch enough data for indicators to warm up
     let bars = client.get_bars("BTC", "1h", Some(500)).await?;
     println!("✓ Fetched {} bars\n", bars.len());
@@ -23,10 +25,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // 2. Initialize Strategies
     let mut golden_cross = GoldenCrossStrategy::new(10, 30); // Fast=10, Slow=30 for demo
     let mut rsi_strat = RsiStrategy::new(14, 30.0, 70.0);
+    let mut mean_reversion = MeanReversionStrategy::new(20, 2.0);
+    let mut momentum = MomentumStrategy::new(50, 12, 26, 9);
 
     println!("📊 Running Strategies:");
     println!("{}", "=".repeat(70));
-    println!("{:<20} | {:<10} | {:<10} | {}", "Time", "Strategy", "Signal", "Info");
+    println!(
+        "{:<20} | {:<10} | {:<10} | Info",
+        "Time", "Strategy", "Signal"
+    );
     println!("{}", "-".repeat(70));
 
     // 3. Run Event Loop
@@ -41,6 +48,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
         if let Some(mut signal) = rsi_strat.on_bar(&bar) {
             signal.symbol = "BTC".to_string();
             print_signal(&signal, "RSI");
+        }
+
+        // Update Mean Reversion
+        if let Some(mut signal) = mean_reversion.on_bar(&bar) {
+            signal.symbol = "BTC".to_string();
+            print_signal(&signal, "MeanRev");
+        }
+
+        // Update Momentum
+        if let Some(mut signal) = momentum.on_bar(&bar) {
+            signal.symbol = "BTC".to_string();
+            print_signal(&signal, "Momentum");
         }
     }
     println!("{}", "=".repeat(70));

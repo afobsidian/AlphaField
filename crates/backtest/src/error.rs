@@ -1,5 +1,5 @@
-use thiserror::Error;
 use alphafield_core::QuantError;
+use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum BacktestError {
@@ -16,10 +16,7 @@ pub enum BacktestError {
     Execution(String),
 
     #[error("Insufficient funds: required {required}, available {available}")]
-    InsufficientFunds {
-        required: f64,
-        available: f64,
-    },
+    InsufficientFunds { required: f64, available: f64 },
 
     #[error("Position not found: {0}")]
     PositionNotFound(String),

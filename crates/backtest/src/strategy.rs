@@ -1,5 +1,5 @@
-use alphafield_core::{Bar, Tick};
 use crate::error::Result;
+use alphafield_core::{Bar, Tick};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum OrderSide {
@@ -23,7 +23,7 @@ pub struct OrderRequest {
 
 pub trait Strategy {
     fn on_bar(&mut self, bar: &Bar) -> Result<Vec<OrderRequest>>;
-    fn on_tick(&mut self, tick: &Tick) -> Result<Vec<OrderRequest>> {
+    fn on_tick(&mut self, _tick: &Tick) -> Result<Vec<OrderRequest>> {
         // Default implementation does nothing for ticks
         Ok(Vec::new())
     }

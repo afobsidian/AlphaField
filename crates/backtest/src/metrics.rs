@@ -32,7 +32,7 @@ impl PerformanceMetrics {
         let start_time = equity_history.first().unwrap().0;
         let end_time = equity_history.last().unwrap().0;
         let duration_years = (end_time - start_time) as f64 / (1000.0 * 3600.0 * 24.0 * 365.0);
-        
+
         let cagr = if duration_years > 0.0 {
             (final_equity / initial_equity).powf(1.0 / duration_years) - 1.0
         } else {
@@ -42,7 +42,7 @@ impl PerformanceMetrics {
         // Max Drawdown
         let mut max_drawdown = 0.0;
         let mut peak = initial_equity;
-        
+
         for &(_, equity) in equity_history {
             if equity > peak {
                 peak = equity;
@@ -57,13 +57,17 @@ impl PerformanceMetrics {
         // Calculate daily returns
         let mut returns = Vec::new();
         for i in 1..equity_history.len() {
-            let prev = equity_history[i-1].1;
+            let prev = equity_history[i - 1].1;
             let curr = equity_history[i].1;
             returns.push((curr - prev) / prev);
         }
 
         let avg_return = returns.iter().sum::<f64>() / returns.len() as f64;
-        let variance = returns.iter().map(|r| (r - avg_return).powi(2)).sum::<f64>() / returns.len() as f64;
+        let variance = returns
+            .iter()
+            .map(|r| (r - avg_return).powi(2))
+            .sum::<f64>()
+            / returns.len() as f64;
         let volatility = variance.sqrt() * (252.0f64).sqrt(); // Annualized volatility
 
         let annualized_return = avg_return * 252.0; // Simple annualization

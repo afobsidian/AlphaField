@@ -16,15 +16,16 @@ impl RiskCheck for MaxOrderValue {
         // Estimate value. For market orders, we need a price estimate.
         // For limit orders, use limit price.
         let price = order.price.unwrap_or(0.0); // If 0, we can't check value accurately without market data
-        
+
         // If price is 0 (Market order with no estimate), we might skip or fail.
         // For safety, let's assume if price > 0 we check.
         if price > 0.0 {
             let value = price * order.quantity;
             if value > self.max_value {
-                return Err(QuantError::DataValidation(
-                    format!("Order value {:.2} exceeds limit {:.2}", value, self.max_value)
-                ));
+                return Err(QuantError::DataValidation(format!(
+                    "Order value {:.2} exceeds limit {:.2}",
+                    value, self.max_value
+                )));
             }
         }
         Ok(())
@@ -57,7 +58,7 @@ impl<S: ExecutionService> ExecutionService for RiskManager<S> {
         for check in &self.checks {
             check.check(order)?;
         }
-        
+
         // If all pass, forward to service
         self.service.submit_order(order).await
     }

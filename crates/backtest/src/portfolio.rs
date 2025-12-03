@@ -1,7 +1,6 @@
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use crate::error::{BacktestError, Result};
-use alphafield_core::Tick;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Position {
@@ -58,9 +57,15 @@ impl Portfolio {
         }
     }
 
-    pub fn update_from_fill(&mut self, symbol: &str, quantity: f64, price: f64, fee: f64) -> Result<()> {
+    pub fn update_from_fill(
+        &mut self,
+        symbol: &str,
+        quantity: f64,
+        price: f64,
+        fee: f64,
+    ) -> Result<()> {
         let cost = quantity * price;
-        
+
         if self.cash - cost - fee < 0.0 {
             return Err(BacktestError::InsufficientFunds {
                 required: cost + fee,
@@ -70,7 +75,10 @@ impl Portfolio {
 
         self.cash -= cost + fee;
 
-        let position = self.positions.entry(symbol.to_string()).or_insert(Position::new(symbol, 0.0, 0.0));
+        let position = self
+            .positions
+            .entry(symbol.to_string())
+            .or_insert(Position::new(symbol, 0.0, 0.0));
         position.update(quantity, price);
 
         if position.quantity.abs() < 1e-9 {

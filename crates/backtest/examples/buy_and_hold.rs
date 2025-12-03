@@ -1,8 +1,10 @@
 use alphafield_backtest::{
-    BacktestEngine, ExchangeSimulator, SlippageModel, Strategy, OrderRequest, OrderSide, OrderType, Result
+    BacktestEngine, OrderRequest, OrderSide, OrderType, SlippageModel, Strategy,
 };
-use alphafield_core::{Bar, Tick};
+use alphafield_core::Bar;
 use chrono::{TimeZone, Utc};
+
+type Result<T> = alphafield_backtest::error::Result<T>;
 
 struct BuyAndHoldStrategy {
     symbol: String,
@@ -19,14 +21,14 @@ impl BuyAndHoldStrategy {
 }
 
 impl Strategy for BuyAndHoldStrategy {
-    fn on_bar(&mut self, bar: &Bar) -> Result<Vec<OrderRequest>> {
+    fn on_bar(&mut self, _bar: &Bar) -> Result<Vec<OrderRequest>> {
         if !self.invested {
             self.invested = true;
             // Calculate quantity based on assumed cash (simplified for example)
             // In a real strategy, we'd need access to Portfolio state via Context
             // For now, hardcoding a quantity that fits
-            let quantity = 980.0; 
-            
+            let quantity = 980.0;
+
             Ok(vec![OrderRequest {
                 symbol: self.symbol.clone(),
                 side: OrderSide::Buy,
@@ -39,11 +41,11 @@ impl Strategy for BuyAndHoldStrategy {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // 1. Setup Engine
     let mut engine = BacktestEngine::new(
-        100_000.0, // Initial Cash
-        0.001,     // 0.1% Fee
+        100_000.0,                           // Initial Cash
+        0.001,                               // 0.1% Fee
         SlippageModel::FixedPercent(0.0005), // 0.05% Slippage
     );
 
@@ -82,7 +84,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Sharpe Ratio: {:.2}", metrics.sharpe_ratio);
     println!("Max Drawdown: {:.2}%", metrics.max_drawdown * 100.0);
     println!("Volatility: {:.2}%", metrics.volatility * 100.0);
-    println!("Final Equity: {:.2}", engine.portfolio.total_equity(&std::collections::HashMap::from([(symbol.to_string(), bars.last().unwrap().close)])));
+    println!(
+        "Final Equity: {:.2}",
+        engine
+            .portfolio
+            .total_equity(&std::collections::HashMap::from([(
+                symbol.to_string(),
+                bars.last().unwrap().close
+            )]))
+    );
 
     Ok(())
 }

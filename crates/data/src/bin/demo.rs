@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\n📊 TEST 1: OHLC Data (Priority: Binance)");
     println!("{}", "-".repeat(70));
-    
+
     // Fetch BTC OHLC (Should use Binance)
     println!("Requesting BTC 1h bars...");
     match client.get_bars("BTC", "1h", Some(24)).await {
@@ -30,7 +30,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("✓ Success! Fetched {} bars", bars.len());
             if let Some(last) = bars.last() {
                 println!("  Last bar: {}", last);
-                println!("  Volume: {:.4} (indicates Binance source if > 0)", last.volume);
+                println!(
+                    "  Volume: {:.4} (indicates Binance source if > 0)",
+                    last.volume
+                );
             }
         }
         Err(e) => eprintln!("✗ Failed: {}", e),
@@ -51,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n📊 TEST 3: Fallback Scenario (Simulation)");
     println!("{}", "-".repeat(70));
     println!("Requesting data for 'monero' (Not on Binance US, might trigger fallback or CoinGecko direct)");
-    
+
     // Monero (XMR) might be on Binance, but let's try something obscure if needed.
     // Actually XMR is delisted from some Binance regions.
     // Let's try a CoinGecko-specific ID if my mapping supports it, but my mapping is simple.
@@ -59,7 +62,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // If I pass "bitcoin" directly:
     // Binance: "BITCOINUSDT" (Invalid) -> Error -> Fallback to CoinGecko
     // CoinGecko: "bitcoin" -> Success
-    
+
     println!("Requesting 'bitcoin' (explicit ID to force fallback/CoinGecko)...");
     match client.get_bars("bitcoin", "1d", Some(7)).await {
         Ok(bars) => {
