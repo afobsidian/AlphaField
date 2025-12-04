@@ -79,6 +79,16 @@ cargo run --example golden_cross_backtest -p alphafield_backtest
 
 ## 🛠️ Development Commands
 
+## ⚠️ Trading Model
+
+AlphaField is configured as a spot-only trading engine by default. That means:
+
+- **No margin/borrowing**: Strategies run under a cash-constrained model; there is no borrowing, margin interest, or liquidation mechanics.
+- **No shorting**: The backtest and execution layers prevent selling more than the currently held quantity. Attempts to sell beyond holdings are rejected during backtests (see [crates/backtest/src/portfolio.rs](crates/backtest/src/portfolio.rs)) and at execution time via the `NoShorts` risk check (see [crates/execution/src/risk.rs](crates/execution/src/risk.rs)).
+
+If you need margin/leverage support, it requires adding an account/borrow model, margin interest, and liquidation rules in the backtest and execution layers. I can draft a minimal design if you'd like.
+
+
 We use a `Makefile` to simplify common development tasks.
 
 ### Core Commands

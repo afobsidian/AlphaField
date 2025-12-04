@@ -66,6 +66,22 @@ impl Portfolio {
     ) -> Result<()> {
         let cost = quantity * price;
 
+        // Prevent selling more than currently held (no shorting in spot-only mode)
+        if quantity < 0.0 {
+            let available_qty = self
+                .positions
+                .get(symbol)
+                .map(|p| p.quantity)
+                .unwrap_or(0.0);
+            if available_qty + quantity < -1e-9 {
+                return Err(BacktestError::InsufficientPosition {
+                    symbol: symbol.to_string(),
+                    required: -quantity,
+                    available: available_qty,
+                });
+            }
+        }
+
         if self.cash - cost - fee < 0.0 {
             return Err(BacktestError::InsufficientFunds {
                 required: cost + fee,

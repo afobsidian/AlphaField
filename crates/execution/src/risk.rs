@@ -1,4 +1,4 @@
-use alphafield_core::{ExecutionService, Order, QuantError, Result};
+use alphafield_core::{ExecutionService, Order, QuantError, Result, OrderSide};
 use async_trait::async_trait;
 
 /// Trait for a single risk check rule
@@ -48,6 +48,21 @@ impl<S: ExecutionService> RiskManager<S> {
 
     pub fn add_check<C: RiskCheck + 'static>(&mut self, check: C) {
         self.checks.push(Box::new(check));
+    }
+}
+
+/// Risk check that prevents short/sell orders in spot-only mode.
+pub struct NoShorts;
+
+impl RiskCheck for NoShorts {
+    fn check(&self, order: &Order) -> Result<()> {
+        if order.side == OrderSide::Sell || order.quantity < 0.0 {
+            return Err(QuantError::DataValidation(format!(
+                "Short selling is disabled for symbol {}",
+                order.symbol
+            )));
+        }
+        Ok(())
     }
 }
 

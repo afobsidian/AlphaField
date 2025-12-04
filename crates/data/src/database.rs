@@ -1,4 +1,4 @@
-use alphafield_core::{Bar, QuantError, Result};
+use alphafield_core::{Bar, QuantError, Result, Tick};
 use sqlx::{postgres::PgPoolOptions, Pool, Postgres, Row};
 use std::env;
 
@@ -56,6 +56,44 @@ impl DatabaseClient {
         .await
         .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
 
+        // If TimescaleDB is available, enable extension and convert to hypertable
+        let _ = sqlx::query("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;")
+            .execute(&self.pool)
+            .await;
+
+        // Create hypertable for candles if using TimescaleDB
+        let _ = sqlx::query("SELECT create_hypertable('candles', 'timestamp', if_not_exists => TRUE);")
+            .execute(&self.pool)
+            .await;
+
+        // Create trades table for tick-level data
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS trades (
+                id BIGSERIAL PRIMARY KEY,
+                symbol VARCHAR(20) NOT NULL,
+                timestamp TIMESTAMPTZ NOT NULL,
+                price DOUBLE PRECISION NOT NULL,
+                quantity DOUBLE PRECISION NOT NULL,
+                is_buyer_maker BOOLEAN NOT NULL
+            )
+            "#
+        )
+        .execute(&self.pool)
+        .await
+        .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+
+        // Index for trades
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_trades_timestamp ON trades(timestamp)")
+            .execute(&self.pool)
+            .await
+            .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+
+        // Convert trades to hypertable if possible
+        let _ = sqlx::query("SELECT create_hypertable('trades', 'timestamp', if_not_exists => TRUE);")
+            .execute(&self.pool)
+            .await;
+
         Ok(())
     }
 
@@ -97,6 +135,29 @@ impl DatabaseClient {
 
         tx.commit().await.map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
         
+        Ok(())
+    }
+
+    /// Saves a single tick/trade to the trades table
+    pub async fn save_tick(&self, symbol: &str, tick: &Tick) -> Result<()> {
+        // Validate tick first
+        tick.validate()?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO trades (symbol, timestamp, price, quantity, is_buyer_maker)
+            VALUES ($1, $2, $3, $4, $5)
+            "#,
+        )
+        .bind(symbol)
+        .bind(tick.timestamp)
+        .bind(tick.price)
+        .bind(tick.quantity)
+        .bind(tick.is_buyer_maker)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+
         Ok(())
     }
 

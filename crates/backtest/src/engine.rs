@@ -68,14 +68,22 @@ impl BacktestEngine {
                     let price = self.exchange.calculate_price(bar.close, order.quantity);
                     let fee = self.exchange.calculate_fee(price, order.quantity);
 
-                    // Try to execute, skip if insufficient funds
-                    match self.portfolio.update_from_fill(&order.symbol, order.quantity, price, fee) {
+                    // Try to execute, skip if insufficient funds or insufficient position (no shorting)
+                    match self
+                        .portfolio
+                        .update_from_fill(&order.symbol, order.quantity, price, fee)
+                    {
                         Ok(_) => {}
                         Err(crate::error::BacktestError::InsufficientFunds { required, available }) => {
-                            // Log and skip this trade
                             eprintln!(
                                 "Skipping trade: insufficient funds (required: {:.2}, available: {:.2})",
                                 required, available
+                            );
+                        }
+                        Err(crate::error::BacktestError::InsufficientPosition { symbol, required, available }) => {
+                            eprintln!(
+                                "Skipping trade: insufficient position for {} (required: {:.6}, available: {:.6})",
+                                symbol, required, available
                             );
                         }
                         Err(e) => return Err(e),

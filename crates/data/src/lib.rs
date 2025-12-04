@@ -27,6 +27,9 @@ pub use database::{DatabaseClient, CachedSymbol};
 pub mod pipeline;
 pub use pipeline::{DataPipeline, DataPersister, MarketEvent};
 
+pub mod gap_filler;
+pub use gap_filler::GapFiller;
+
 // ============================================================================
 // COINLAYER API CLIENT
 // ============================================================================

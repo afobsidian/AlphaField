@@ -84,8 +84,12 @@ impl DataPersister {
                         }
                     }
                     MarketEvent::Tick(_tick) => {
-                        // Ticks not yet implemented in DB schema
-                        // Future: self.client.save_tick(...)
+                        // Persist tick to trades table
+                        if let Err(e) = self.client.save_tick(&self.symbol, &_tick).await {
+                            error!("Failed to persist tick: {}", e);
+                        } else {
+                            info!("Persisted tick: {}", _tick);
+                        }
                     }
                 },
                 Err(broadcast::error::RecvError::Lagged(count)) => {
