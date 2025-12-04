@@ -1,4 +1,4 @@
-use alphafield_core::{ExecutionService, Order, OrderStatus, OrderType, QuantError, Result};
+use alphafield_core::{ExecutionService, Order, OrderStatus, QuantError, Result};
 use async_trait::async_trait;
 use chrono::Utc;
 use std::collections::HashMap;

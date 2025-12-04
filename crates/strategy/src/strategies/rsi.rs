@@ -64,27 +64,27 @@ impl Strategy for RsiStrategy {
         self.config.strategy_name()
     }
 
-    fn on_bar(&mut self, bar: &Bar) -> Option<Signal> {
+    fn on_bar(&mut self, bar: &Bar) -> Option<Vec<Signal>> {
         let rsi_val = self.rsi.update(bar.close)?;
 
         if rsi_val < self.config.lower_bound && self.position != SignalType::Buy {
             self.position = SignalType::Buy;
-            return Some(Signal {
+            return Some(vec![Signal {
                 timestamp: bar.timestamp,
                 symbol: "UNKNOWN".to_string(),
                 signal_type: SignalType::Buy,
                 strength: (self.config.lower_bound - rsi_val) / self.config.lower_bound,
                 metadata: Some(format!("RSI Oversold: {:.2}", rsi_val)),
-            });
+            }]);
         } else if rsi_val > self.config.upper_bound && self.position != SignalType::Sell {
             self.position = SignalType::Sell;
-            return Some(Signal {
+            return Some(vec![Signal {
                 timestamp: bar.timestamp,
                 symbol: "UNKNOWN".to_string(),
                 signal_type: SignalType::Sell,
                 strength: (rsi_val - self.config.upper_bound) / (100.0 - self.config.upper_bound),
                 metadata: Some(format!("RSI Overbought: {:.2}", rsi_val)),
-            });
+            }]);
         }
 
         None

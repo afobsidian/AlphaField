@@ -1,12 +1,21 @@
 use alphafield_backtest::{BacktestEngine, SlippageModel, StrategyAdapter};
-use alphafield_core::Bar;
 use alphafield_strategy::GoldenCrossStrategy;
-use chrono::{TimeZone, Utc};
 
 #[tokio::main]
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    // Load .env
-    dotenvy::dotenv().ok();
+    // Try to load .env, but fallback to manual parsing if it fails
+    if dotenvy::dotenv().is_err() {
+        // Manual fallback: read DATABASE_URL directly from .env
+        if let Ok(contents) = std::fs::read_to_string(".env") {
+            for line in contents.lines() {
+                if line.starts_with("DATABASE_URL=") {
+                    let value = line.trim_start_matches("DATABASE_URL=");
+                    std::env::set_var("DATABASE_URL", value);
+                    break;
+                }
+            }
+        }
+    }
     
     println!("=== Golden Cross Strategy Backtest ===\n");
 
@@ -20,18 +29,27 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // 2. Fetch/Load Historical Data
     let symbol = "BTC";
     let interval = "1h";
-    let storage = alphafield_data::HistoricalDataStorage::new("data/historical");
     
-    let bars = if storage.exists(symbol, interval) {
-        println!("Loading historical data from storage...");
-        storage.load_bars(symbol, interval)?
+    println!("Connecting to database...");
+    let db = match alphafield_data::DatabaseClient::new_from_env().await {
+        Ok(client) => client,
+        Err(e) => {
+            eprintln!("Failed to connect to database: {}", e);
+            eprintln!("Ensure DATABASE_URL is set in .env and Postgres is running.");
+            return Ok(());
+        }
+    };
+    
+    let bars = if db.exists(symbol, interval).await? {
+        println!("Loading historical data from database...");
+        db.load_bars(symbol, interval).await?
     } else {
         println!("Fetching historical data from API...");
         let client = alphafield_data::UnifiedDataClient::new_from_env();
         // Fetch 1000 hours (~41 days)
         let bars = client.get_bars(symbol, interval, Some(1000)).await?;
-        println!("Saving {} bars to storage...", bars.len());
-        storage.save_bars(symbol, interval, &bars)?;
+        println!("Saving {} bars to database...", bars.len());
+        db.save_bars(symbol, interval, &bars).await?;
         bars
     };
 
@@ -60,14 +78,20 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let adapter = StrategyAdapter::new(
         golden_cross,
         symbol,
-        0.95, // Use 95% of portfolio for each trade
+        0.01, // Trade 0.01 BTC per signal (~$1k at $100k/BTC)
     );
 
     engine.set_strategy(Box::new(adapter));
 
     // 5. Run Backtest
     println!("Running backtest...\n");
-    let metrics = engine.run()?;
+    let metrics = match engine.run() {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Backtest failed: {}", e);
+            return Ok(());
+        }
+    };
 
     // 6. Report Results
     println!("=== Backtest Results ===");

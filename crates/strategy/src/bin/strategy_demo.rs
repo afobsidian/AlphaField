@@ -39,27 +39,35 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // 3. Run Event Loop
     for bar in bars {
         // Update Golden Cross
-        if let Some(mut signal) = golden_cross.on_bar(&bar) {
-            signal.symbol = "BTC".to_string(); // Inject symbol
-            print_signal(&signal, "GoldenCross");
+        if let Some(signals) = golden_cross.on_bar(&bar) {
+            for mut signal in signals {
+                signal.symbol = "BTC".to_string(); // Inject symbol
+                print_signal(&signal, "GoldenCross");
+            }
         }
 
         // Update RSI
-        if let Some(mut signal) = rsi_strat.on_bar(&bar) {
-            signal.symbol = "BTC".to_string();
-            print_signal(&signal, "RSI");
+        if let Some(signals) = rsi_strat.on_bar(&bar) {
+            for mut signal in signals {
+                signal.symbol = "BTC".to_string();
+                print_signal(&signal, "RSI");
+            }
         }
 
         // Update Mean Reversion
-        if let Some(mut signal) = mean_reversion.on_bar(&bar) {
-            signal.symbol = "BTC".to_string();
-            print_signal(&signal, "MeanRev");
+        if let Some(signals) = mean_reversion.on_bar(&bar) {
+            for mut signal in signals {
+                signal.symbol = "BTC".to_string();
+                print_signal(&signal, "MeanRev");
+            }
         }
 
         // Update Momentum
-        if let Some(mut signal) = momentum.on_bar(&bar) {
-            signal.symbol = "BTC".to_string();
-            print_signal(&signal, "Momentum");
+        if let Some(signals) = momentum.on_bar(&bar) {
+            for mut signal in signals {
+                signal.symbol = "BTC".to_string();
+                print_signal(&signal, "Momentum");
+            }
         }
     }
     println!("{}", "=".repeat(70));

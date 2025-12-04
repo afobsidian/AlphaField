@@ -13,11 +13,17 @@ reqwest = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 dotenvy = "0.15"
 hmac = "0.12"
 sha2 = "0.10"
 hex = "0.4"
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "postgres", "chrono", "macros"] }
 
 [[bin]]
 name = "data-demo"
 path = "src/bin/demo.rs"
+
+[[bin]]
+name = "ingestion-demo"
+path = "src/bin/ingestion_demo.rs"

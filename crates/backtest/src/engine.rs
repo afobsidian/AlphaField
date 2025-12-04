@@ -65,15 +65,21 @@ impl BacktestEngine {
                 let orders = strategy.on_bar(bar)?;
                 for order in orders {
                     // Simple execution logic: Execute immediately at close price
-                    // In reality, this would go to an order book or next bar open
                     let price = self.exchange.calculate_price(bar.close, order.quantity);
                     let fee = self.exchange.calculate_fee(price, order.quantity);
 
-                    // Check if we have enough cash/position
-                    // (Simplified check, real engine needs more robust validation)
-
-                    self.portfolio
-                        .update_from_fill(&order.symbol, order.quantity, price, fee)?;
+                    // Try to execute, skip if insufficient funds
+                    match self.portfolio.update_from_fill(&order.symbol, order.quantity, price, fee) {
+                        Ok(_) => {}
+                        Err(crate::error::BacktestError::InsufficientFunds { required, available }) => {
+                            // Log and skip this trade
+                            eprintln!(
+                                "Skipping trade: insufficient funds (required: {:.2}, available: {:.2})",
+                                required, available
+                            );
+                        }
+                        Err(e) => return Err(e),
+                    }
                 }
             }
         }

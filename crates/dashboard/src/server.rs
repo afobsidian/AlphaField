@@ -6,7 +6,19 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::services::ServeDir;
 
 pub async fn run_server(addr: &str) -> Result<()> {
-    let state = Arc::new(AppState::new());
+    // Load .env with fallback parsing for non-standard format
+    if dotenvy::dotenv().is_err() {
+        if let Ok(contents) = std::fs::read_to_string(".env") {
+            for line in contents.lines() {
+                if line.starts_with("DATABASE_URL=") {
+                    std::env::set_var("DATABASE_URL", line.trim_start_matches("DATABASE_URL="));
+                    break;
+                }
+            }
+        }
+    }
+    
+    let state = Arc::new(AppState::with_database().await);
 
     // Create API router
     let api_router = create_router(state);

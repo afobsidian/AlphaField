@@ -111,7 +111,7 @@ impl Strategy for MomentumStrategy {
         "EMA-MACD Momentum"
     }
 
-    fn on_bar(&mut self, bar: &Bar) -> Option<Signal> {
+    fn on_bar(&mut self, bar: &Bar) -> Option<Vec<Signal>> {
         let ema_val = self.ema.update(bar.close)?;
         let (macd_line, signal_line, _histogram) = self.macd.update(bar.close)?;
 
@@ -120,7 +120,7 @@ impl Strategy for MomentumStrategy {
         // Bullish: Price above EMA and MACD crosses above signal
         if price > ema_val && macd_line > signal_line && self.last_position != SignalType::Buy {
             self.last_position = SignalType::Buy;
-            return Some(Signal {
+            return Some(vec![Signal {
                 timestamp: bar.timestamp,
                 symbol: "UNKNOWN".to_string(),
                 signal_type: SignalType::Buy,
@@ -129,13 +129,13 @@ impl Strategy for MomentumStrategy {
                     "Bullish Momentum: Price {:.2} > EMA {:.2}, MACD {:.4} > Signal {:.4}",
                     price, ema_val, macd_line, signal_line
                 )),
-            });
+            }]);
         }
 
         // Bearish: Price below EMA and MACD crosses below signal
         if price < ema_val && macd_line < signal_line && self.last_position != SignalType::Sell {
             self.last_position = SignalType::Sell;
-            return Some(Signal {
+            return Some(vec![Signal {
                 timestamp: bar.timestamp,
                 symbol: "UNKNOWN".to_string(),
                 signal_type: SignalType::Sell,
@@ -146,7 +146,7 @@ impl Strategy for MomentumStrategy {
                     "Bearish Momentum: Price {:.2} < EMA {:.2}, MACD {:.4} < Signal {:.4}",
                     price, ema_val, macd_line, signal_line
                 )),
-            });
+            }]);
         }
 
         None

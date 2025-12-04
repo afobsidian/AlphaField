@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,105 +8,230 @@
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
+
 <body>
-    <div class="container">
-        <header>
-            <h1>🚀 AlphaField Dashboard</h1>
-            <div id="status-indicator" class="status-online">Online</div>
-        </header>
-
-        <!-- Portfolio Summary -->
-        <section class="summary-cards">
-            <div class="card">
-                <h3>Total Value</h3>
-                <div class="value" id="total-value">$0.00</div>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">🚀</span>
+                <span class="logo-text">AlphaField</span>
             </div>
-            <div class="card">
-                <h3>Cash Balance</h3>
-                <div class="value" id="cash-balance">$0.00</div>
-            </div>
-            <div class="card">
-                <h3>Total P&L</h3>
-                <div class="value" id="total-pnl">$0.00</div>
-                <div class="sub-value" id="pnl-percent">0.00%</div>
-            </div>
-            <div class="card">
-                <h3>Sharpe Ratio</h3>
-                <div class="value" id="sharpe-ratio">0.00</div>
-            </div>
-        </section>
-
-        <div class="main-grid">
-            <!-- Equity Curve Chart -->
-            <div class="card chart-card">
-                <h3>Equity Curve</h3>
-                <canvas id="equityChart"></canvas>
-            </div>
-
-            <!-- Performance Metrics -->
-            <div class="card metrics-card">
-                <h3>Performance Metrics</h3>
-                <div class="metric-row">
-                    <span>Win Rate</span>
-                    <span id="win-rate">0%</span>
-                </div>
-                <div class="metric-row">
-                    <span>Max Drawdown</span>
-                    <span id="max-drawdown">0%</span>
-                </div>
-                <div class="metric-row">
-                    <span>Total Trades</span>
-                    <span id="total-trades">0</span>
-                </div>
-                <div class="metric-row">
-                    <span>Profit Factor</span>
-                    <span id="profit-factor">0.00</span>
+            <ul class="nav-menu">
+                <li class="nav-item active" onclick="switchTab('data')">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-label">Data</span>
+                </li>
+                <li class="nav-item" onclick="switchTab('backtest')">
+                    <span class="nav-icon">📈</span>
+                    <span class="nav-label">Backtest</span>
+                </li>
+                <li class="nav-item" onclick="switchTab('live')">
+                    <span class="nav-icon">🔴</span>
+                    <span class="nav-label">Live</span>
+                </li>
+            </ul>
+            <div class="sidebar-footer">
+                <div id="db-status" class="status-badge disconnected">
+                    <span class="status-dot"></span>
+                    <span>Checking...</span>
                 </div>
             </div>
-        </div>
+        </nav>
 
-        <!-- Active Positions -->
-        <section class="card">
-            <h3>Active Positions</h3>
-            <table id="positions-table">
-                <thead>
-                    <tr>
-                        <th>Symbol</th>
-                        <th>Quantity</th>
-                        <th>Entry Price</th>
-                        <th>Current Price</th>
-                        <th>P&L</th>
-                        <th>%</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Populated by JS -->
-                </tbody>
-            </table>
-        </section>
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- DATA MANAGER VIEW -->
+            <div id="data-view" class="view-section">
+                <header class="view-header">
+                    <h1>📊 Data Manager</h1>
+                    <p>Manage historical market data for backtesting</p>
+                </header>
 
-        <!-- Recent Orders -->
-        <section class="card">
-            <h3>Recent Orders</h3>
-            <table id="orders-table">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>ID</th>
-                        <th>Symbol</th>
-                        <th>Side</th>
-                        <th>Type</th>
-                        <th>Qty</th>
-                        <th>Price</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- Populated by JS -->
-                </tbody>
-            </table>
-        </section>
+                <div class="content-grid">
+                    <!-- Fetch New Data Card -->
+                    <div class="card fetch-card">
+                        <h3>Fetch New Data</h3>
+                        <form id="fetch-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Symbol</label>
+                                    <select id="fetch-symbol">
+                                        <option value="BTC">BTC (Bitcoin)</option>
+                                        <option value="ETH">ETH (Ethereum)</option>
+                                        <option value="SOL">SOL (Solana)</option>
+                                        <option value="XRP">XRP (Ripple)</option>
+                                        <option value="ADA">ADA (Cardano)</option>
+                                        <option value="DOGE">DOGE (Dogecoin)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Interval</label>
+                                    <select id="fetch-interval">
+                                        <option value="1h">1 Hour</option>
+                                        <option value="4h">4 Hours</option>
+                                        <option value="1d">1 Day</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Days</label>
+                                    <input type="number" id="fetch-days" value="30" min="1" max="365">
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <span>⬇️</span> Fetch Data
+                            </button>
+                        </form>
+                        <div id="fetch-status" class="status-message"></div>
+                    </div>
+
+                    <!-- Cached Data Card -->
+                    <div class="card data-card">
+                        <h3>Cached Data</h3>
+                        <div id="symbols-list" class="symbols-list">
+                            <div class="loading">Loading...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BACKTEST VIEW -->
+            <div id="backtest-view" class="view-section" style="display: none;">
+                <header class="view-header">
+                    <h1>📈 Strategy Backtester</h1>
+                    <p>Test trading strategies against historical data</p>
+                </header>
+
+                <div class="content-grid backtest-grid">
+                    <!-- Configuration -->
+                    <div class="card config-card">
+                        <h3>Configuration</h3>
+                        <form id="backtest-form">
+                            <div class="form-group">
+                                <label>Strategy</label>
+                                <select id="bt-strategy" onchange="updateParams()">
+                                    <option value="GoldenCross">Golden Cross (SMA)</option>
+                                    <option value="Rsi">RSI Reversal</option>
+                                    <option value="MeanReversion">Mean Reversion (BB)</option>
+                                    <option value="Momentum">Momentum (MACD)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Symbol</label>
+                                <select id="bt-symbol">
+                                    <!-- Populated dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Days to Test</label>
+                                <input type="number" id="bt-days" value="30" min="7" max="365">
+                            </div>
+
+                            <div id="strategy-params" class="params-section">
+                                <!-- Dynamic params -->
+                            </div>
+
+                            <button type="submit" class="btn btn-primary btn-block">
+                                <span>▶️</span> Run Backtest
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Results -->
+                    <div class="card results-card">
+                        <h3>Results</h3>
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <span class="metric-label">Total Return</span>
+                                <span class="metric-value" id="bt-return">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">CAGR</span>
+                                <span class="metric-value" id="bt-cagr">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Sharpe Ratio</span>
+                                <span class="metric-value" id="bt-sharpe">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Max Drawdown</span>
+                                <span class="metric-value" id="bt-drawdown">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Volatility</span>
+                                <span class="metric-value" id="bt-volatility">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chart -->
+                <div class="card chart-card">
+                    <h3>Equity Curve</h3>
+                    <div class="chart-container">
+                        <canvas id="backtestChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LIVE VIEW -->
+            <div id="live-view" class="view-section" style="display: none;">
+                <header class="view-header">
+                    <h1>🔴 Live Trading</h1>
+                    <p>Monitor active strategies and positions</p>
+                </header>
+
+                <div class="summary-cards">
+                    <div class="card summary-card">
+                        <h4>Total Value</h4>
+                        <div class="value" id="total-value">$0.00</div>
+                    </div>
+                    <div class="card summary-card">
+                        <h4>Cash</h4>
+                        <div class="value" id="cash-balance">$0.00</div>
+                    </div>
+                    <div class="card summary-card">
+                        <h4>P&L</h4>
+                        <div class="value" id="total-pnl">$0.00</div>
+                        <div class="sub-value" id="pnl-percent">0.00%</div>
+                    </div>
+                    <div class="card summary-card">
+                        <h4>Sharpe</h4>
+                        <div class="value" id="sharpe-ratio">0.00</div>
+                    </div>
+                </div>
+
+                <div class="content-grid">
+                    <div class="card chart-card">
+                        <h3>Equity Curve</h3>
+                        <div class="chart-container">
+                            <canvas id="equityChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="card positions-card">
+                        <h3>Positions</h3>
+                        <table id="positions-table">
+                            <thead>
+                                <tr>
+                                    <th>Symbol</th>
+                                    <th>Qty</th>
+                                    <th>Entry</th>
+                                    <th>P&L</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td colspan="4" class="empty">No positions</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
     </div>
     <script src="app.js"></script>
 </body>
+
 </html>

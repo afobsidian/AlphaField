@@ -9,19 +9,19 @@ where
 {
     inner: T,
     symbol: String,
-    /// Position size as a fraction of portfolio value (0.0 to 1.0)
-    position_size: f64,
+    /// Base quantity to trade (e.g. number of units)
+    quantity: f64,
 }
 
 impl<T> StrategyAdapter<T>
 where
     T: alphafield_core::Strategy,
 {
-    pub fn new(strategy: T, symbol: impl Into<String>, position_size: f64) -> Self {
+    pub fn new(strategy: T, symbol: impl Into<String>, quantity: f64) -> Self {
         Self {
             inner: strategy,
             symbol: symbol.into(),
-            position_size: position_size.clamp(0.0, 1.0),
+            quantity,
         }
     }
 }
@@ -31,40 +31,40 @@ where
     T: alphafield_core::Strategy,
 {
     fn on_bar(&mut self, bar: &Bar) -> Result<Vec<OrderRequest>> {
-        let signal = self.inner.on_bar(bar);
+        let signals = self.inner.on_bar(bar);
+        let mut orders = Vec::new();
 
-        if let Some(sig) = signal {
-            match sig.signal_type {
-                alphafield_core::SignalType::Buy => {
-                    // For now, we use a fixed quantity calculation
-                    // In a real system, this would query the portfolio for available cash
-                    // and calculate position size accordingly
-                    let quantity = 100.0 * self.position_size * sig.strength;
+        if let Some(sigs) = signals {
+            for sig in sigs {
+                match sig.signal_type {
+                    alphafield_core::SignalType::Buy => {
+                        // Use fixed quantity scaled by signal strength
+                        let quantity = self.quantity * sig.strength;
 
-                    Ok(vec![OrderRequest {
-                        symbol: self.symbol.clone(),
-                        side: OrderSide::Buy,
-                        quantity,
-                        order_type: OrderType::Market,
-                    }])
+                        orders.push(OrderRequest {
+                            symbol: self.symbol.clone(),
+                            side: OrderSide::Buy,
+                            quantity,
+                            order_type: OrderType::Market,
+                        });
+                    }
+                    alphafield_core::SignalType::Sell => {
+                        // Sell signal - close position or short
+                        let quantity = -self.quantity * sig.strength;
+
+                        orders.push(OrderRequest {
+                            symbol: self.symbol.clone(),
+                            side: OrderSide::Sell,
+                            quantity: quantity.abs(),
+                            order_type: OrderType::Market,
+                        });
+                    }
+                    alphafield_core::SignalType::Hold => {}
                 }
-                alphafield_core::SignalType::Sell => {
-                    // Sell signal - close position or short
-                    // For simplicity, we'll assume we're closing an existing position
-                    let quantity = -100.0 * self.position_size * sig.strength;
-
-                    Ok(vec![OrderRequest {
-                        symbol: self.symbol.clone(),
-                        side: OrderSide::Sell,
-                        quantity: quantity.abs(),
-                        order_type: OrderType::Market,
-                    }])
-                }
-                alphafield_core::SignalType::Hold => Ok(Vec::new()),
             }
-        } else {
-            Ok(Vec::new())
         }
+        
+        Ok(orders)
     }
 
     fn on_tick(&mut self, tick: &Tick) -> Result<Vec<OrderRequest>> {
@@ -73,7 +73,7 @@ where
         if let Some(sig) = signal {
             match sig.signal_type {
                 alphafield_core::SignalType::Buy => {
-                    let quantity = 100.0 * self.position_size * sig.strength;
+                    let quantity = self.quantity * sig.strength;
 
                     Ok(vec![OrderRequest {
                         symbol: self.symbol.clone(),
@@ -83,7 +83,7 @@ where
                     }])
                 }
                 alphafield_core::SignalType::Sell => {
-                    let quantity = -100.0 * self.position_size * sig.strength;
+                    let quantity = -self.quantity * sig.strength;
 
                     Ok(vec![OrderRequest {
                         symbol: self.symbol.clone(),

@@ -1,7 +1,7 @@
 use alphafield_core::{Bar, QuantError, Result};
 use chrono::{DateTime, Utc};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 /// Storage for historical market data
 pub struct HistoricalDataStorage {

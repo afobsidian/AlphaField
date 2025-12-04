@@ -103,7 +103,7 @@ impl Strategy for MeanReversionStrategy {
         "Bollinger Bands Mean Reversion"
     }
 
-    fn on_bar(&mut self, bar: &Bar) -> Option<Signal> {
+    fn on_bar(&mut self, bar: &Bar) -> Option<Vec<Signal>> {
         let (upper, middle, lower) = self.bb.update(bar.close)?;
 
         let price = bar.close;
@@ -112,7 +112,7 @@ impl Strategy for MeanReversionStrategy {
         if price <= lower && self.last_position != SignalType::Buy {
             self.last_position = SignalType::Buy;
             let distance = (middle - price) / middle;
-            return Some(Signal {
+            return Some(vec![Signal {
                 timestamp: bar.timestamp,
                 symbol: "UNKNOWN".to_string(),
                 signal_type: SignalType::Buy,
@@ -121,14 +121,14 @@ impl Strategy for MeanReversionStrategy {
                     "BB Lower Band Touch: Price {:.2} <= Lower {:.2}",
                     price, lower
                 )),
-            });
+            }]);
         }
 
         // Sell when price touches upper band (overbought)
         if price >= upper && self.last_position != SignalType::Sell {
             self.last_position = SignalType::Sell;
             let distance = (price - middle) / middle;
-            return Some(Signal {
+            return Some(vec![Signal {
                 timestamp: bar.timestamp,
                 symbol: "UNKNOWN".to_string(),
                 signal_type: SignalType::Sell,
@@ -137,7 +137,7 @@ impl Strategy for MeanReversionStrategy {
                     "BB Upper Band Touch: Price {:.2} >= Upper {:.2}",
                     price, upper
                 )),
-            });
+            }]);
         }
 
         None

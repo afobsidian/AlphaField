@@ -21,6 +21,12 @@ use std::time::{Duration, Instant};
 pub mod storage;
 pub use storage::HistoricalDataStorage;
 
+pub mod database;
+pub use database::{DatabaseClient, CachedSymbol};
+
+pub mod pipeline;
+pub use pipeline::{DataPipeline, DataPersister, MarketEvent};
+
 // ============================================================================
 // COINLAYER API CLIENT
 // ============================================================================
@@ -1342,6 +1348,42 @@ impl UnifiedDataClient {
         }
 
         Err(last_error.unwrap_or_else(|| QuantError::Api("All data sources failed".to_string())))
+    }
+
+    /// Get available trading pairs from Binance (USDT pairs only, base assets)
+    pub async fn get_exchange_info(&self) -> Result<Vec<String>> {
+        let key = self.binance_keys.get_next_key();
+        let client = BinanceClient::new(key, None);
+        
+        match client.get_exchange_info().await {
+            Ok(info) => {
+                // Extract unique base assets from USDT pairs
+                let mut symbols: Vec<String> = info.symbols
+                    .into_iter()
+                    .filter(|s| s.quote_asset == "USDT" && s.status == "TRADING")
+                    .map(|s| s.base_asset)
+                    .collect();
+                
+                // Sort with popular first
+                let popular = ["BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "AVAX", "DOT", "LINK", "MATIC"];
+                symbols.sort_by(|a, b| {
+                    let a_pop = popular.iter().position(|p| p == a);
+                    let b_pop = popular.iter().position(|p| p == b);
+                    match (a_pop, b_pop) {
+                        (Some(ai), Some(bi)) => ai.cmp(&bi),
+                        (Some(_), None) => std::cmp::Ordering::Less,
+                        (None, Some(_)) => std::cmp::Ordering::Greater,
+                        (None, None) => a.cmp(b),
+                    }
+                });
+                
+                // Deduplicate
+                symbols.dedup();
+                
+                Ok(symbols)
+            }
+            Err(e) => Err(e),
+        }
     }
 }
 

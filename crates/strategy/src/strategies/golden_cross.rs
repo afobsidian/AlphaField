@@ -68,7 +68,7 @@ impl Strategy for GoldenCrossStrategy {
         self.config.strategy_name()
     }
 
-    fn on_bar(&mut self, bar: &Bar) -> Option<Signal> {
+    fn on_bar(&mut self, bar: &Bar) -> Option<Vec<Signal>> {
         let fast_opt = self.fast_sma.update(bar.close);
         let slow_opt = self.slow_sma.update(bar.close);
 
@@ -103,7 +103,7 @@ impl Strategy for GoldenCrossStrategy {
         self.last_fast = Some(fast);
         self.last_slow = Some(slow);
 
-        signal
+        signal.map(|s| vec![s])
     }
 }
 

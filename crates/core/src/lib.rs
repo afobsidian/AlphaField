@@ -388,12 +388,12 @@ pub struct Signal {
 }
 
 /// Trait that all trading strategies must implement
-pub trait Strategy {
+pub trait Strategy: Send + Sync {
     /// Returns the name of the strategy
     fn name(&self) -> &str;
 
     /// Process a new bar and potentially return a signal
-    fn on_bar(&mut self, bar: &Bar) -> Option<Signal>;
+    fn on_bar(&mut self, bar: &Bar) -> Option<Vec<Signal>>;
 
     /// Process a new tick (optional)
     fn on_tick(&mut self, _tick: &Tick) -> Option<Signal> {
@@ -403,6 +403,25 @@ pub trait Strategy {
     /// Process a new quote (optional)
     fn on_quote(&mut self, _quote: &Quote) -> Option<Signal> {
         None
+    }
+}
+
+/// Blanket implementation for boxed strategies to enable dynamic dispatch
+impl<T: Strategy + ?Sized> Strategy for Box<T> {
+    fn name(&self) -> &str {
+        (**self).name()
+    }
+
+    fn on_bar(&mut self, bar: &Bar) -> Option<Vec<Signal>> {
+        (**self).on_bar(bar)
+    }
+
+    fn on_tick(&mut self, tick: &Tick) -> Option<Signal> {
+        (**self).on_tick(tick)
+    }
+
+    fn on_quote(&mut self, quote: &Quote) -> Option<Signal> {
+        (**self).on_quote(quote)
     }
 }
 
