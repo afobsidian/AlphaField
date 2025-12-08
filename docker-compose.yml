@@ -1,0 +1,67 @@
+# =============================================================================
+# AlphaField Docker Compose
+# Development and production deployment orchestration
+# =============================================================================
+
+services:
+  # ---------------------------------------------------------------------------
+  # TimescaleDB - Time-series database
+  # ---------------------------------------------------------------------------
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: alphafield-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-alphafield}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-alphafield_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-alphafield}
+    volumes:
+      - timescaledb_data:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-alphafield}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # AlphaField API Server
+  # ---------------------------------------------------------------------------
+  alphafield-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: alphafield-api
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-alphafield}:${POSTGRES_PASSWORD:-alphafield_dev}@timescaledb:5432/${POSTGRES_DB:-alphafield}
+      RUST_LOG: ${RUST_LOG:-info}
+      # API keys - mount from .env or secrets
+      BINANCE_API_KEY: ${BINANCE_API_KEY:-}
+      BINANCE_SECRET_KEY: ${BINANCE_SECRET_KEY:-}
+      COINGECKO_API_KEY: ${COINGECKO_API_KEY:-}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  timescaledb_data:
+    driver: local
+
+# =============================================================================
+# Usage:
+#   Development:  docker-compose up -d
+#   Production:   docker-compose -f docker-compose.yml up -d
+#   Logs:         docker-compose logs -f alphafield-api
+#   Stop:         docker-compose down
+#   Clean:        docker-compose down -v  (removes volumes)
+# =============================================================================

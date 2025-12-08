@@ -5,6 +5,7 @@ use crate::portfolio::Portfolio;
 use crate::strategy::Strategy;
 use alphafield_core::Bar;
 use std::collections::HashMap;
+use tracing::{debug, info, trace, warn, instrument};
 
 pub struct BacktestEngine {
     pub portfolio: Portfolio,
@@ -15,6 +16,11 @@ pub struct BacktestEngine {
 
 impl BacktestEngine {
     pub fn new(initial_cash: f64, fee_rate: f64, slippage: SlippageModel) -> Self {
+        debug!(
+            initial_cash = initial_cash,
+            fee_rate = fee_rate,
+            "Creating new BacktestEngine"
+        );
         Self {
             portfolio: Portfolio::new(initial_cash),
             exchange: ExchangeSimulator::new(fee_rate, slippage),
@@ -24,20 +30,18 @@ impl BacktestEngine {
     }
 
     pub fn set_strategy(&mut self, strategy: Box<dyn Strategy>) {
+        debug!("Strategy set on BacktestEngine");
         self.strategy = Some(strategy);
     }
 
     pub fn add_data(&mut self, symbol: &str, bars: Vec<Bar>) {
+        info!(symbol = symbol, bar_count = bars.len(), "Data loaded for backtest");
         self.data.insert(symbol.to_string(), bars);
     }
 
+    #[instrument(skip(self), fields(symbols = ?self.data.keys().collect::<Vec<_>>()))]
     pub fn run(&mut self) -> Result<PerformanceMetrics> {
-        // 1. Align data by timestamp
-        // For simplicity, assuming all symbols have data for the same timestamps for now.
-        // In a real engine, we'd need a priority queue or merged iterator.
-
-        // Find the common time range (intersection) or union depending on strategy requirements
-        // Here we just iterate through the first symbol's data as a driver
+        info!("Starting backtest run");
 
         let driver_symbol = self
             .data
@@ -49,42 +53,68 @@ impl BacktestEngine {
             .clone();
         let bars = self.data.get(&driver_symbol).unwrap();
 
-        for bar in bars {
+        info!(
+            symbol = driver_symbol,
+            total_bars = bars.len(),
+            "Processing bars"
+        );
+
+        let mut orders_filled = 0u64;
+        let mut orders_skipped = 0u64;
+
+        for (bar_idx, bar) in bars.iter().enumerate() {
             let timestamp = bar.timestamp.timestamp_millis();
 
-            // 2. Update Portfolio Market Value (Mark to Market)
+            // Update Portfolio Market Value (Mark to Market)
             let mut current_prices = HashMap::new();
-            // In a real loop, we'd get the price for ALL symbols at this timestamp
-            // For now, just using the driver symbol's close price
             current_prices.insert(driver_symbol.clone(), bar.close);
 
             self.portfolio.record_equity(timestamp, &current_prices);
 
-            // 3. Strategy Logic
+            trace!(
+                bar_idx = bar_idx,
+                timestamp = %bar.timestamp,
+                close = bar.close,
+                "Processing bar"
+            );
+
+            // Strategy Logic
             if let Some(strategy) = &mut self.strategy {
                 let orders = strategy.on_bar(bar)?;
                 for order in orders {
-                    // Simple execution logic: Execute immediately at close price
                     let price = self.exchange.calculate_price(bar.close, order.quantity);
                     let fee = self.exchange.calculate_fee(price, order.quantity);
 
-                    // Try to execute, skip if insufficient funds or insufficient position (no shorting)
                     match self
                         .portfolio
                         .update_from_fill(&order.symbol, order.quantity, price, fee)
                     {
-                        Ok(_) => {}
-                        Err(crate::error::BacktestError::InsufficientFunds { required, available }) => {
-                            eprintln!(
-                                "Skipping trade: insufficient funds (required: {:.2}, available: {:.2})",
-                                required, available
+                        Ok(_) => {
+                            debug!(
+                                symbol = order.symbol,
+                                quantity = order.quantity,
+                                price = price,
+                                fee = fee,
+                                "Order filled"
                             );
+                            orders_filled += 1;
+                        }
+                        Err(crate::error::BacktestError::InsufficientFunds { required, available }) => {
+                            warn!(
+                                required = required,
+                                available = available,
+                                "Skipping trade: insufficient funds"
+                            );
+                            orders_skipped += 1;
                         }
                         Err(crate::error::BacktestError::InsufficientPosition { symbol, required, available }) => {
-                            eprintln!(
-                                "Skipping trade: insufficient position for {} (required: {:.6}, available: {:.6})",
-                                symbol, required, available
+                            warn!(
+                                symbol = symbol,
+                                required = required,
+                                available = available,
+                                "Skipping trade: insufficient position"
                             );
+                            orders_skipped += 1;
                         }
                         Err(e) => return Err(e),
                     }
@@ -92,9 +122,22 @@ impl BacktestEngine {
             }
         }
 
-        Ok(PerformanceMetrics::calculate(
+        let metrics = PerformanceMetrics::calculate_with_trades(
             &self.portfolio.equity_history,
+            &self.portfolio.trades,
             0.02,
-        )) // 2% risk free rate
+        );
+
+        info!(
+            orders_filled = orders_filled,
+            orders_skipped = orders_skipped,
+            total_trades = self.portfolio.trades.len(),
+            total_return = format!("{:.2}%", metrics.total_return * 100.0),
+            sharpe_ratio = format!("{:.2}", metrics.sharpe_ratio),
+            max_drawdown = format!("{:.2}%", metrics.max_drawdown * 100.0),
+            "Backtest completed"
+        );
+
+        Ok(metrics)
     }
 }

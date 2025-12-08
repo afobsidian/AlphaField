@@ -7,6 +7,7 @@
     <title>AlphaField Dashboard</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 
 <body>
@@ -21,6 +22,10 @@
                 <li class="nav-item active" onclick="switchTab('data')">
                     <span class="nav-icon">📊</span>
                     <span class="nav-label">Data</span>
+                </li>
+                <li class="nav-item" onclick="switchTab('sentiment')">
+                    <span class="nav-icon">🧠</span>
+                    <span class="nav-label">Sentiment</span>
                 </li>
                 <li class="nav-item" onclick="switchTab('backtest')">
                     <span class="nav-icon">📈</span>
@@ -54,16 +59,13 @@
                         <h3>Fetch New Data</h3>
                         <form id="fetch-form">
                             <div class="form-row">
-                                <div class="form-group">
+                                <div class="form-group symbol-search">
                                     <label>Symbol</label>
-                                    <select id="fetch-symbol">
-                                        <option value="BTC">BTC (Bitcoin)</option>
-                                        <option value="ETH">ETH (Ethereum)</option>
-                                        <option value="SOL">SOL (Solana)</option>
-                                        <option value="XRP">XRP (Ripple)</option>
-                                        <option value="ADA">ADA (Cardano)</option>
-                                        <option value="DOGE">DOGE (Dogecoin)</option>
-                                    </select>
+                                    <div class="autocomplete-wrapper">
+                                        <input type="text" id="fetch-symbol" placeholder="Search symbols..."
+                                            autocomplete="off">
+                                        <div id="symbol-dropdown" class="symbol-dropdown"></div>
+                                    </div>
                                 </div>
                                 <div class="form-group">
                                     <label>Interval</label>
@@ -95,11 +97,120 @@
                 </div>
             </div>
 
+            <!-- SENTIMENT VIEW -->
+            <div id="sentiment-view" class="view-section" style="display: none;">
+                <header class="view-header">
+                    <h1>🧠 Market Sentiment</h1>
+                    <p>Fear & Greed Index and sentiment analysis</p>
+                </header>
+
+                <div class="content-grid sentiment-grid">
+                    <!-- Current Sentiment Gauge -->
+                    <div class="card sentiment-gauge-card">
+                        <h3>Current Sentiment</h3>
+                        <div class="sentiment-gauge">
+                            <div id="gauge-container">
+                                <div id="gauge-value" class="gauge-value">--</div>
+                                <div id="gauge-label" class="gauge-label">Loading...</div>
+                                <div class="gauge-bar">
+                                    <div id="gauge-fill" class="gauge-fill" style="width: 0%"></div>
+                                    <div id="gauge-marker" class="gauge-marker" style="left: 0%"></div>
+                                </div>
+                                <div class="gauge-scale">
+                                    <span>Extreme Fear</span>
+                                    <span>Neutral</span>
+                                    <span>Extreme Greed</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="sentiment-updated" id="sentiment-updated">Last updated: --</div>
+                    </div>
+
+                    <!-- Sentiment Stats -->
+                    <div class="card sentiment-stats-card">
+                        <h3>Statistics (30 days)</h3>
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <span class="metric-label">Average</span>
+                                <span class="metric-value" id="sent-avg">--</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Min</span>
+                                <span class="metric-value" id="sent-min">--</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Max</span>
+                                <span class="metric-value" id="sent-max">--</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">7-day SMA</span>
+                                <span class="metric-value" id="sent-sma7">--</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Momentum</span>
+                                <span class="metric-value" id="sent-momentum">--</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Days in Fear</span>
+                                <span class="metric-value" id="sent-fear-days">--</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sentiment Zones -->
+                    <div class="card sentiment-zones-card">
+                        <h3>Zone Distribution</h3>
+                        <div class="zone-bars">
+                            <div class="zone-bar">
+                                <div class="zone-label">🔴 Fear</div>
+                                <div class="zone-progress">
+                                    <div id="zone-fear" class="zone-fill fear" style="width: 0%"></div>
+                                </div>
+                                <div id="zone-fear-pct" class="zone-pct">0%</div>
+                            </div>
+                            <div class="zone-bar">
+                                <div class="zone-label">⚪ Neutral</div>
+                                <div class="zone-progress">
+                                    <div id="zone-neutral" class="zone-fill neutral" style="width: 0%"></div>
+                                </div>
+                                <div id="zone-neutral-pct" class="zone-pct">0%</div>
+                            </div>
+                            <div class="zone-bar">
+                                <div class="zone-label">🟢 Greed</div>
+                                <div class="zone-progress">
+                                    <div id="zone-greed" class="zone-fill greed" style="width: 0%"></div>
+                                </div>
+                                <div id="zone-greed-pct" class="zone-pct">0%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Historical Chart -->
+                <div class="charts-section">
+                    <div class="card chart-card-full">
+                        <h3>Historical Sentiment</h3>
+                        <div class="chart-controls">
+                            <select id="sentiment-days" onchange="loadSentimentHistory()">
+                                <option value="30">30 Days</option>
+                                <option value="90">90 Days</option>
+                                <option value="180">180 Days</option>
+                                <option value="365">1 Year</option>
+                            </select>
+                            <button class="btn btn-secondary" onclick="loadSentimentHistory()">
+                                🔄 Refresh
+                            </button>
+                        </div>
+                        <div id="sentiment-chart" style="width:100%;height:400px;"></div>
+                    </div>
+                </div>
+            </div>
+
             <!-- BACKTEST VIEW -->
             <div id="backtest-view" class="view-section" style="display: none;">
                 <header class="view-header">
                     <h1>📈 Strategy Backtester</h1>
-                    <p>Test trading strategies against historical data</p>
+                    <p>Test trading strategies against historical data with comprehensive analytics</p>
                 </header>
 
                 <div class="content-grid backtest-grid">
@@ -126,6 +237,14 @@
                                 <label>Days to Test</label>
                                 <input type="number" id="bt-days" value="30" min="7" max="365">
                             </div>
+                            <div class="form-group">
+                                <label>Start Date (Optional)</label>
+                                <input type="date" id="bt-start-date" class="form-control">
+                            </div>
+                            <div class="form-group">
+                                <label>End Date (Optional)</label>
+                                <input type="date" id="bt-end-date" class="form-control">
+                            </div>
 
                             <div id="strategy-params" class="params-section">
                                 <!-- Dynamic params -->
@@ -137,9 +256,9 @@
                         </form>
                     </div>
 
-                    <!-- Results -->
+                    <!-- Core Metrics -->
                     <div class="card results-card">
-                        <h3>Results</h3>
+                        <h3>Performance Metrics</h3>
                         <div class="metrics-grid">
                             <div class="metric">
                                 <span class="metric-label">Total Return</span>
@@ -150,26 +269,149 @@
                                 <span class="metric-value" id="bt-cagr">—</span>
                             </div>
                             <div class="metric">
-                                <span class="metric-label">Sharpe Ratio</span>
+                                <span class="metric-label">Sharpe</span>
                                 <span class="metric-value" id="bt-sharpe">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Sortino</span>
+                                <span class="metric-value" id="bt-sortino">—</span>
                             </div>
                             <div class="metric">
                                 <span class="metric-label">Max Drawdown</span>
                                 <span class="metric-value" id="bt-drawdown">—</span>
                             </div>
                             <div class="metric">
-                                <span class="metric-label">Volatility</span>
-                                <span class="metric-value" id="bt-volatility">—</span>
+                                <span class="metric-label">Calmar</span>
+                                <span class="metric-value" id="bt-calmar">—</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Benchmark Comparison -->
+                    <div class="card benchmark-card">
+                        <h3>vs BTC Buy & Hold</h3>
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <span class="metric-label">Alpha</span>
+                                <span class="metric-value" id="bt-alpha">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Beta</span>
+                                <span class="metric-value" id="bt-beta">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Excess Return</span>
+                                <span class="metric-value" id="bt-excess">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Correlation</span>
+                                <span class="metric-value" id="bt-correlation">—</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sentiment Analysis -->
+                    <div class="card sentiment-stats-card">
+                        <h3>Sentiment Context</h3>
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <span class="metric-label">Market Mood</span>
+                                <span class="metric-value" id="bt-market-mood">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Avg Index</span>
+                                <span class="metric-value" id="bt-market-avg">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Asset RSI</span>
+                                <span class="metric-value" id="bt-asset-rsi">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Momentum</span>
+                                <span class="metric-value" id="bt-asset-mom">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Fear Days</span>
+                                <span class="metric-value" id="bt-fear-days">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Greed Days</span>
+                                <span class="metric-value" id="bt-greed-days">—</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Trade Stats -->
+                    <div class="card trade-stats-card">
+                        <h3>Trade Statistics</h3>
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <span class="metric-label">Total Trades</span>
+                                <span class="metric-value" id="bt-trades">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Win Rate</span>
+                                <span class="metric-value" id="bt-winrate">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Profit Factor</span>
+                                <span class="metric-value" id="bt-pf">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Avg Duration</span>
+                                <span class="metric-value" id="bt-duration">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Win Streak</span>
+                                <span class="metric-value" id="bt-winstreak">—</span>
+                            </div>
+                            <div class="metric">
+                                <span class="metric-label">Loss Streak</span>
+                                <span class="metric-value" id="bt-lossstreak">—</span>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Chart -->
-                <div class="card chart-card">
-                    <h3>Equity Curve</h3>
-                    <div class="chart-container">
-                        <canvas id="backtestChart"></canvas>
+                <!-- Charts Section -->
+                <div class="charts-section">
+                    <!-- Equity Curve with Benchmark -->
+                    <div class="card chart-card-full">
+                        <h3>Equity Curve vs Benchmark</h3>
+                        <div id="equity-chart" style="width:100%;height:400px;"></div>
+                    </div>
+
+                    <!-- Drawdown Chart -->
+                    <div class="card chart-card-half">
+                        <h3>Underwater (Drawdown)</h3>
+                        <div id="drawdown-chart" style="width:100%;height:300px;"></div>
+                    </div>
+
+                    <!-- Monthly Returns Heatmap -->
+                    <div class="card chart-card-half">
+                        <h3>Monthly Returns</h3>
+                        <div id="monthly-chart" style="width:100%;height:300px;"></div>
+                    </div>
+
+                    <!-- Rolling Sharpe -->
+                    <div class="card chart-card-half">
+                        <h3>Rolling Sharpe (20-bar)</h3>
+                        <div id="rolling-chart" style="width:100%;height:300px;"></div>
+                    </div>
+
+                    <!-- Trade Distribution -->
+                    <div class="card chart-card-half">
+                        <h3>Trade P&L Distribution</h3>
+                        <div id="trades-chart" style="width:100%;height:300px;"></div>
+                    </div>
+                </div>
+
+                <!-- Status Bar -->
+                <div class="card status-bar-card">
+                    <div class="status-bar-content">
+                        <span id="bt-data-source">📊 Ready to run</span>
+                        <span id="bt-date-range">—</span>
+                        <span>⏱️ <strong id="bt-exec-time">—</strong> ms</span>
                     </div>
                 </div>
             </div>
@@ -177,31 +419,61 @@
             <!-- LIVE VIEW -->
             <div id="live-view" class="view-section" style="display: none;">
                 <header class="view-header">
-                    <h1>🔴 Live Trading</h1>
-                    <p>Monitor active strategies and positions</p>
+                    <div class="view-header-content">
+                        <h1>🔴 Live Trading</h1>
+                        <p>Monitor active strategies and positions</p>
+                    </div>
+                    <div id="ws-status" class="status-badge connecting">⟳ Connecting...</div>
                 </header>
 
+                <!-- Control Panel -->
+                <div class="control-panel">
+                    <div class="control-group">
+                        <label>Strategy</label>
+                        <select id="live-strategy">
+                            <option value="GoldenCross">Golden Cross</option>
+                            <option value="Rsi">RSI Reversal</option>
+                            <option value="MeanReversion">Mean Reversion</option>
+                            <option value="Momentum">Momentum</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label>Mode</label>
+                        <select id="live-mode">
+                            <option value="paper">Paper Trading</option>
+                            <option value="live" disabled>Live Trading</option>
+                        </select>
+                    </div>
+                    <div class="control-buttons">
+                        <button id="btn-start" class="btn btn-success">▶ Start</button>
+                        <button id="btn-stop" class="btn btn-secondary" disabled>⏹ Stop</button>
+                        <button id="btn-panic" class="btn btn-danger">⚠ Panic Close</button>
+                    </div>
+                    <div id="engine-status" class="engine-stopped">Stopped</div>
+                </div>
+
+                <!-- Summary Cards -->
                 <div class="summary-cards">
                     <div class="card summary-card">
                         <h4>Total Value</h4>
-                        <div class="value" id="total-value">$0.00</div>
+                        <div class="value" id="live-total-value">$0.00</div>
                     </div>
                     <div class="card summary-card">
                         <h4>Cash</h4>
-                        <div class="value" id="cash-balance">$0.00</div>
+                        <div class="value" id="live-cash">$0.00</div>
+                    </div>
+                    <div class="card summary-card">
+                        <h4>Positions Value</h4>
+                        <div class="value" id="live-positions-value">$0.00</div>
                     </div>
                     <div class="card summary-card">
                         <h4>P&L</h4>
-                        <div class="value" id="total-pnl">$0.00</div>
-                        <div class="sub-value" id="pnl-percent">0.00%</div>
-                    </div>
-                    <div class="card summary-card">
-                        <h4>Sharpe</h4>
-                        <div class="value" id="sharpe-ratio">0.00</div>
+                        <div class="value" id="live-pnl">$0.00</div>
                     </div>
                 </div>
 
-                <div class="content-grid">
+                <div class="content-grid live-grid">
+                    <!-- Equity Chart -->
                     <div class="card chart-card">
                         <h3>Equity Curve</h3>
                         <div class="chart-container">
@@ -209,23 +481,59 @@
                         </div>
                     </div>
 
+                    <!-- Positions Table -->
                     <div class="card positions-card">
-                        <h3>Positions</h3>
-                        <table id="positions-table">
+                        <h3>Open Positions</h3>
+                        <table class="data-table">
                             <thead>
                                 <tr>
                                     <th>Symbol</th>
                                     <th>Qty</th>
                                     <th>Entry</th>
+                                    <th>Current</th>
                                     <th>P&L</th>
+                                    <th>%</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody id="live-positions-table">
                                 <tr>
-                                    <td colspan="4" class="empty">No positions</td>
+                                    <td colspan="6" class="empty">No open positions</td>
                                 </tr>
                             </tbody>
                         </table>
+                    </div>
+
+                    <!-- Trade History -->
+                    <div class="card trades-card">
+                        <h3>Recent Trades</h3>
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Symbol</th>
+                                    <th>Side</th>
+                                    <th>Qty</th>
+                                    <th>Price</th>
+                                    <th>P&L</th>
+                                </tr>
+                            </thead>
+                            <tbody id="trade-history">
+                                <tr>
+                                    <td colspan="6" class="empty">No trades yet</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Log Console -->
+                    <div class="card log-card">
+                        <h3>Activity Log</h3>
+                        <div id="log-console" class="log-console">
+                            <div class="log-entry log-info">
+                                <span class="log-time">--:--:--</span>
+                                <span class="log-msg">Waiting for connection...</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

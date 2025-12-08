@@ -21,28 +21,26 @@ fn test_golden_cross_signals() {
 
     // Setup: Fast < Slow initially
     // We need enough bars to establish the trend
-    // 100, 90, 80, 70, 60
-    // Bar 5: Fast(3) = (80+70+60)/3 = 70. Slow(5) = (100+90+80+70+60)/5 = 80.
-    // Fast < Slow.
-
     let prices = vec![
         100.0, 90.0, 80.0, 70.0, 60.0, // Now reverse trend sharply
         80.0, 100.0, 120.0, 140.0,
     ];
 
-    let mut signals = Vec::new();
+    let mut all_signals = Vec::new();
     for (i, price) in prices.iter().enumerate() {
-        if let Some(signal) = strategy.on_bar(&create_bar(*price)) {
-            println!(
-                "Bar {}: Price {}, Signal {:?}",
-                i, price, signal.signal_type
-            );
-            signals.push(signal);
+        if let Some(signals) = strategy.on_bar(&create_bar(*price)) {
+            for signal in &signals {
+                println!(
+                    "Bar {}: Price {}, Signal {:?}",
+                    i, price, signal.signal_type
+                );
+            }
+            all_signals.extend(signals);
         }
     }
 
     // Should eventually get a Buy signal as Fast crosses above Slow
-    assert!(signals.iter().any(|s| s.signal_type == SignalType::Buy));
+    assert!(all_signals.iter().any(|s| s.signal_type == SignalType::Buy));
 }
 
 #[test]
@@ -60,11 +58,13 @@ fn test_rsi_signals() {
     let mut sell_signals = 0;
 
     for price in prices {
-        if let Some(signal) = strategy.on_bar(&create_bar(price)) {
-            match signal.signal_type {
-                SignalType::Buy => buy_signals += 1,
-                SignalType::Sell => sell_signals += 1,
-                _ => {}
+        if let Some(signals) = strategy.on_bar(&create_bar(price)) {
+            for signal in signals {
+                match signal.signal_type {
+                    SignalType::Buy => buy_signals += 1,
+                    SignalType::Sell => sell_signals += 1,
+                    _ => {}
+                }
             }
         }
     }
@@ -84,13 +84,10 @@ fn test_mean_reversion_signals() {
     }
 
     // Spike up -> Sell
-    // Mean becomes (900 + 120)/10 = 102
-    // Variance increases, but price 120 should be > Upper Band
-    let signal = strategy.on_bar(&create_bar(120.0));
-
-    assert!(signal.is_some(), "Should generate signal on spike");
-    let _sell_signal = signal.unwrap();
-    assert_eq!(_sell_signal.signal_type, SignalType::Sell);
+    let signals = strategy.on_bar(&create_bar(120.0));
+    assert!(signals.is_some(), "Should generate signal on spike");
+    let signals = signals.unwrap();
+    assert!(signals.iter().any(|s| s.signal_type == SignalType::Sell));
 
     // Drop down -> Buy
     // Feed some normal data to stabilize
@@ -98,9 +95,10 @@ fn test_mean_reversion_signals() {
         strategy.on_bar(&create_bar(100.0));
     }
 
-    let signal = strategy.on_bar(&create_bar(80.0));
-    assert!(signal.is_some(), "Should generate signal on drop");
-    assert_eq!(signal.unwrap().signal_type, SignalType::Buy);
+    let signals = strategy.on_bar(&create_bar(80.0));
+    assert!(signals.is_some(), "Should generate signal on drop");
+    let signals = signals.unwrap();
+    assert!(signals.iter().any(|s| s.signal_type == SignalType::Buy));
 }
 
 #[test]
@@ -110,13 +108,13 @@ fn test_momentum_signals() {
     // Strong uptrend
     let prices: Vec<f64> = (0..20).map(|i| 100.0 + (i as f64) * 2.0).collect();
 
-    let mut signals = Vec::new();
+    let mut all_signals = Vec::new();
     for price in prices {
-        if let Some(signal) = strategy.on_bar(&create_bar(price)) {
-            signals.push(signal);
+        if let Some(signals) = strategy.on_bar(&create_bar(price)) {
+            all_signals.extend(signals);
         }
     }
 
     // Should have buy signals in strong uptrend
-    assert!(signals.iter().any(|s| s.signal_type == SignalType::Buy));
+    assert!(all_signals.iter().any(|s| s.signal_type == SignalType::Buy));
 }

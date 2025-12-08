@@ -5,7 +5,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use alphafield_data::{CachedSymbol, DatabaseClient, UnifiedDataClient};
+use alphafield_data::{CachedSymbol, UnifiedDataClient};
 
 use crate::api::AppState;
 
@@ -74,7 +74,7 @@ pub async fn fetch_symbol(
     let client = UnifiedDataClient::new_from_env();
     let limit = req.limit.unwrap_or(1000);
 
-    match client.get_bars(&req.symbol, &req.interval, Some(limit)).await {
+    match client.get_bars(&req.symbol, &req.interval, None, None, Some(limit)).await {
         Ok(bars) => {
             let count = bars.len();
             // Save to DB

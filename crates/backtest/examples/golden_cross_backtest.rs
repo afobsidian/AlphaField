@@ -47,7 +47,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         println!("Fetching historical data from API...");
         let client = alphafield_data::UnifiedDataClient::new_from_env();
         // Fetch 1000 hours (~41 days)
-        let bars = client.get_bars(symbol, interval, Some(1000)).await?;
+        let bars = client.get_bars(symbol, interval, None, None, Some(1000)).await?;
         println!("Saving {} bars to database...", bars.len());
         db.save_bars(symbol, interval, &bars).await?;
         bars

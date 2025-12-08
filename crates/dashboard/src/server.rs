@@ -1,4 +1,5 @@
 use crate::api::{create_router, AppState};
+use crate::websocket::start_heartbeat_task;
 use alphafield_core::Result;
 use axum::Router;
 use std::sync::Arc;
@@ -20,6 +21,9 @@ pub async fn run_server(addr: &str) -> Result<()> {
     
     let state = Arc::new(AppState::with_database().await);
 
+    // Start heartbeat background task
+    let _heartbeat_handle = start_heartbeat_task(state.hub.clone());
+
     // Create API router
     let api_router = create_router(state);
 
@@ -40,6 +44,7 @@ pub async fn run_server(addr: &str) -> Result<()> {
 
     println!("🚀 Dashboard server running on http://{}", addr);
     println!("📊 Open your browser to view the dashboard");
+    println!("🔌 WebSocket available at ws://{}/api/ws", addr);
 
     axum::serve(listener, app)
         .await
@@ -47,3 +52,4 @@ pub async fn run_server(addr: &str) -> Result<()> {
 
     Ok(())
 }
+

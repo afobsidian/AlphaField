@@ -42,7 +42,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     } else {
         println!("📥 Fetching historical data from API...");
         let client = alphafield_data::UnifiedDataClient::new_from_env();
-        let bars = client.get_bars(symbol, interval, Some(1000)).await?;
+        let bars = client.get_bars(symbol, interval, None, None, Some(1000)).await?;
         db.save_bars(symbol, interval, &bars).await?;
         bars
     };

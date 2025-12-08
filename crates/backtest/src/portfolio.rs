@@ -1,4 +1,6 @@
 use crate::error::{BacktestError, Result};
+use crate::trade::{Trade, TradeSide};
+use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -41,11 +43,34 @@ impl Position {
     }
 }
 
+/// Tracks an open trade for MAE/MFE calculation
+#[derive(Debug, Clone)]
+struct OpenTrade {
+    symbol: String,
+    side: TradeSide,
+    entry_time: DateTime<Utc>,
+    entry_price: f64,
+    quantity: f64,
+    fees_paid: f64,
+    /// Best price seen during trade (for MFE)
+    best_price: f64,
+    /// Worst price seen during trade (for MAE)
+    worst_price: f64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Portfolio {
     pub cash: f64,
     pub positions: HashMap<String, Position>,
     pub equity_history: Vec<(i64, f64)>, // Timestamp (ms), Equity
+    /// Completed trades for metrics calculation
+    pub trades: Vec<Trade>,
+    /// Open trades being tracked (not serialized)
+    #[serde(skip)]
+    open_trades: HashMap<String, OpenTrade>,
+    /// Current timestamp for trade tracking
+    #[serde(skip)]
+    current_timestamp: i64,
 }
 
 impl Portfolio {
@@ -54,6 +79,41 @@ impl Portfolio {
             cash: initial_cash,
             positions: HashMap::new(),
             equity_history: Vec::new(),
+            trades: Vec::new(),
+            open_trades: HashMap::new(),
+            current_timestamp: 0,
+        }
+    }
+
+    /// Set current timestamp for trade tracking
+    pub fn set_timestamp(&mut self, timestamp_ms: i64) {
+        self.current_timestamp = timestamp_ms;
+    }
+
+    /// Update MAE/MFE for all open trades based on current prices
+    pub fn update_open_trades(&mut self, current_prices: &HashMap<String, f64>) {
+        for (symbol, open_trade) in &mut self.open_trades {
+            if let Some(&price) = current_prices.get(symbol) {
+                match open_trade.side {
+                    TradeSide::Long => {
+                        if price > open_trade.best_price {
+                            open_trade.best_price = price;
+                        }
+                        if price < open_trade.worst_price {
+                            open_trade.worst_price = price;
+                        }
+                    }
+                    TradeSide::Short => {
+                        // For short: lower price is better
+                        if price < open_trade.best_price {
+                            open_trade.best_price = price;
+                        }
+                        if price > open_trade.worst_price {
+                            open_trade.worst_price = price;
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -91,11 +151,84 @@ impl Portfolio {
 
         self.cash -= cost + fee;
 
+        let prev_quantity = self
+            .positions
+            .get(symbol)
+            .map(|p| p.quantity)
+            .unwrap_or(0.0);
+
         let position = self
             .positions
             .entry(symbol.to_string())
             .or_insert(Position::new(symbol, 0.0, 0.0));
+        
+        let _entry_price_before = position.avg_price;
         position.update(quantity, price);
+
+        // Track trades: opening new position
+        if prev_quantity.abs() < 1e-9 && quantity.abs() > 1e-9 {
+            // New position opened
+            let side = if quantity > 0.0 { TradeSide::Long } else { TradeSide::Short };
+            let entry_time = Utc.timestamp_millis_opt(self.current_timestamp).unwrap();
+            
+            self.open_trades.insert(symbol.to_string(), OpenTrade {
+                symbol: symbol.to_string(),
+                side,
+                entry_time,
+                entry_price: price,
+                quantity: quantity.abs(),
+                fees_paid: fee,
+                best_price: price,
+                worst_price: price,
+            });
+        } else if position.quantity.abs() < 1e-9 {
+            // Position closed - record completed trade
+            if let Some(open) = self.open_trades.remove(symbol) {
+                let exit_time = Utc.timestamp_millis_opt(self.current_timestamp).unwrap();
+                let duration_secs = (exit_time - open.entry_time).num_seconds();
+                
+                // Calculate PnL
+                let pnl = match open.side {
+                    TradeSide::Long => (price - open.entry_price) * open.quantity - open.fees_paid - fee,
+                    TradeSide::Short => (open.entry_price - price) * open.quantity - open.fees_paid - fee,
+                };
+
+                // Calculate MAE/MFE as dollar amounts
+                let (mae, mfe) = match open.side {
+                    TradeSide::Long => {
+                        let mae = (open.entry_price - open.worst_price) * open.quantity;
+                        let mfe = (open.best_price - open.entry_price) * open.quantity;
+                        (mae.max(0.0), mfe.max(0.0))
+                    }
+                    TradeSide::Short => {
+                        let mae = (open.worst_price - open.entry_price) * open.quantity;
+                        let mfe = (open.entry_price - open.best_price) * open.quantity;
+                        (mae.max(0.0), mfe.max(0.0))
+                    }
+                };
+
+                self.trades.push(Trade {
+                    symbol: open.symbol,
+                    side: open.side,
+                    entry_time: open.entry_time,
+                    exit_time,
+                    entry_price: open.entry_price,
+                    exit_price: price,
+                    quantity: open.quantity,
+                    pnl,
+                    fees: open.fees_paid + fee,
+                    mae,
+                    mfe,
+                    duration_secs,
+                });
+            }
+        } else if (prev_quantity > 0.0 && quantity > 0.0) || (prev_quantity < 0.0 && quantity < 0.0) {
+            // Adding to existing position - update fees
+            if let Some(open) = self.open_trades.get_mut(symbol) {
+                open.fees_paid += fee;
+                open.quantity += quantity.abs();
+            }
+        }
 
         if position.quantity.abs() < 1e-9 {
             self.positions.remove(symbol);
@@ -111,7 +244,6 @@ impl Portfolio {
                 equity += position.market_value(price);
             } else {
                 // Fallback to last known price (avg_price) if current price is missing
-                // In a real system, this might be an error or handled differently
                 equity += position.market_value(position.avg_price);
             }
         }
@@ -119,6 +251,8 @@ impl Portfolio {
     }
 
     pub fn record_equity(&mut self, timestamp: i64, current_prices: &HashMap<String, f64>) {
+        self.set_timestamp(timestamp);
+        self.update_open_trades(current_prices);
         let equity = self.total_equity(current_prices);
         self.equity_history.push((timestamp, equity));
     }

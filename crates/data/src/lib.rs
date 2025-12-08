@@ -22,13 +22,24 @@ pub mod storage;
 pub use storage::HistoricalDataStorage;
 
 pub mod database;
-pub use database::{DatabaseClient, CachedSymbol};
+pub use database::{CachedSymbol, DatabaseClient};
 
 pub mod pipeline;
-pub use pipeline::{DataPipeline, DataPersister, MarketEvent};
+pub use pipeline::{DataPersister, DataPipeline, MarketEvent};
 
 pub mod gap_filler;
 pub use gap_filler::GapFiller;
+
+pub mod ingestion_monitor;
+pub use ingestion_monitor::{
+    AlertSeverity, IngestionAlert, IngestionMonitor, IngestionMonitorConfig, IngestionStatus,
+    IngestionSummary,
+};
+
+pub mod sentiment;
+pub use sentiment::{
+    FearGreedData, SentimentClassification, SentimentClient, SentimentIndicator,
+};
 
 // ============================================================================
 // COINLAYER API CLIENT
@@ -1196,6 +1207,8 @@ impl UnifiedDataClient {
         &self,
         symbol: &str,
         interval: &str,
+        start_time: Option<chrono::DateTime<chrono::Utc>>,
+        end_time: Option<chrono::DateTime<chrono::Utc>>,
         limit: Option<u32>,
     ) -> Result<Vec<Bar>> {
         let mut last_error = None;
@@ -1215,9 +1228,13 @@ impl UnifiedDataClient {
                         symbol.to_string()
                     };
 
-                    match client.get_klines(&pair, interval, None, None, limit).await {
+                    let start_ts = start_time.map(|t| t.timestamp_millis());
+                    let end_ts = end_time.map(|t| t.timestamp_millis());
+
+                    match client.get_klines(&pair, interval, start_ts, end_ts, limit).await {
                         Ok(bars) => return Ok(bars),
                         Err(e) => {
+                            tracing::warn!(source = "Binance", error = %e, "Failed to fetch bars");
                             // If rate limited, mark key
                             if e.to_string().contains("429") || e.to_string().contains("418") {
                                 if let Some(k) = key {
@@ -1249,9 +1266,11 @@ impl UnifiedDataClient {
                         _ => 1,
                     };
 
+                    // CoinGecko client logic would need update for start/end, but for now fallback to limit logic
                     match client.get_ohlc(coin_id, "usd", days).await {
                         Ok(bars) => return Ok(bars),
                         Err(e) => {
+                            tracing::warn!(source = "CoinGecko", error = %e, "Failed to fetch bars");
                             if e.to_string().contains("429") {
                                 if let Some(k) = key {
                                     self.coingecko_keys
@@ -1267,13 +1286,9 @@ impl UnifiedDataClient {
                         let client = CoinlayerClient::new(key);
 
                         // Coinlayer only supports daily data via historical endpoint
-                        // We need to fetch multiple days. For now, let's just fetch today's rate
-                        // and return it as a single bar if interval is 1d.
-                        // This is a limitation of Coinlayer.
-                        // For true OHLC, we need get_historical_bars which makes multiple requests.
-
                         if interval == "1d" {
-                            // Calculate start date based on limit
+                            // Logic for date range fetching would go here
+                            // For now, retaining limit based logic as fallback
                             let days = limit.unwrap_or(1);
                             let start_date =
                                 Utc::now().date_naive() - chrono::Duration::days(days as i64);
@@ -1283,18 +1298,25 @@ impl UnifiedDataClient {
                                 .await
                             {
                                 Ok(bars) => return Ok(bars),
-                                Err(e) => last_error = Some(e),
+                                Err(e) => {
+                                    tracing::warn!(source = "Coinlayer", error = %e, "Failed to fetch bars");
+                                    last_error = Some(e);
+                                },
                             }
                         } else {
                             // Coinlayer doesn't support intraday
-                            continue;
+                            let e = QuantError::Api(
+                                "Coinlayer does not support intraday data".to_string(),
+                            );
+                            tracing::warn!(source = "Coinlayer", error = %e, "Skipping: intraday not supported");
+                            last_error = Some(e);
                         }
                     }
                 }
             }
         }
 
-        Err(last_error.unwrap_or_else(|| QuantError::Api("All data sources failed".to_string())))
+        Err(last_error.unwrap_or(QuantError::Api("No data sources available".to_string())))
     }
 
     /// Fetches current price using smart routing

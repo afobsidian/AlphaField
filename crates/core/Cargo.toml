@@ -8,3 +8,4 @@ async-trait = "0.1.89"
 chrono = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }

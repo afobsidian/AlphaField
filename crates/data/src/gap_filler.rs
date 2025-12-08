@@ -1,6 +1,7 @@
 use crate::database::DatabaseClient;
-use alphafield_core::{Bar, QuantError, Result};
-use chrono::{Duration, Utc};
+use alphafield_core::{Bar, Result};
+use chrono::Duration;
+
 
 /// Simple gap-filler that forward-fills missing bars using previous close price.
 /// This is intentionally conservative: volumes are set to 0 and OHLC all equal to last close.

@@ -1,272 +1,322 @@
-# 🗺️ AlphaField Roadmap
+# 🗺️ AlphaField Roadmap v2.0
 
 > Updated: December 2025  
-> Based on: Original Project Plan & Current Codebase State
+> Status: V1 Complete, V2 Planning  
+> Purpose: **Personal Algorithmic Trading Platform**
 
 ---
 
-## ✅ Phase 1: Foundation & Data Layer (Completed)
+## 📊 Feature Gap Analysis
 
-### Core Types
-- [x] Defined `Bar`, `Tick`, `Quote`, `Order`, `Trade` structs in `crates/core`
-- [x] Added validation methods and helper functions (typical price, spread, etc.)
-- [x] Implemented `Copy` trait for zero-cost stack allocation
-
-### Data Clients
-- [x] Binance client (OHLCV with volume)
-- [x] CoinGecko client (market data, prices)
-- [x] Coinlayer client (daily OHLC fallback)
-
-### Unified Data Interface
-- [x] `UnifiedDataClient` as single entry point
-- [x] Smart routing based on data type (OHLC → Binance, Prices → CoinGecko)
-- [x] API key rotation via `ApiKeyPool`
-- [x] Automatic fallbacks on rate limits or errors
-
-### Database Layer
-- [x] PostgreSQL integration via `sqlx`
-- [x] `DatabaseClient` for OHLCV storage (`crates/data/src/database.rs`)
-- [x] Schema: `candles` table with symbol, timeframe, OHLCV
-- [x] Batch save/load, upsert on conflict, index on timestamp
-- [x] TimescaleDB hypertable conversion for large-scale time-series
-- [x] Gap-filler service for missing candles
+| Feature | AlphaField | Gap Priority |
+|---------|------------|--------------|
+| Backtesting | ✅ Complete | - |
+| Live Trading | ✅ Binance | - |
+| Monte Carlo / Sensitivity | ✅ Complete | - |
+| Risk Management | ✅ Complete | - |
+| **Interactive Charting** | ⚠️ Basic | High |
+| **DCA/Grid Bots** | ❌ Missing | High |
+| **Sentiment Analysis** | ❌ Missing | High |
+| **Advanced Order Types** | ⚠️ Limited | Medium |
+| **Enhanced Reporting** | ⚠️ Basic | Medium |
+| **Mobile Monitoring** | ❌ Missing | Low |
 
 ---
 
-## ✅ Phase 2: Strategy Engine (Completed)
+## ✅ V1 Completed Phases (1-11)
 
-### Strategy Trait
-- [x] Core `Strategy` trait (`on_bar`, `on_tick`, `on_quote`)
-- [x] Backtest-specific `Strategy` trait returning `Vec<OrderRequest>`
-- [x] `StrategyAdapter` for seamless backtest ↔ live integration
-
-### Indicator Library
-- [x] SMA (Simple Moving Average)
-- [x] EMA (Exponential Moving Average)
-- [x] RSI (Relative Strength Index)
-- [x] Common `Indicator` trait with `update()`, `value()`, `reset()`
-
-### Example Strategies
-- [x] Golden Cross (SMA crossover)
-- [x] RSI Strategy (overbought/oversold)
-- [x] Buy-and-Hold baseline
+All original phases complete:
+- Foundation & Data Layer
+- Strategy Engine & Indicators
+- Backtesting Engine
+- Live Execution (Binance)
+- Dashboard & Analytics
+- Production Hardening
+- Enhanced Metrics
+- Real-Time Dashboard
+- Stress Testing
+- Data Infrastructure
+- Production Deployment
 
 ---
 
-## ✅ Phase 3: Backtesting Engine (Completed)
+## 🎯 V2 Roadmap: Personal Trading Enhancements
 
-### Event-Driven Architecture
-- [x] `BacktestEngine` processes data bar-by-bar
-- [x] No look-ahead bias (candle-by-candle event loop)
+### Phase 12: Interactive Charting
 
-### Portfolio Manager
-- [x] `Portfolio` tracks cash, positions, equity history
-- [x] `Position` struct with avg price, quantity, PnL
+> Target: Q1 2026 | Priority: **High**
 
-### Order Matching & Simulation
-- [x] `ExchangeSimulator` with configurable fee rate
-- [x] `SlippageModel` for realistic fills
-- [x] Latency injection support
+#### Chart Display
+- [ ] Multiple timeframes (1m, 5m, 15m, 1h, 4h, 1d)
+- [ ] Candlestick, line, area chart types
 
-### Spot-Only Enforcement (New)
-- [x] `InsufficientPosition` error blocks shorting in backtest
-- [x] Cash constraint validation (`InsufficientFunds`)
+#### Indicators on Chart
+- [ ] SMA/EMA overlay display
+- [ ] RSI, MACD in separate panels
+- [ ] Bollinger Bands visualization
+- [ ] Custom indicator parameter controls
 
-### Performance Metrics
-- [x] Total Return, CAGR
-- [x] Sharpe Ratio (annualized)
-- [x] Max Drawdown
-- [x] Volatility (annualized)
+#### Trade Markers
+- [ ] Entry/exit points on chart
+- [ ] P&L annotations
+- [ ] Backtest equity curve overlay
 
 ---
 
-## ✅ Phase 4: Live Execution (Completed)
+### Phase 13: Sentiment Analysis ✅
 
-### Exchange Connectivity
-- [x] `ExecutionService` trait for order submission
-- [x] Binance client implementation (`crates/execution/src/clients/`)
+> Target: Q1 2026 | Priority: **High** | Status: **Complete**
 
-### Risk Management
-- [x] `RiskManager<S>` wrapper pattern
-- [x] `RiskCheck` trait for composable rules
-- [x] `MaxOrderValue` check
-- [x] `NoShorts` check (spot-only enforcement)
+#### Data Sources
+- [x] Fear & Greed Index integration (`SentimentClient`)
+- [ ] Twitter/X sentiment API (crypto mentions) - *future*
+- [ ] Reddit sentiment (r/cryptocurrency, r/bitcoin) - *future*
+- [ ] News headline sentiment (CryptoPanic, NewsAPI) - *future*
 
-### Paper Trading
-- [x] Simulated execution via `ExchangeSimulator`
+#### Sentiment Indicators
+- [x] Aggregate sentiment score (bullish/bearish/neutral)
+- [x] Sentiment momentum (rate of change)
+- [ ] Social volume tracking - *future*
+- [ ] Whale alert integration (large transactions) - *future*
 
----
+#### Strategy Integration
+- [x] Sentiment as strategy input/filter (`SentimentIndicator`)
+- [x] Backtest with historical sentiment data
+- [x] Sentiment divergence detection (price vs sentiment)
+- [x] Per-asset technical sentiment (`AssetSentimentCalculator`)
+- [x] RSI zones, momentum zones, volume ratio
+- [x] Composite sentiment score per asset
 
-## 🔄 Phase 5: Dashboard & Analytics (In Progress)
-
-### Backend (Axum)
-- [x] Server setup (`crates/dashboard/src/server.rs`)
-- [x] API endpoints (`api.rs`, `backtest_api.rs`, `data_api.rs`)
-- [x] Mock data for development
-
-### Frontend (React)
-- [x] Static HTML/JS/CSS scaffold (`crates/dashboard/static/`)
-
----
-
-## 📅 Phase 6: Production Hardening (Planned)
-
-### Data Infrastructure
-- [ ] TimescaleDB hypertables for candles/trades
-- [ ] Survivorship bias handling (delisted coins in dataset)
-
-### Advanced Backtesting
-- [ ] Walk-Forward Analysis module
-- [ ] Monte Carlo stress testing
-- [ ] Parameter sensitivity analysis
-- [ ] Multi-asset correlation checks
-
-### Live Trading Safeguards
-- [ ] Max daily loss auto-flatten
-- [ ] Position drift alerting
-- [ ] Multi-strategy correlation monitor
-- [ ] Volatility-scaled position sizing (ATR-based)
-
-### Deployment
-- [ ] Docker Compose setup (Rust + PostgreSQL/TimescaleDB)
-- [ ] CI/CD pipeline (build, test, lint)
-- [ ] Minimal capital deployment ($500–$1000)
-- [ ] Full-scale rollout with monitoring
+#### Dashboard Display
+- [x] Sentiment API endpoints (`/api/sentiment/*`)
+- [x] Sentiment gauge widget with gradient bar
+- [x] Historical sentiment chart with zone shading
+- [x] Zone distribution bars (Fear/Neutral/Greed)
+- [x] Statistics panel (avg, min, max, SMA, momentum)
+- [x] Asset sentiment in backtest response
 
 ---
 
-## 📊 Progress Summary
+### Phase 14: Automated Trading Bots
 
-| Phase | Status | Completion |
-|-------|--------|------------|
-| 1. Data Layer | ✅ Complete | 100% |
-| 2. Strategy Engine | ✅ Complete | 100% |
-| 3. Backtesting | ✅ Complete | 80% |
-| 4. Live Execution | ✅ Complete | 70% |
-| 5. Dashboard | 🔄 In Progress | 40% |
-| 6. Production | 📅 Planned | 0% |
+> Target: Q2 2026 | Priority: **High**
 
----
+#### DCA Bot
+- [ ] Scheduled recurring buys
+- [ ] Fixed amount or % of available balance
+- [ ] Configurable frequency (daily, weekly, monthly)
+- [ ] Stop if price exceeds threshold
 
-## 🎯 Phase 7: Enhanced Metrics & Validation (Short-term)
+#### Grid Bot
+- [ ] Upper/lower price range
+- [ ] Number of grid levels
+- [ ] Auto buy low / sell high within range
+- [ ] Profit tracking per grid
 
-> Target: 2–4 weeks
-
-### Performance Metrics Expansion
-- [ ] Sortino Ratio (downside deviation only)
-- [ ] SQN (System Quality Number) for strategy robustness
-- [ ] Win Rate, Loss Rate
-- [ ] Expectancy (average $ per trade)
-- [ ] Profit Factor (gross profit / gross loss)
-- [ ] Average Win / Average Loss ratio
-
-### Walk-Forward Analysis
-- [ ] Define train/test window parameters
-- [ ] Rolling optimization: train on window N, test on N+1
-- [ ] Aggregate out-of-sample results across all windows
-- [ ] Report parameter stability across windows
-
-### Trade-Level Reporting
-- [ ] Trade log export (CSV/JSON)
-- [ ] Per-trade metrics (duration, MAE, MFE)
-- [ ] Entry/exit timing analysis
+#### Trailing Orders
+- [ ] Trailing stop-loss (% or fixed distance)
+- [ ] Trailing take-profit
+- [ ] Activation price triggers
 
 ---
 
-## 🎯 Phase 8: Real-Time Dashboard (Medium-term)
+### Phase 15: Advanced Order Management
 
-> Target: 1–2 months
+> Target: Q2 2026 | Priority: **Medium**
 
-### WebSocket Streaming
-- [ ] Axum WebSocket handler for live updates
-- [ ] Broadcast equity curve, positions, recent trades
-- [ ] Heartbeat/reconnect logic on frontend
+#### Order Types
+- [ ] OCO (One-Cancels-Other)
+- [ ] Bracket orders (entry + SL + TP)
+- [ ] Iceberg orders (split large orders)
+- [ ] Limit chase (adjust limit if not filled)
 
-### Live Data Endpoints
-- [ ] `/api/positions` – current holdings
-- [ ] `/api/balance` – cash + equity
-- [ ] `/api/orders` – open/recent orders
-- [ ] `/api/trades` – execution history
+#### Position Management
+- [ ] Scale in/out of positions
+- [ ] Partial take-profit levels
+- [ ] Break-even stop adjustment
 
-### Frontend Enhancements
-- [ ] Real-time equity curve (Recharts or Lightweight Charts)
-- [ ] Position table with live PnL
-- [ ] Trade history with entry/exit markers on chart
-- [ ] Control panel: Start / Stop / Panic Close buttons
-- [ ] Log console with streaming `tracing` events
-
-### Paper Trading Integration
-- [ ] Binance Testnet API connectivity
-- [ ] Paper vs Live mode toggle in dashboard
-- [ ] Side-by-side backtest vs paper comparison
+#### Order Queue
+- [ ] Pending orders dashboard
+- [ ] Order modification UI
+- [ ] Bulk cancel
 
 ---
 
-## 🎯 Phase 9: Stress Testing & Robustness (Medium-term)
+### Phase 16: Enhanced Reporting
 
-> Target: 2–3 months
+> Target: Q3 2026 | Priority: **Medium**
 
-### Monte Carlo Simulation
-- [ ] Shuffle trade order to test path dependency
-- [ ] Generate N equity curves from same trades
-- [ ] Report confidence intervals (5th/50th/95th percentile)
-- [ ] Visualize Monte Carlo fan chart
+#### Trade Journal
+- [ ] Auto-logged trade history
+- [ ] Notes/tags per trade
+- [ ] Screenshot capture of chart state
 
-### Parameter Sensitivity
-- [ ] Grid search over key parameters
-- [ ] Heatmap of Sharpe/Drawdown vs parameters
-- [ ] Identify robust parameter regions
+#### Performance Reports
+- [ ] Daily/weekly/monthly P&L summaries
+- [ ] Strategy performance breakdown
+- [ ] Drawdown analysis with charts
+- [ ] PDF export
 
-### Correlation & Diversification
-- [ ] Multi-asset backtest support
-- [ ] Cross-strategy correlation matrix
-- [ ] Alert when strategies are too correlated
-
----
-
-## 🎯 Phase 10: Data Infrastructure Scale-Up (Long-term)
-
-> Target: 3–4 months
-
-### TimescaleDB Migration
-- [ ] Convert `candles` table to hypertable
-- [ ] Add `trades` hypertable for tick data
-- [ ] Enable compression policies for old data
-- [ ] Benchmark query performance vs plain PostgreSQL
-
-### Survivorship Bias Handling
-- [ ] Track delisted/dead coins in dataset
-- [ ] Include LUNA, FTT, etc. in historical tests
-- [ ] Flag assets by status (active, delisted, migrated)
-
-### Data Quality
-- [ ] Data integrity checks (missing bars, outliers)
-- [ ] Alerting on ingestion failures
+#### Tax Reporting
+- [ ] Cost basis tracking (FIFO, LIFO)
+- [ ] Realized gains/losses by year
+- [ ] CSV export for tax software
 
 ---
 
-## 🎯 Phase 11: Production Deployment (Long-term)
+### Phase 17: Mobile Monitoring
 
-> Target: 4–6 months
+> Target: Q4 2026 | Priority: **Low**
 
-### Live Trading Safeguards
-- [ ] Max Daily Loss circuit breaker (auto-flatten)
-- [ ] Fat-finger protection (reject orders > X% of account)
-- [ ] Drift monitor (alert if fill deviates > 0.5% from expected)
-- [ ] Volatility-scaled sizing (reduce size when ATR spikes)
+#### Progressive Web App (PWA)
+- [ ] Responsive dashboard for mobile
+- [ ] Portfolio balance view
+- [ ] Active positions
+- [ ] Push notifications for critical events
 
-### Infrastructure
-- [ ] Docker Compose (Rust services + TimescaleDB)
-- [ ] CI/CD pipeline (GitHub Actions: build, test, clippy, fmt)
-- [ ] Secrets management (API keys via Vault or env injection)
-- [ ] Logging & monitoring (Prometheus + Grafana or similar)
+#### Quick Actions
+- [ ] Emergency close all positions
+- [ ] Pause/resume bots
+- [ ] View recent trades
 
-### Staged Rollout
-- [ ] **Alpha**: $500–$1,000 capital, single strategy
-- [ ] **Beta**: $5,000 capital, 2–3 strategies, correlation checks
-- [ ] **Full Scale**: Target allocation with automated rebalancing
+---
 
-### Operational Runbooks
-- [ ] Incident response (exchange outage, API errors)
-- [ ] Daily reconciliation (DB vs exchange balances)
-- [ ] Strategy performance review cadence
+### Phase 18: Machine Learning Trading Models
+
+> Target: Q1 2027 | Priority: **High**
+
+#### Data Pipeline
+- [ ] Feature engineering from market data (OHLCV, volume profiles)
+- [ ] Technical indicator features (SMA, RSI, MACD, Bollinger Bands)
+- [ ] Sentiment features integration
+- [ ] Train/validation/test split utilities (time-based, no lookahead)
+- [ ] Data normalization and scaling
+
+#### Model Training
+- [ ] Price direction classification (up/down/neutral)
+- [ ] Price magnitude regression
+- [ ] Optimal entry/exit timing models
+- [ ] Ensemble methods (Random Forest, Gradient Boosting)
+- [ ] Deep learning models (LSTM, Transformer for sequences)
+- [ ] Hyperparameter tuning framework
+
+#### Model Storage & Versioning
+- [ ] Trained model persistence (ONNX/serialized format)
+- [ ] Model metadata (training date, features, performance)
+- [ ] Model comparison and selection
+
+#### Inference & Strategy Integration
+- [ ] Real-time prediction from trained models
+- [ ] ML-based strategy wrapper (model → trading signals)
+- [ ] Confidence thresholds for trade execution
+- [ ] Hybrid strategies (ML + traditional indicators)
+
+#### Walk-Forward Backtesting
+- [ ] Train on period A, backtest on unseen period B
+- [ ] Rolling window retraining
+- [ ] Out-of-sample performance metrics
+- [ ] Overfitting detection (train vs test gap)
+
+#### Dashboard Integration
+- [ ] Model training UI (select features, params, train)
+- [ ] Training progress and metrics display
+- [ ] Prediction visualization on charts
+- [ ] Model performance comparison view
+
+---
+
+### Phase 19: Advanced Backtesting Techniques
+
+> Target: Q1 2027 | Priority: **High**
+> Reference: [4 Backtesting Techniques for Winning Strategies](https://www.youtube.com/watch?v=W722Ca8tS7g)
+
+#### 1. Walk Forward Analysis (WFA)
+- [ ] Rolling window optimization (in-sample → out-of-sample)
+- [ ] Configurable in-sample/out-of-sample periods
+- [ ] Automatic parameter re-optimization on each window
+- [ ] Walk forward efficiency ratio (WFE) calculation
+- [ ] Anchor vs rolling walk forward modes
+- [ ] Visual timeline of training windows and test periods
+
+#### 2. Monte Carlo Simulation
+- [ ] Trade sequence randomization (1000+ permutations)
+- [ ] Simulated missed trades (random % drop-out)
+- [ ] Slippage/fill variation simulation
+- [ ] Confidence interval calculation (95%, 99%)
+- [ ] Best/worst/median scenario identification
+- [ ] Drawdown distribution analysis
+- [ ] Ruin probability estimation
+
+#### 3. Sensitivity Analysis
+- [ ] Parameter sweep testing (grid search)
+- [ ] Heatmap visualization of parameter combinations
+- [ ] Identify "parameter cliffs" (fragile zones)
+- [ ] Optimal parameter range detection
+- [ ] Multi-parameter correlation analysis
+- [ ] Robustness score (performance stability across params)
+
+#### 4. Realistic Backtesting Conditions
+- [ ] Variable slippage modeling (by volume, volatility)
+- [ ] Partial fill simulation
+- [ ] Latency impact modeling
+- [ ] Commission/fee variations by exchange
+- [ ] Spread widening during high volatility
+- [ ] Market impact for larger positions
+
+#### 5. Overfitting Detection & Prevention
+- [ ] In-sample vs out-of-sample performance gap alerts
+- [ ] Complexity penalty (fewer parameters = better)
+- [ ] Bootstrap validation
+- [ ] Cross-validation folds for strategy testing
+- [ ] Strategy degradation tracking over time
+
+#### Dashboard Integration
+- [ ] Walk forward analysis wizard
+- [ ] Monte Carlo results with distribution charts
+- [ ] Sensitivity heatmap visualization
+- [ ] Robustness score badges on strategies
+- [ ] Overfitting risk indicator
+
+---
+
+## 📈 Progress Summary
+
+| Phase | Description | Status | Priority |
+|-------|-------------|--------|----------|
+| 1-11 | V1 Core Platform | ✅ Complete | - |
+| 12 | Interactive Charting | 🎯 Planned | High |
+| 13 | Sentiment Analysis | ✅ Complete | High |
+| 14 | Automated Bots | 🎯 Planned | High |
+| 15 | Advanced Orders | 🎯 Planned | Medium |
+| 16 | Enhanced Reporting | 🎯 Planned | Medium |
+| 17 | Mobile Monitoring | 🎯 Planned | Low |
+| 18 | ML Trading Models | 🎯 Planned | High |
+| 19 | Advanced Backtesting | 🎯 Planned | High |
+
+---
+
+## 🎯 Recommended Implementation Order
+
+1. **Phase 12** (Charting) - Visual feedback on trades
+2. **Phase 13** (Sentiment) - Additional alpha source ✅
+3. **Phase 19** (Advanced Backtesting) - Robust strategy validation
+4. **Phase 14** (Bots) - Hands-off automation
+5. **Phase 18** (ML Models) - Data-driven predictions
+6. **Phase 15** (Advanced Orders) - Better execution
+7. **Phase 16** (Reporting) - Track & optimize
+8. **Phase 17** (Mobile) - Nice to have
+
+---
+
+## 📝 Notes
+
+- All features for **single-user personal use**
+- No multi-user / authentication needed
+- Focus on reliability and automation
+- Sentiment data can be stored for backtesting historical strategies
+- ML models should always be validated on out-of-sample data to prevent overfitting
+- Walk-forward analysis and Monte Carlo are essential before trusting any strategy
+
+---
+
+*Last updated: December 2025*
