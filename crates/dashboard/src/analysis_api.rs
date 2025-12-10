@@ -7,11 +7,17 @@ use tracing::{info, instrument, warn};
 
 use alphafield_backtest::{
     monte_carlo::{MonteCarloConfig, MonteCarloSimulator, Trade as McTrade},
-    sensitivity::HeatmapData,
-    CorrelationAnalyzer, CorrelationConfig, CorrelationResult, MonteCarloResult,
+    sensitivity::{HeatmapData, SensitivityAnalyzer, SensitivityConfig, ParameterRange},
+    walk_forward::{WalkForwardAnalyzer, WalkForwardConfig, WalkForwardResult},
+    CorrelationAnalyzer, CorrelationConfig, CorrelationResult, MonteCarloResult, StrategyAdapter,
 };
 
 use crate::api::AppState;
+use crate::services::data_service::fetch_data_with_cache;
+use crate::services::strategy_service::StrategyFactory;
+use alphafield_backtest::strategy::Strategy as BacktestStrategy;
+use chrono::{Duration, Utc};
+use std::collections::HashMap;
 
 // ============= Monte Carlo API =============
 
@@ -180,6 +186,9 @@ pub struct SensitivityRequest {
     pub param: ParameterInput,
     /// Optional second parameter for 2D analysis
     pub param_y: Option<ParameterInput>,
+    /// Any fixed parameters to include
+    #[serde(default)]
+    pub fixed_params: HashMap<String, f64>,
 }
 
 #[derive(Deserialize)]
@@ -209,20 +218,244 @@ pub struct ParameterResultOutput {
 
 pub async fn run_sensitivity(
     State(_state): State<Arc<AppState>>,
-    Json(_req): Json<SensitivityRequest>,
+    Json(req): Json<SensitivityRequest>,
 ) -> Json<SensitivityResponse> {
-    // Note: Full sensitivity analysis requires fetching data and creating strategies
-    // This is a placeholder that shows the API structure
-    // In production, this would:
-    // 1. Fetch historical data
-    // 2. Run grid search over parameters
-    // 3. Return results with heatmap
+    info!("Sensitivity Analysis requested for {} {}", req.symbol, req.strategy);
 
-    Json(SensitivityResponse {
-        success: false,
-        results: vec![],
-        best_params: None,
-        heatmap: None,
-        error: Some("Sensitivity analysis via API not yet implemented - use programmatic API".to_string()),
-    })
+    // 1. Fetch Data
+    let days = if req.days > 0 { req.days } else { 180 };
+    let end_time = Utc::now();
+    let start_time = end_time - Duration::days(days as i64);
+
+    let (bars, _) = match fetch_data_with_cache(
+        req.symbol.clone(),
+        req.interval.clone(),
+        start_time,
+        end_time
+    ).await {
+        Ok(res) => res,
+        Err(e) => return Json(SensitivityResponse {
+            success: false,
+            results: vec![],
+            best_params: None,
+            heatmap: None,
+            error: Some(format!("Failed to fetch data: {}", e)),
+        }),
+    };
+
+    if bars.len() < 100 {
+         return Json(SensitivityResponse {
+            success: false,
+            results: vec![],
+            best_params: None,
+            heatmap: None,
+            error: Some("Insufficient data for sensitivity analysis".to_string()),
+        });
+    }
+
+    // 2. Configure Analyzer
+    let config = SensitivityConfig {
+        initial_capital: 10000.0,
+        fee_rate: 0.001,
+        parallel: true,
+    };
+    let analyzer = SensitivityAnalyzer::new(config);
+
+    // 3. Run Analysis
+    let strategy_name = req.strategy.clone();
+    let fixed_params = req.fixed_params.clone();
+    let req_symbol = req.symbol.clone();
+    
+    let range_x = ParameterRange::new(&req.param.name, req.param.min, req.param.max, req.param.step);
+    
+    let result_raw = if let Some(py) = &req.param_y {
+        let range_y = ParameterRange::new(&py.name, py.min, py.max, py.step);
+        let sym = req_symbol.clone();
+        let s_name = strategy_name.clone();
+        
+        // Use create_backtest which returns properly wrapped strategies
+        let factory_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            analyzer.analyze_2d(&bars, &req.symbol, &range_x, &range_y, |v1, v2| {
+                let mut p = fixed_params.clone();
+                p.insert(req.param.name.clone(), v1);
+                p.insert(py.name.clone(), v2);
+                
+                // Use create_backtest for properly adapted strategies
+                StrategyFactory::create_backtest(&s_name, &p, &sym, 0.5)
+                    .unwrap_or_else(|| {
+                        // Fallback to default params for invalid combos
+                        StrategyFactory::create_backtest(&s_name, &fixed_params, &sym, 0.5)
+                            .expect("Base strategy should be valid")
+                    })
+            })
+        }));
+        
+        match factory_result {
+            Ok(res) => res,
+            Err(_) => return Json(SensitivityResponse {
+                success: false,
+                results: vec![],
+                best_params: None,
+                heatmap: None,
+                error: Some("Strategy creation failed - invalid parameter combination".to_string()),
+            }),
+        }
+    } else {
+        let sym = req_symbol.clone();
+        let s_name = strategy_name.clone();
+        
+        let factory_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            analyzer.analyze_1d(&bars, &req.symbol, &range_x, |v1| {
+                let mut p = fixed_params.clone();
+                p.insert(req.param.name.clone(), v1);
+                
+                // Use create_backtest for properly adapted strategies
+                StrategyFactory::create_backtest(&s_name, &p, &sym, 0.5)
+                    .unwrap_or_else(|| {
+                        StrategyFactory::create_backtest(&s_name, &fixed_params, &sym, 0.5)
+                            .expect("Base strategy should be valid")
+                    })
+            })
+        }));
+        
+        match factory_result {
+            Ok(res) => res,
+            Err(_) => return Json(SensitivityResponse {
+                success: false,
+                results: vec![],
+                best_params: None,
+                heatmap: None,
+                error: Some("Strategy creation failed - invalid parameter combination".to_string()),
+            }),
+        }
+    };
+
+    match result_raw {
+        Ok(res) => {
+            // Convert to response format
+             let results: Vec<ParameterResultOutput> = res.results.iter().map(|r| {
+                ParameterResultOutput {
+                    params: r.params.clone(),
+                    sharpe_ratio: r.metrics.sharpe_ratio,
+                    total_return: r.metrics.total_return,
+                    max_drawdown: r.metrics.max_drawdown,
+                }
+            }).collect();
+            
+            let best_params = res.best_sharpe.map(|r| r.params);
+
+            Json(SensitivityResponse {
+                success: true,
+                results,
+                best_params,
+                heatmap: res.heatmap,
+                error: None,
+            })
+        },
+        Err(e) => Json(SensitivityResponse {
+            success: false,
+            results: vec![],
+            best_params: None,
+            heatmap: None,
+            error: Some(e),
+        })
+    }
+}
+// ============= Walk-Forward API =============
+
+#[derive(Deserialize)]
+pub struct WalkForwardRequest {
+    pub strategy: String,
+    pub symbol: String,
+    pub interval: String,
+    pub params: HashMap<String, f64>,
+    pub train_window_days: Option<usize>, // Default 365
+    pub test_window_days: Option<usize>,  // Default 90
+}
+
+#[derive(Serialize)]
+pub struct WalkForwardResponse {
+    pub success: bool,
+    pub result: Option<WalkForwardResult>,
+    pub error: Option<String>,
+}
+
+pub async fn run_walk_forward(
+    State(_state): State<Arc<AppState>>,
+    Json(req): Json<WalkForwardRequest>,
+) -> Json<WalkForwardResponse> {
+    info!("Walk-Forward Analysis requested for {}", req.symbol);
+
+    // 1. Fetch 4 years of data (pagination now supported)
+    let end_time = Utc::now();
+    let start_time = end_time - Duration::days(4 * 365);
+
+    let (bars, data_status) = match fetch_data_with_cache(
+        req.symbol.clone(),
+        req.interval.clone(),
+        start_time,
+        end_time
+    ).await {
+        Ok(res) => res,
+        Err(e) => return Json(WalkForwardResponse {
+            success: false,
+            result: None,
+            error: Some(format!("Failed to fetch data: {}", e)),
+        }),
+    };
+
+    info!(bars_fetched = bars.len(), source = %data_status.source, "Data fetch complete");
+
+    // Need at least 1 year of hourly data for meaningful WFA
+    let min_bars = 365 * 24; // 8760 bars for hourly
+    if bars.len() < min_bars {
+        return Json(WalkForwardResponse {
+            success: false,
+            result: None,
+            error: Some(format!(
+                "Insufficient data: have {} bars, need at least {} for walk-forward analysis. Data is being fetched from API, please try again in a moment.",
+                bars.len(), min_bars
+            )),
+        });
+    }
+
+    // 2. Configure Analysis
+    // Convert days to bars (assuming hourly for now, should be dynamic based on interval)
+    let bars_per_day = if req.interval == "1h" { 24 } else { 1 };
+    
+    let config = WalkForwardConfig {
+        train_window: req.train_window_days.unwrap_or(365) * bars_per_day,
+        test_window: req.test_window_days.unwrap_or(90) * bars_per_day,
+        step_size: 30 * bars_per_day, // 1 month step
+        initial_capital: 10000.0,
+        fee_rate: 0.001,
+    };
+
+    // 3. Create Strategy Factory
+    let strategy_name = req.strategy.clone();
+    let strategy_params = req.params.clone();
+    let req_symbol = req.symbol.clone();
+    
+    let factory = move || -> Box<dyn BacktestStrategy> {
+        let core_strat = StrategyFactory::create(&strategy_name, &strategy_params)
+            .unwrap_or_else(|| panic!("Unknown strategy: {}", strategy_name));
+        
+        let adapter = StrategyAdapter::new(core_strat, req_symbol.clone(), 0.5);
+        Box::new(adapter)
+    };
+
+    // 4. Run Analysis
+    let analyzer = WalkForwardAnalyzer::new(config);
+    match analyzer.analyze(&bars, &req.symbol, factory) {
+        Ok(result) => Json(WalkForwardResponse {
+            success: true,
+            result: Some(result),
+            error: None,
+        }),
+        Err(e) => Json(WalkForwardResponse {
+            success: false,
+            result: None,
+            error: Some(e),
+        }),
+    }
 }

@@ -81,7 +81,7 @@ pub async fn get_performance(State(_state): State<Arc<AppState>>) -> Json<Perfor
 use crate::backtest_api::run_backtest;
 use crate::data_api::{delete_symbol, fetch_symbol, get_trading_pairs, list_symbols};
 use crate::websocket::websocket_handler;
-use crate::analysis_api::{run_monte_carlo, calculate_correlation, run_sensitivity};
+use crate::analysis_api::{run_monte_carlo, calculate_correlation, run_sensitivity, run_walk_forward};
 use crate::quality_api::{check_freshness, check_gaps, check_outliers, get_quality_summary};
 use crate::sentiment_api::{get_current_sentiment, get_sentiment_history, sync_sentiment_data};
 
@@ -106,6 +106,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/monte-carlo", post(run_monte_carlo))
         .route("/api/correlation", post(calculate_correlation))
         .route("/api/sensitivity", post(run_sensitivity))
+        .route("/api/walk-forward", post(run_walk_forward))
         // Data management
         .route("/api/data/symbols", get(list_symbols))
         .route("/api/data/pairs", get(get_trading_pairs))

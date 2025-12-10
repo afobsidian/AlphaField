@@ -58,3 +58,5 @@ impl Strategy for StrategyCombiner {
         Ok(all_orders)
     }
 }
+
+// Reverted SignalAdapter addition as StrategyAdapter exists

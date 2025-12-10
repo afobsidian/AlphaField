@@ -1,417 +1,448 @@
+/**
+ * AlphaField Dashboard v2.0
+ * Workflow-Centric State Management
+ */
+
 const API_BASE = '/api';
 
-// ============================================================================
-// STATE
-// ============================================================================
+// ===========================
+// Global Strategy State
+// ===========================
 
-let allSymbols = [];
-const POPULAR_SYMBOLS = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'DOT', 'LINK', 'MATIC'];
+const AppState = {
+    strategy: 'GoldenCross',
+    symbol: '',
+    params: {},
+    backtestDays: 30,
+    backtestResults: null,
+    optimizeResults: null,
+    isTrading: false,
+    currentTab: 'build'
+};
 
-// ============================================================================
-// UTILITY FUNCTIONS
-// ============================================================================
+// Strategy parameter definitions
+const STRATEGY_PARAMS = {
+    GoldenCross: [
+        { name: 'fast_period', label: 'Fast Period', default: 10, min: 5, max: 50, step: 5 },
+        { name: 'slow_period', label: 'Slow Period', default: 30, min: 20, max: 120, step: 10 }
+    ],
+    Rsi: [
+        { name: 'period', label: 'RSI Period', default: 14, min: 5, max: 30, step: 1 },
+        { name: 'lower_bound', label: 'Oversold Level', default: 30, min: 10, max: 40, step: 5 },
+        { name: 'upper_bound', label: 'Overbought Level', default: 70, min: 60, max: 90, step: 5 }
+    ],
+    MeanReversion: [
+        { name: 'period', label: 'BB Period', default: 20, min: 10, max: 50, step: 5 },
+        { name: 'std_dev', label: 'Std Deviations', default: 2.0, min: 1.0, max: 3.0, step: 0.5 }
+    ],
+    Momentum: [
+        { name: 'ema_period', label: 'EMA Period', default: 50, min: 20, max: 100, step: 10 },
+        { name: 'macd_fast', label: 'MACD Fast', default: 12, min: 5, max: 20, step: 1 },
+        { name: 'macd_slow', label: 'MACD Slow', default: 26, min: 20, max: 40, step: 1 },
+        { name: 'macd_signal', label: 'Signal Line', default: 9, min: 5, max: 15, step: 1 }
+    ]
+};
 
-const formatMoney = (value) => new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD'
-}).format(value);
+// ===========================
+// Initialization
+// ===========================
 
-const formatPercent = (value) => `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('AlphaField Dashboard v2.0 initializing...');
 
-const colorClass = (value) => value >= 0 ? 'positive' : 'negative';
+    // Initialize tabs
+    initTabNavigation();
 
-// ============================================================================
-// TAB NAVIGATION
-// ============================================================================
+    // Initialize strategy selection
+    initStrategySelection();
+
+    // Load available symbols
+    loadSymbols();
+
+    // Initialize backtest period buttons
+    initPeriodSelector();
+
+    // Initialize analysis mode toggle
+    initAnalysisModeToggle();
+
+    // Check database status
+    checkDbStatus();
+
+    // Initialize WebSocket for live trading
+    initWebSocket();
+
+    // Load sentiment data
+    loadSentiment();
+
+    console.log('Dashboard initialized');
+});
+
+// ===========================
+// Tab Navigation
+// ===========================
+
+function initTabNavigation() {
+    // Set initial tab from URL hash or default to 'build'
+    const hash = window.location.hash.slice(1);
+    if (['build', 'backtest', 'optimize', 'deploy'].includes(hash)) {
+        switchTab(hash);
+    }
+}
 
 function switchTab(tabName) {
-    // Hide all views
-    document.querySelectorAll('.view-section').forEach(v => v.style.display = 'none');
-    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    AppState.currentTab = tabName;
 
-    // Show selected
-    document.getElementById(`${tabName}-view`).style.display = 'block';
-    event.currentTarget.classList.add('active');
+    // Update tab buttons
+    document.querySelectorAll('.workflow-tab').forEach(tab => {
+        tab.classList.remove('active');
+        if (tab.dataset.tab === tabName) {
+            tab.classList.add('active');
+        }
+    });
 
-    // Load data for tab
-    if (tabName === 'data') {
-        loadSymbols();
-        loadTradingPairs();
-    }
-    if (tabName === 'backtest') populateSymbolDropdown();
-    if (tabName === 'sentiment') loadSentimentData();
+    // Update view sections
+    document.querySelectorAll('.view-section').forEach(section => {
+        section.classList.remove('active');
+    });
+    document.getElementById(`${tabName}-view`).classList.add('active');
+
+    // Update URL hash
+    window.location.hash = tabName;
+
+    // Refresh tab-specific data
+    onTabEnter(tabName);
 }
 
-// ============================================================================
-// SYMBOL SEARCH & AUTOCOMPLETE
-// ============================================================================
-
-async function loadTradingPairs() {
-    try {
-        const res = await fetch(`${API_BASE}/data/pairs`);
-        allSymbols = await res.json();
-        showSymbolDropdown('');  // Show popular symbols immediately
-    } catch (e) {
-        allSymbols = POPULAR_SYMBOLS;
+function onTabEnter(tabName) {
+    switch (tabName) {
+        case 'build':
+            updateParamsUI();
+            break;
+        case 'backtest':
+            updateBacktestSummary();
+            break;
+        case 'optimize':
+            updateSensitivityParams();
+            break;
+        case 'deploy':
+            updateDeploySummary();
+            loadSentiment();
+            break;
     }
 }
 
-function showSymbolDropdown(query) {
-    const dropdown = document.getElementById('symbol-dropdown');
-    const input = document.getElementById('fetch-symbol');
+// ===========================
+// Strategy Selection & Params
+// ===========================
 
-    if (!dropdown) return;
+function initStrategySelection() {
+    document.querySelectorAll('input[name="strategy"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            AppState.strategy = e.target.value;
+            updateParamsUI();
+            updateContextBar();
+        });
+    });
 
-    // Filter and limit results
-    let filtered = allSymbols.filter(s =>
-        s.toLowerCase().includes(query.toLowerCase())
-    ).slice(0, 20);
+    // Initial params setup
+    updateParamsUI();
+}
 
-    // If no query, show popular first
-    if (!query) {
-        const popular = allSymbols.filter(s => POPULAR_SYMBOLS.includes(s));
-        const others = allSymbols.filter(s => !POPULAR_SYMBOLS.includes(s)).slice(0, 10);
-        filtered = [...popular, ...others];
-    }
+function updateParamsUI() {
+    const container = document.getElementById('build-params');
+    const strategyParams = STRATEGY_PARAMS[AppState.strategy] || [];
 
-    if (filtered.length === 0) {
-        dropdown.classList.remove('active');
+    if (strategyParams.length === 0) {
+        container.innerHTML = '<p class="text-muted">No configurable parameters</p>';
         return;
     }
 
-    dropdown.innerHTML = filtered.map(s => {
-        const isPopular = POPULAR_SYMBOLS.includes(s);
-        return `
-            <div class="symbol-option ${isPopular ? 'popular' : ''}" onclick="selectSymbol('${s}')">
-                <span class="symbol-name">${s}</span>
-                ${isPopular ? '<span class="symbol-badge">Popular</span>' : ''}
+    let html = '<h4>Strategy Parameters</h4><div class="param-row">';
+
+    strategyParams.forEach(param => {
+        const value = AppState.params[param.name] || param.default;
+        html += `
+            <div class="form-group">
+                <label>${param.label}</label>
+                <input type="number" 
+                       class="form-input" 
+                       id="param-${param.name}"
+                       value="${value}" 
+                       min="${param.min}" 
+                       max="${param.max}" 
+                       step="${param.step}"
+                       onchange="updateParam('${param.name}', this.value)">
             </div>
         `;
-    }).join('');
-
-    dropdown.classList.add('active');
-}
-
-function selectSymbol(symbol) {
-    document.getElementById('fetch-symbol').value = symbol;
-    document.getElementById('symbol-dropdown').classList.remove('active');
-}
-
-function initSymbolSearch() {
-    const input = document.getElementById('fetch-symbol');
-    const dropdown = document.getElementById('symbol-dropdown');
-
-    if (!input || !dropdown) return;
-
-    // Show dropdown on focus
-    input.addEventListener('focus', () => {
-        showSymbolDropdown(input.value);
     });
 
-    // Filter on input
-    input.addEventListener('input', (e) => {
-        showSymbolDropdown(e.target.value);
-    });
+    html += '</div>';
+    container.innerHTML = html;
 
-    // Hide on click outside
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.autocomplete-wrapper')) {
-            dropdown.classList.remove('active');
+    // Initialize params with defaults
+    strategyParams.forEach(param => {
+        if (!AppState.params[param.name]) {
+            AppState.params[param.name] = param.default;
         }
     });
 }
 
-// ============================================================================
-// DATA MANAGEMENT
-// ============================================================================
+function updateParam(name, value) {
+    AppState.params[name] = parseFloat(value);
+}
+
+function getParams() {
+    // Return current strategy params
+    const strategyParams = STRATEGY_PARAMS[AppState.strategy] || [];
+    const params = {};
+
+    strategyParams.forEach(param => {
+        const input = document.getElementById(`param-${param.name}`);
+        if (input) {
+            params[param.name] = parseFloat(input.value);
+        } else {
+            params[param.name] = AppState.params[param.name] || param.default;
+        }
+    });
+
+    return params;
+}
+
+// ===========================
+// Context Bar
+// ===========================
+
+function updateContextBar() {
+    document.getElementById('ctx-strategy').textContent = AppState.strategy;
+    document.getElementById('ctx-symbol').textContent = AppState.symbol || '—';
+
+    let status = 'Configure strategy to begin';
+    if (AppState.strategy && AppState.symbol) {
+        status = 'Ready to test';
+    }
+    if (AppState.backtestResults) {
+        status = `Tested: ${(AppState.backtestResults.total_return * 100).toFixed(1)}% return`;
+    }
+    if (AppState.isTrading) {
+        status = '🟢 Trading Active';
+    }
+    document.getElementById('ctx-status').textContent = status;
+}
+
+// ===========================
+// Symbol Loading
+// ===========================
 
 async function loadSymbols() {
-    const container = document.getElementById('symbols-list');
-    container.innerHTML = '<div class="loading">Loading...</div>';
-
     try {
-        const res = await fetch(`${API_BASE}/data/symbols`);
-        const symbols = await res.json();
+        const res = await fetch(`${API_BASE}/data/pairs`);
+        const data = await res.json();
 
-        if (symbols.length === 0) {
-            container.innerHTML = '<div class="loading">No data cached. Fetch some data to get started.</div>';
-            return;
+        const select = document.getElementById('build-symbol');
+        select.innerHTML = '';
+
+        if (data.pairs && data.pairs.length > 0) {
+            data.pairs.slice(0, 50).forEach(pair => {
+                const option = document.createElement('option');
+                option.value = pair.symbol;
+                option.textContent = `${pair.symbol} (${pair.base}/${pair.quote})`;
+                select.appendChild(option);
+            });
+        } else {
+            select.innerHTML = '<option value="BTC">BTC (Default)</option>';
         }
 
-        container.innerHTML = symbols.map(s => `
-            <div class="symbol-item">
-                <div class="symbol-info">
-                    <h4>${s.symbol} / ${s.timeframe}</h4>
-                    <p>${s.first_bar || 'Unknown'} → ${s.last_bar || 'Unknown'}</p>
-                </div>
-                <div class="symbol-meta">
-                    <div class="bars">${s.bar_count.toLocaleString()} bars</div>
-                    <button class="btn btn-danger" onclick="deleteSymbol('${s.symbol}', '${s.timeframe}')">Delete</button>
-                </div>
-            </div>
-        `).join('');
+        // Set default selection
+        AppState.symbol = select.value;
+
+        // Listen for changes
+        select.addEventListener('change', (e) => {
+            AppState.symbol = e.target.value;
+            updateContextBar();
+            checkDataStatus();
+        });
+
+        // Check initial data status
+        checkDataStatus();
+
     } catch (e) {
-        container.innerHTML = '<div class="loading">Failed to load symbols</div>';
+        console.error('Failed to load symbols:', e);
+        document.getElementById('build-symbol').innerHTML = '<option value="BTC">BTC</option>';
+        AppState.symbol = 'BTC';
     }
 }
 
-async function fetchData(e) {
-    e.preventDefault();
-    const btn = e.target.querySelector('button');
-    const statusEl = document.getElementById('fetch-status');
-
-    btn.disabled = true;
-    btn.innerHTML = '<span>⏳</span> Fetching...';
-    statusEl.className = 'status-message';
-    statusEl.textContent = '';
+async function checkDataStatus() {
+    const statusEl = document.getElementById('data-status');
+    statusEl.className = 'data-status';
+    statusEl.innerHTML = '<span class="status-icon">⏳</span><span class="status-text">Checking data...</span>';
 
     try {
-        const interval = document.getElementById('fetch-interval').value;
-        const days = parseInt(document.getElementById('fetch-days').value);
+        const res = await fetch(`${API_BASE}/data/symbols`);
+        const data = await res.json();
 
-        // Calculate number of bars based on interval and days
-        let barsPerDay = 24; // Default for 1h
-        if (interval === '4h') barsPerDay = 6;
-        if (interval === '1d') barsPerDay = 1;
-        const limit = days * barsPerDay;
+        const hasCached = data.symbols && data.symbols.some(s => s.symbol === AppState.symbol);
 
+        if (hasCached) {
+            statusEl.className = 'data-status ready';
+            statusEl.innerHTML = '<span class="status-icon">✓</span><span class="status-text">Data cached and ready</span>';
+        } else {
+            statusEl.className = 'data-status missing';
+            statusEl.innerHTML = '<span class="status-icon">⚠</span><span class="status-text">No cached data - click Fetch Data</span>';
+        }
+    } catch (e) {
+        statusEl.className = 'data-status missing';
+        statusEl.innerHTML = '<span class="status-icon">⚠</span><span class="status-text">Unable to check data status</span>';
+    }
+}
+
+async function fetchDataForSymbol() {
+    const statusEl = document.getElementById('data-status');
+    statusEl.className = 'data-status';
+    statusEl.innerHTML = '<span class="status-icon">⏳</span><span class="status-text">Fetching data...</span>';
+
+    try {
         const res = await fetch(`${API_BASE}/data/fetch`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                symbol: document.getElementById('fetch-symbol').value,
-                interval: interval,
-                limit: limit
+                symbol: AppState.symbol,
+                interval: '1h',
+                days: 365
             })
         });
 
         const data = await res.json();
 
         if (data.success) {
-            statusEl.className = 'status-message success';
-            statusEl.textContent = `✓ ${data.message}`;
-            loadSymbols();
+            statusEl.className = 'data-status ready';
+            statusEl.innerHTML = `<span class="status-icon">✓</span><span class="status-text">Fetched ${data.bars_fetched} bars</span>`;
         } else {
-            statusEl.className = 'status-message error';
-            statusEl.textContent = `✗ ${data.message}`;
+            throw new Error(data.message || 'Fetch failed');
         }
     } catch (e) {
-        statusEl.className = 'status-message error';
-        statusEl.textContent = `✗ Network error`;
-    }
-
-    btn.disabled = false;
-    btn.innerHTML = '<span>⬇️</span> Fetch Data';
-}
-
-async function deleteSymbol(symbol, interval) {
-    if (!confirm(`Delete all ${symbol} ${interval} data?`)) return;
-
-    try {
-        await fetch(`${API_BASE}/data/${symbol}/${interval}`, { method: 'DELETE' });
-        loadSymbols();
-    } catch (e) {
-        alert('Failed to delete');
+        statusEl.className = 'data-status missing';
+        statusEl.innerHTML = `<span class="status-icon">❌</span><span class="status-text">Error: ${e.message}</span>`;
     }
 }
 
-// ============================================================================
-// BACKTEST
-// ============================================================================
+// ===========================
+// Workflow Navigation
+// ===========================
 
-async function populateSymbolDropdown() {
-    const select = document.getElementById('bt-symbol');
-
-    try {
-        const res = await fetch(`${API_BASE}/data/symbols`);
-        const symbols = await res.json();
-
-        if (symbols.length === 0) {
-            select.innerHTML = '<option value="">No data - fetch first</option>';
-            return;
-        }
-
-        // Deduplicate symbols
-        const uniqueSymbols = [...new Set(symbols.map(s => s.symbol))];
-        select.innerHTML = uniqueSymbols.map(s => `<option value="${s}">${s}</option>`).join('');
-    } catch (e) {
-        select.innerHTML = '<option value="BTC">BTC</option>';
-    }
+function goToBacktest() {
+    AppState.params = getParams();
+    updateContextBar();
+    switchTab('backtest');
 }
 
-function updateParams() {
-    const strategy = document.getElementById('bt-strategy').value;
-    const container = document.getElementById('strategy-params');
-
-    const params = {
-        GoldenCross: `
-            <div class="form-group">
-                <label>Fast Period</label>
-                <input type="number" name="fast_period" value="10">
-            </div>
-            <div class="form-group">
-                <label>Slow Period</label>
-                <input type="number" name="slow_period" value="30">
-            </div>
-        `,
-        Rsi: `
-            <div class="form-group">
-                <label>Period</label>
-                <input type="number" name="period" value="14">
-            </div>
-            <div class="form-group">
-                <label>Lower Bound</label>
-                <input type="number" name="lower_bound" value="30">
-            </div>
-            <div class="form-group">
-                <label>Upper Bound</label>
-                <input type="number" name="upper_bound" value="70">
-            </div>
-        `,
-        MeanReversion: `
-            <div class="form-group">
-                <label>Period</label>
-                <input type="number" name="period" value="20">
-            </div>
-            <div class="form-group">
-                <label>Std Dev</label>
-                <input type="number" step="0.1" name="std_dev" value="2.0">
-            </div>
-        `,
-        Momentum: `
-            <div class="form-group">
-                <label>EMA Period</label>
-                <input type="number" name="ema_period" value="50">
-            </div>
-            <div class="form-group">
-                <label>MACD Fast</label>
-                <input type="number" name="macd_fast" value="12">
-            </div>
-            <div class="form-group">
-                <label>MACD Slow</label>
-                <input type="number" name="macd_slow" value="26">
-            </div>
-            <div class="form-group">
-                <label>MACD Signal</label>
-                <input type="number" name="macd_signal" value="9">
-            </div>
-        `
-    };
-
-    container.innerHTML = params[strategy] || '';
+function goToOptimize() {
+    switchTab('optimize');
 }
 
-async function runBacktest(e) {
-    e.preventDefault();
-    const btn = e.target.querySelector('button');
-    btn.disabled = true;
-    btn.innerHTML = '<span>⏳</span> Running...';
+function goToDeploy() {
+    switchTab('deploy');
+}
 
-    try {
-        const strategy = document.getElementById('bt-strategy').value;
-        const symbol = document.getElementById('bt-symbol').value;
-        const days = parseInt(document.getElementById('bt-days').value);
-        const startDate = document.getElementById('bt-start-date').value;
-        const endDate = document.getElementById('bt-end-date').value;
+// ===========================
+// Backtest
+// ===========================
 
-        // Collect strategy params
-        const params = {};
-        document.querySelectorAll('.strategy-param').forEach(input => {
-            params[input.dataset.param] = parseFloat(input.value);
+function initPeriodSelector() {
+    document.querySelectorAll('.period-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            AppState.backtestDays = parseInt(btn.dataset.days);
         });
+    });
+}
 
-        const requestBody = {
-            strategy,
-            symbol,
-            interval: '1h',
-            days,
-            params,
-            include_benchmark: true
-        };
+function updateBacktestSummary() {
+    document.getElementById('bt-summary-strategy').textContent = AppState.strategy;
+    document.getElementById('bt-summary-symbol').textContent = AppState.symbol || '—';
 
-        if (startDate) requestBody.start_date = new Date(startDate).toISOString();
-        if (endDate) requestBody.end_date = new Date(endDate).toISOString();
+    const params = getParams();
+    const paramsStr = Object.entries(params).map(([k, v]) => `${k}=${v}`).join(', ');
+    document.getElementById('bt-summary-params').textContent = paramsStr || '—';
+}
+
+async function runBacktest() {
+    const btn = document.getElementById('btn-run-backtest');
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Running...';
+
+    const placeholderEl = document.getElementById('results-placeholder');
+    const contentEl = document.getElementById('results-content');
+
+    try {
+        const params = getParams();
 
         const res = await fetch(`${API_BASE}/backtest/run`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify({
+                strategy: AppState.strategy,
+                symbol: AppState.symbol,
+                interval: '1h',
+                days: AppState.backtestDays,
+                params: params,
+                include_benchmark: true
+            })
         });
 
         const data = await res.json();
 
-        // Update core metrics
+        if (data.error) throw new Error(data.error);
+        if (!data.metrics) throw new Error('No metrics returned');
+
+        // Store results
+        AppState.backtestResults = data.metrics;
+
+        // Update metrics display
         updateMetric('bt-return', data.metrics.total_return * 100, '%');
-        updateMetric('bt-cagr', data.metrics.cagr * 100, '%');
         document.getElementById('bt-sharpe').textContent = data.metrics.sharpe_ratio.toFixed(2);
-        document.getElementById('bt-sortino').textContent = data.metrics.sortino_ratio.toFixed(2);
         updateMetric('bt-drawdown', -data.metrics.max_drawdown * 100, '%', true);
-        document.getElementById('bt-calmar').textContent = data.metrics.calmar_ratio.toFixed(2);
+        document.getElementById('bt-winrate').textContent = `${(data.metrics.win_rate * 100).toFixed(0)}%`;
+        document.getElementById('bt-trades').textContent = data.metrics.total_trades;
 
-        // Update benchmark comparison
+        // Alpha calculation
         if (data.benchmark) {
-            updateMetric('bt-alpha', data.benchmark.comparison.alpha * 100, '%');
-            document.getElementById('bt-beta').textContent = data.benchmark.comparison.beta.toFixed(2);
-            updateMetric('bt-excess', data.benchmark.comparison.excess_return * 100, '%');
-            document.getElementById('bt-correlation').textContent = data.benchmark.comparison.correlation.toFixed(2);
+            const alpha = (data.metrics.total_return - data.benchmark.total_return) * 100;
+            updateMetric('bt-alpha', alpha, '%', false);
+        } else {
+            document.getElementById('bt-alpha').textContent = '—';
         }
 
-        // Update trade stats
-        document.getElementById('bt-trades').textContent = data.trade_summary.total_trades;
-        updateMetric('bt-winrate', data.trade_summary.winning_trades / Math.max(1, data.trade_summary.total_trades) * 100, '%');
-        document.getElementById('bt-pf').textContent = data.metrics.profit_factor.toFixed(2);
-        document.getElementById('bt-duration').textContent = `${data.trade_summary.avg_trade_duration_hours.toFixed(1)}h`;
-        document.getElementById('bt-winstreak').textContent = data.trade_summary.longest_winning_streak;
-        document.getElementById('bt-lossstreak').textContent = data.trade_summary.longest_losing_streak;
+        // Render equity chart
+        renderEquityChart(data.equity_curve, data.benchmark?.equity_curve);
 
-        // Update data status
-        if (data.data_status) {
-            const ds = data.data_status;
-            const sourceIcon = ds.source === 'cache' ? '💾' : '🌐';
-            const cacheNote = ds.cached_after ? ' (cached)' : '';
-            document.getElementById('bt-data-source').innerHTML =
-                `${sourceIcon} ${ds.bars_loaded} bars from ${ds.source}${cacheNote}`;
+        // Show results
+        placeholderEl.classList.add('hidden');
+        contentEl.classList.remove('hidden');
 
-            if (ds.date_range_start && ds.date_range_end) {
-                const start = new Date(ds.date_range_start).toLocaleDateString();
-                const end = new Date(ds.date_range_end).toLocaleDateString();
-                document.getElementById('bt-date-range').textContent = `${start} — ${end}`;
-            }
-        }
-
-        // Update execution time
-        document.getElementById('bt-exec-time').textContent = data.execution_time_ms;
-
-        // Render Plotly Charts
-        renderEquityChart(data.equity_curve, data.benchmark?.curve);
-        renderDrawdownChart(data.drawdown_curve);
-        renderRollingChart(data.rolling_stats);
-        renderMonthlyReturnsChart(data.monthly_returns);
-        renderTradesChart(data.trades);
-
-        // Fetch and display market sentiment (Fear & Greed Index) for the backtest period
-        await fetchBacktestSentiment(days);
-
-        // Display asset sentiment from backtest response
-        if (data.asset_sentiment) {
-            displayAssetSentiment(data.asset_sentiment);
-        }
+        updateContextBar();
 
     } catch (e) {
         alert('Backtest failed: ' + e.message);
+        console.error(e);
     }
 
     btn.disabled = false;
-    btn.innerHTML = '<span>▶️</span> Run Backtest';
+    btn.innerHTML = '▶️ Run Backtest';
 }
 
 function updateMetric(id, value, suffix = '', invert = false) {
     const el = document.getElementById(id);
+    if (!el) return;
+
     el.textContent = `${value >= 0 ? '+' : ''}${value.toFixed(2)}${suffix}`;
     el.className = `metric-value ${invert ? (value <= 0 ? 'positive' : 'negative') : (value >= 0 ? 'positive' : 'negative')}`;
 }
 
 function renderEquityChart(equityCurve, benchmarkCurve) {
+    if (!equityCurve || equityCurve.length === 0) return;
+
     const timestamps = equityCurve.map(p => new Date(p.timestamp));
     const equity = equityCurve.map(p => p.equity);
 
@@ -430,7 +461,7 @@ function renderEquityChart(equityCurve, benchmarkCurve) {
             y: benchmarkCurve.map(p => p.equity),
             type: 'scatter',
             mode: 'lines',
-            name: 'BTC Buy & Hold',
+            name: 'Buy & Hold',
             line: { color: '#6b7280', width: 1, dash: 'dot' }
         });
     }
@@ -442,643 +473,494 @@ function renderEquityChart(equityCurve, benchmarkCurve) {
         margin: { t: 20, r: 20, b: 40, l: 60 },
         xaxis: { gridcolor: '#334155' },
         yaxis: { gridcolor: '#334155', title: 'Equity ($)' },
-        legend: { x: 0, y: 1.1, orientation: 'h' },
-        hovermode: 'x unified'
+        legend: { x: 0, y: 1, orientation: 'h' }
     }, { responsive: true });
 }
 
-function renderDrawdownChart(drawdownCurve) {
-    if (!drawdownCurve || drawdownCurve.length === 0) return;
+// ===========================
+// Optimize & Tune
+// ===========================
 
-    Plotly.newPlot('drawdown-chart', [{
-        x: drawdownCurve.map(p => new Date(p.timestamp)),
-        y: drawdownCurve.map(p => -p.drawdown * 100),
-        type: 'scatter',
-        mode: 'lines',
-        fill: 'tozeroy',
-        name: 'Drawdown',
-        line: { color: '#ef4444', width: 1 },
-        fillcolor: 'rgba(239, 68, 68, 0.3)'
-    }], {
-        paper_bgcolor: '#1e293b',
-        plot_bgcolor: '#1e293b',
-        font: { color: '#94a3b8' },
-        margin: { t: 20, r: 20, b: 40, l: 60 },
-        xaxis: { gridcolor: '#334155' },
-        yaxis: { gridcolor: '#334155', title: 'Drawdown (%)', range: [null, 0] },
-        hovermode: 'x'
-    }, { responsive: true });
-}
+function initAnalysisModeToggle() {
+    document.querySelectorAll('input[name="analysis-mode"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            const mode = e.target.value;
 
-function renderRollingChart(rollingStats) {
-    if (!rollingStats || !rollingStats.rolling_sharpe || rollingStats.rolling_sharpe.length === 0) return;
+            // Update mode option styles
+            document.querySelectorAll('.mode-option').forEach(opt => {
+                opt.classList.remove('active');
+            });
+            e.target.closest('.mode-option').classList.add('active');
 
-    Plotly.newPlot('rolling-chart', [{
-        x: rollingStats.rolling_sharpe.map(p => new Date(p[0])),
-        y: rollingStats.rolling_sharpe.map(p => p[1]),
-        type: 'scatter',
-        mode: 'lines',
-        name: 'Rolling Sharpe',
-        line: { color: '#10b981', width: 2 }
-    }], {
-        paper_bgcolor: '#1e293b',
-        plot_bgcolor: '#1e293b',
-        font: { color: '#94a3b8' },
-        margin: { t: 20, r: 20, b: 40, l: 60 },
-        xaxis: { gridcolor: '#334155' },
-        yaxis: { gridcolor: '#334155', title: 'Sharpe Ratio' },
-        shapes: [{
-            type: 'line',
-            x0: 0, x1: 1, xref: 'paper',
-            y0: 0, y1: 0,
-            line: { color: '#6b7280', dash: 'dash' }
-        }],
-        hovermode: 'x'
-    }, { responsive: true });
-}
+            // Show/hide config sections
+            document.getElementById('wfa-config').classList.toggle('hidden', mode !== 'walkforward');
+            document.getElementById('sensitivity-config').classList.toggle('hidden', mode !== 'sensitivity');
 
-function renderMonthlyReturnsChart(monthlyReturns) {
-    if (!monthlyReturns || monthlyReturns.length === 0) {
-        document.getElementById('monthly-chart').innerHTML = '<p style="color:#94a3b8;text-align:center;padding:20px;">No monthly data</p>';
-        return;
-    }
-
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const years = [...new Set(monthlyReturns.map(m => m.year))].sort();
-
-    const z = years.map(year => {
-        return months.map((_, monthIdx) => {
-            const found = monthlyReturns.find(m => m.year === year && m.month === monthIdx + 1);
-            return found ? found.return_pct * 100 : null;
+            // Hide results
+            document.getElementById('wfa-results').classList.add('hidden');
+            document.getElementById('sensitivity-results').classList.add('hidden');
         });
     });
-
-    Plotly.newPlot('monthly-chart', [{
-        z: z,
-        x: months,
-        y: years.map(String),
-        type: 'heatmap',
-        colorscale: [
-            [0, '#ef4444'],
-            [0.5, '#1e293b'],
-            [1, '#10b981']
-        ],
-        zmid: 0,
-        text: z.map(row => row.map(v => v !== null ? `${v.toFixed(1)}%` : '')),
-        texttemplate: '%{text}',
-        textfont: { size: 10, color: '#fff' },
-        hovertemplate: '%{y} %{x}: %{z:.1f}%<extra></extra>'
-    }], {
-        paper_bgcolor: '#1e293b',
-        plot_bgcolor: '#1e293b',
-        font: { color: '#94a3b8' },
-        margin: { t: 20, r: 20, b: 40, l: 60 },
-        xaxis: { side: 'top' },
-        yaxis: { autorange: 'reversed' }
-    }, { responsive: true });
 }
 
-function renderTradesChart(trades) {
-    if (!trades || trades.length === 0) {
-        document.getElementById('trades-chart').innerHTML = '<p style="color:#94a3b8;text-align:center;padding:20px;">No trades</p>';
-        return;
-    }
+function updateSensitivityParams() {
+    const strategyParams = STRATEGY_PARAMS[AppState.strategy] || [];
+    const select1 = document.getElementById('sens-param-1');
+    const select2 = document.getElementById('sens-param-2');
 
-    const pnls = trades.map(t => t.pnl);
-    const colors = trades.map(t => t.pnl >= 0 ? '#10b981' : '#ef4444');
+    select1.innerHTML = '';
+    select2.innerHTML = '<option value="">None (1D Sweep)</option>';
 
-    Plotly.newPlot('trades-chart', [{
-        x: pnls,
-        type: 'histogram',
-        marker: { color: '#3b82f6' },
-        nbinsx: 20
-    }], {
-        paper_bgcolor: '#1e293b',
-        plot_bgcolor: '#1e293b',
-        font: { color: '#94a3b8' },
-        margin: { t: 20, r: 20, b: 40, l: 60 },
-        xaxis: { gridcolor: '#334155', title: 'P&L ($)' },
-        yaxis: { gridcolor: '#334155', title: 'Count' },
-        bargap: 0.1
-    }, { responsive: true });
-}
-
-// ============================================================================
-// HEALTH CHECK
-// ============================================================================
-
-async function checkHealth() {
-    try {
-        const res = await fetch(`${API_BASE}/health`);
-        const data = await res.json();
-
-        const badge = document.getElementById('db-status');
-        if (data.database === 'connected') {
-            badge.className = 'status-badge connected';
-            badge.innerHTML = '<span class="status-dot"></span>DB Connected';
-        } else {
-            badge.className = 'status-badge disconnected';
-            badge.innerHTML = '<span class="status-dot"></span>DB Offline';
-        }
-    } catch (e) {
-        document.getElementById('db-status').innerHTML = '<span class="status-dot"></span>Offline';
-    }
-}
-
-// ============================================================================
-// LIVE VIEW
-// ============================================================================
-
-let equityChart;
-
-function initEquityChart() {
-    const ctx = document.getElementById('equityChart');
-    if (!ctx) return;
-
-    equityChart = new Chart(ctx.getContext('2d'), {
-        type: 'line',
-        data: { labels: ['Day 1', 'Day 2', 'Day 3'], datasets: [{ label: 'Equity', data: [100000, 101200, 102500], borderColor: '#3b82f6', backgroundColor: 'rgba(59, 130, 246, 0.1)', tension: 0.4, fill: true }] },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-                y: { grid: { color: '#334155' }, ticks: { color: '#94a3b8' } },
-                x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
-            }
-        }
+    strategyParams.forEach(param => {
+        select1.innerHTML += `<option value="${param.name}" 
+            data-min="${param.min}" data-max="${param.max}" data-step="${param.step}">
+            ${param.label}
+        </option>`;
+        select2.innerHTML += `<option value="${param.name}"
+            data-min="${param.min}" data-max="${param.max}" data-step="${param.step}">
+            ${param.label}
+        </option>`;
     });
 }
 
-// ============================================================================
-// WEBSOCKET CLIENT
-// ============================================================================
-
-let ws = null;
-let wsReconnectAttempts = 0;
-const WS_MAX_RECONNECT_ATTEMPTS = 10;
-const WS_RECONNECT_DELAY_MS = 2000;
-
-function connectWebSocket() {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/api/ws`;
-
-    console.log('Connecting to WebSocket:', wsUrl);
-    updateWsStatus('connecting');
+async function runWalkForward() {
+    const chartContainer = document.getElementById('optimize-chart');
+    chartContainer.innerHTML = '<div class="placeholder-content"><span class="placeholder-icon">⏳</span><span>Running Walk-Forward Analysis...</span></div>';
 
     try {
-        ws = new WebSocket(wsUrl);
+        const res = await fetch(`${API_BASE}/walk-forward`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                strategy: AppState.strategy,
+                symbol: AppState.symbol,
+                params: getParams()
+            })
+        });
 
-        ws.onopen = () => {
-            console.log('WebSocket connected');
-            wsReconnectAttempts = 0;
-            updateWsStatus('connected');
-            addLog('info', 'Connected to real-time updates');
-
-            // Request initial state
-            ws.send(JSON.stringify({ command: 'Snapshot' }));
-        };
-
-        ws.onmessage = (event) => {
-            try {
-                const msg = JSON.parse(event.data);
-                handleWsMessage(msg);
-            } catch (e) {
-                console.error('Failed to parse WebSocket message:', e);
-            }
-        };
-
-        ws.onclose = (event) => {
-            console.log('WebSocket closed:', event.code, event.reason);
-            updateWsStatus('disconnected');
-
-            // Auto-reconnect
-            if (wsReconnectAttempts < WS_MAX_RECONNECT_ATTEMPTS) {
-                wsReconnectAttempts++;
-                const delay = WS_RECONNECT_DELAY_MS * wsReconnectAttempts;
-                console.log(`Reconnecting in ${delay}ms (attempt ${wsReconnectAttempts})`);
-                setTimeout(connectWebSocket, delay);
-            } else {
-                addLog('error', 'Connection lost. Please refresh the page.');
-            }
-        };
-
-        ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-            updateWsStatus('error');
-        };
-    } catch (e) {
-        console.error('Failed to create WebSocket:', e);
-        updateWsStatus('error');
-    }
-}
-
-function handleWsMessage(msg) {
-    switch (msg.type) {
-        case 'Portfolio':
-            updatePortfolioUI(msg.data);
-            break;
-        case 'Position':
-            updatePositionUI(msg.data);
-            break;
-        case 'Positions':
-            updateAllPositionsUI(msg.data);
-            break;
-        case 'Trade':
-            addTradeToHistory(msg.data);
-            break;
-        case 'Log':
-            addLog(msg.data.level, msg.data.message);
-            break;
-        case 'EngineStatus':
-            updateEngineStatusUI(msg.data);
-            break;
-        case 'Heartbeat':
-            // Connection is alive
-            break;
-        default:
-            console.log('Unknown message type:', msg.type);
-    }
-}
-
-function updateWsStatus(status) {
-    const badge = document.getElementById('ws-status');
-    if (!badge) return;
-
-    const statusMap = {
-        connecting: { class: 'status-badge connecting', text: '⟳ Connecting...' },
-        connected: { class: 'status-badge connected', text: '● Live' },
-        disconnected: { class: 'status-badge disconnected', text: '○ Disconnected' },
-        error: { class: 'status-badge error', text: '✕ Error' }
-    };
-
-    const s = statusMap[status] || statusMap.disconnected;
-    badge.className = s.class;
-    badge.textContent = s.text;
-}
-
-function updatePortfolioUI(data) {
-    const el = (id) => document.getElementById(id);
-
-    if (el('live-total-value')) el('live-total-value').textContent = formatMoney(data.total_value);
-    if (el('live-cash')) el('live-cash').textContent = formatMoney(data.cash);
-    if (el('live-positions-value')) el('live-positions-value').textContent = formatMoney(data.positions_value);
-    if (el('live-pnl')) {
-        el('live-pnl').textContent = formatMoney(data.pnl);
-        el('live-pnl').className = `metric-value ${colorClass(data.pnl)}`;
-    }
-}
-
-function updatePositionUI(position) {
-    const row = document.getElementById(`position-${position.symbol}`);
-    if (row) {
-        row.querySelector('.pos-price').textContent = formatMoney(position.current_price);
-        row.querySelector('.pos-pnl').textContent = formatMoney(position.pnl);
-        row.querySelector('.pos-pnl').className = `pos-pnl ${colorClass(position.pnl)}`;
-    }
-}
-
-function updateAllPositionsUI(positions) {
-    const container = document.getElementById('live-positions-table');
-    if (!container) return;
-
-    if (positions.length === 0) {
-        container.innerHTML = '<tr><td colspan="6" class="empty">No open positions</td></tr>';
-        return;
-    }
-
-    container.innerHTML = positions.map(p => `
-        <tr id="position-${p.symbol}">
-            <td>${p.symbol}</td>
-            <td>${p.quantity.toFixed(4)}</td>
-            <td>${formatMoney(p.entry_price)}</td>
-            <td class="pos-price">${formatMoney(p.current_price)}</td>
-            <td class="pos-pnl ${colorClass(p.pnl)}">${formatMoney(p.pnl)}</td>
-            <td class="${colorClass(p.pnl_percent)}">${formatPercent(p.pnl_percent)}</td>
-        </tr>
-    `).join('');
-}
-
-function addTradeToHistory(trade) {
-    const container = document.getElementById('trade-history');
-    if (!container) return;
-
-    const tradeTime = new Date(trade.timestamp).toLocaleTimeString();
-    const sideClass = trade.side === 'Buy' ? 'positive' : 'negative';
-
-    const row = document.createElement('tr');
-    row.innerHTML = `
-        <td>${tradeTime}</td>
-        <td>${trade.symbol}</td>
-        <td class="${sideClass}">${trade.side}</td>
-        <td>${trade.quantity.toFixed(4)}</td>
-        <td>${formatMoney(trade.price)}</td>
-        <td class="${colorClass(trade.pnl || 0)}">${trade.pnl ? formatMoney(trade.pnl) : '-'}</td>
-    `;
-
-    // Add to top of list
-    container.insertBefore(row, container.firstChild);
-
-    // Limit to 50 trades
-    while (container.children.length > 50) {
-        container.removeChild(container.lastChild);
-    }
-}
-
-function updateEngineStatusUI(status) {
-    const startBtn = document.getElementById('btn-start');
-    const stopBtn = document.getElementById('btn-stop');
-    const statusEl = document.getElementById('engine-status');
-
-    if (startBtn) startBtn.disabled = status.running;
-    if (stopBtn) stopBtn.disabled = !status.running;
-
-    if (statusEl) {
-        statusEl.className = status.running ? 'engine-running' : 'engine-stopped';
-        statusEl.textContent = status.running
-            ? `Running: ${status.strategy || 'Unknown'} (${status.mode})`
-            : 'Stopped';
-    }
-}
-
-function addLog(level, message) {
-    const console = document.getElementById('log-console');
-    if (!console) return;
-
-    const time = new Date().toLocaleTimeString();
-    const entry = document.createElement('div');
-    entry.className = `log-entry log-${level}`;
-    entry.innerHTML = `<span class="log-time">${time}</span> <span class="log-msg">${message}</span>`;
-
-    console.appendChild(entry);
-    console.scrollTop = console.scrollHeight;
-
-    // Limit to 100 entries
-    while (console.children.length > 100) {
-        console.removeChild(console.firstChild);
-    }
-}
-
-// Control panel actions
-function startTrading() {
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-        addLog('error', 'Not connected');
-        return;
-    }
-
-    const strategy = document.getElementById('live-strategy')?.value || 'GoldenCross';
-    const mode = document.getElementById('live-mode')?.value || 'paper';
-
-    ws.send(JSON.stringify({ command: 'Start', strategy, mode }));
-}
-
-function stopTrading() {
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-        addLog('error', 'Not connected');
-        return;
-    }
-
-    ws.send(JSON.stringify({ command: 'Stop' }));
-}
-
-function panicClose() {
-    if (!confirm('⚠️ PANIC CLOSE: This will close ALL positions immediately. Continue?')) {
-        return;
-    }
-
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-        addLog('error', 'Not connected');
-        return;
-    }
-
-    ws.send(JSON.stringify({ command: 'PanicClose' }));
-    addLog('warn', 'PANIC CLOSE initiated');
-}
-
-// ============================================================================
-// SENTIMENT ANALYSIS
-// ============================================================================
-
-async function loadSentimentData() {
-    // Load current sentiment
-    loadCurrentSentiment();
-    // Load history
-    loadSentimentHistory();
-}
-
-async function loadCurrentSentiment() {
-    try {
-        const res = await fetch(`${API_BASE}/sentiment/current`);
         const data = await res.json();
+        if (!data.success) throw new Error(data.error || 'Analysis failed');
 
-        if (data.success && data.data) {
-            const sent = data.data;
+        const result = data.result;
 
-            // Update gauge value
-            const gaugeValue = document.getElementById('gauge-value');
-            const gaugeLabel = document.getElementById('gauge-label');
-            const gaugeMarker = document.getElementById('gauge-marker');
+        // Update metrics
+        document.getElementById('wfa-stability').textContent = (result.stability_score || 0).toFixed(2);
+        updateMetric('wfa-avg-return', (result.aggregate_oos?.mean_return || 0) * 100, '%');
+        document.getElementById('wfa-win-rate').textContent = `${((result.aggregate_oos?.win_rate || 0) * 100).toFixed(0)}%`;
+        document.getElementById('wfa-oos-sharpe').textContent = (result.aggregate_oos?.mean_sharpe || 0).toFixed(2);
 
-            gaugeValue.textContent = sent.value;
-            gaugeLabel.textContent = sent.classification;
-            gaugeMarker.style.left = `${sent.value}%`;
+        // Show results card
+        document.getElementById('wfa-results').classList.remove('hidden');
+        document.getElementById('sensitivity-results').classList.add('hidden');
 
-            // Update gauge color class based on sentiment
-            gaugeValue.className = 'gauge-value';
-            if (sent.is_fear) {
-                gaugeValue.classList.add('fear');
-            } else if (sent.is_greed) {
-                gaugeValue.classList.add('greed');
-            } else {
-                gaugeValue.classList.add('neutral');
-            }
+        // Render chart
+        renderWFAChart(result.windows);
 
-            // Update timestamp
-            const updated = new Date(sent.timestamp * 1000).toLocaleString();
-            document.getElementById('sentiment-updated').textContent = `Last updated: ${updated}`;
-        }
+        document.getElementById('optimize-chart-title').textContent = 'Walk-Forward Window Returns';
+
     } catch (e) {
-        console.error('Failed to load current sentiment:', e);
+        alert('Walk-Forward Analysis failed: ' + e.message);
+        console.error(e);
     }
 }
 
-async function loadSentimentHistory() {
-    const days = document.getElementById('sentiment-days')?.value || 30;
-
-    try {
-        const res = await fetch(`${API_BASE}/sentiment/history?days=${days}`);
-        const data = await res.json();
-
-        if (data.success) {
-            // Update stats
-            if (data.stats) {
-                document.getElementById('sent-avg').textContent = data.stats.average.toFixed(1);
-                document.getElementById('sent-min').textContent = data.stats.min;
-                document.getElementById('sent-max').textContent = data.stats.max;
-                document.getElementById('sent-sma7').textContent = data.stats.sma_7?.toFixed(1) || '--';
-                document.getElementById('sent-momentum').textContent = data.stats.momentum_7 !== null
-                    ? `${data.stats.momentum_7 >= 0 ? '+' : ''}${data.stats.momentum_7.toFixed(1)}`
-                    : '--';
-                document.getElementById('sent-fear-days').textContent = data.stats.days_in_fear;
-
-                // Update zone bars
-                const total = data.stats.days_in_fear + data.stats.days_in_greed + data.stats.days_neutral;
-                if (total > 0) {
-                    const fearPct = (data.stats.days_in_fear / total * 100).toFixed(0);
-                    const neutralPct = (data.stats.days_neutral / total * 100).toFixed(0);
-                    const greedPct = (data.stats.days_in_greed / total * 100).toFixed(0);
-
-                    document.getElementById('zone-fear').style.width = `${fearPct}%`;
-                    document.getElementById('zone-neutral').style.width = `${neutralPct}%`;
-                    document.getElementById('zone-greed').style.width = `${greedPct}%`;
-
-                    document.getElementById('zone-fear-pct').textContent = `${fearPct}%`;
-                    document.getElementById('zone-neutral-pct').textContent = `${neutralPct}%`;
-                    document.getElementById('zone-greed-pct').textContent = `${greedPct}%`;
-                }
-            }
-
-            // Render chart
-            renderSentimentChart(data.data);
-        }
-    } catch (e) {
-        console.error('Failed to load sentiment history:', e);
-    }
-}
-
-function renderSentimentChart(sentimentData) {
-    if (!sentimentData || sentimentData.length === 0) {
-        document.getElementById('sentiment-chart').innerHTML = '<p style="color:#94a3b8;text-align:center;padding:60px;">No sentiment data available</p>';
+function renderWFAChart(windows) {
+    if (!windows || windows.length === 0) {
+        document.getElementById('optimize-chart').innerHTML = '<div class="placeholder-content"><span class="placeholder-icon">📊</span><span>No window data available</span></div>';
         return;
     }
 
-    // Sort by timestamp ascending for chart
-    const sorted = [...sentimentData].sort((a, b) => a.timestamp - b.timestamp);
+    const windowLabels = windows.map((w, i) => `Window ${i + 1}`);
+    const testReturns = windows.map(w => (w.test_metrics?.total_return || 0) * 100);
+    const trainReturns = windows.map(w => (w.train_metrics?.total_return || 0) * 100);
+    const barColors = testReturns.map(r => r >= 0 ? '#10b981' : '#ef4444');
 
-    const timestamps = sorted.map(d => new Date(d.timestamp * 1000));
-    const values = sorted.map(d => d.value);
-
-    // Color based on value
-    const colors = sorted.map(d => {
-        if (d.value <= 25) return '#ef4444';      // Extreme Fear - red
-        if (d.value <= 45) return '#f97316';      // Fear - orange
-        if (d.value <= 55) return '#94a3b8';      // Neutral - gray
-        if (d.value <= 75) return '#84cc16';      // Greed - light green
-        return '#22c55e';                          // Extreme Greed - green
-    });
-
-    Plotly.newPlot('sentiment-chart', [
+    Plotly.newPlot('optimize-chart', [
         {
-            x: timestamps,
-            y: values,
-            type: 'scatter',
-            mode: 'lines+markers',
-            name: 'Fear & Greed',
-            line: { color: '#3b82f6', width: 2 },
-            marker: { color: colors, size: 6 }
+            x: windowLabels,
+            y: trainReturns,
+            type: 'bar',
+            name: 'Train Return',
+            marker: { color: 'rgba(59, 130, 246, 0.6)' }
+        },
+        {
+            x: windowLabels,
+            y: testReturns,
+            type: 'bar',
+            name: 'Test Return (OOS)',
+            marker: { color: barColors }
         }
     ], {
         paper_bgcolor: '#1e293b',
         plot_bgcolor: '#1e293b',
         font: { color: '#94a3b8' },
-        margin: { t: 20, r: 20, b: 40, l: 60 },
-        xaxis: { gridcolor: '#334155' },
-        yaxis: {
-            gridcolor: '#334155',
-            title: 'Fear & Greed Index',
-            range: [0, 100]
-        },
-        shapes: [
-            // Extreme Fear zone (0-25)
-            { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 0, y1: 25, fillcolor: 'rgba(239, 68, 68, 0.1)', line: { width: 0 } },
-            // Extreme Greed zone (75-100)
-            { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 75, y1: 100, fillcolor: 'rgba(34, 197, 94, 0.1)', line: { width: 0 } },
-            // Neutral line
-            { type: 'line', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 50, y1: 50, line: { color: '#6b7280', dash: 'dash', width: 1 } }
-        ],
-        hovermode: 'x unified'
+        margin: { t: 40, r: 20, b: 60, l: 60 },
+        xaxis: { gridcolor: '#334155', tickangle: -45 },
+        yaxis: { gridcolor: '#334155', title: 'Return (%)' },
+        barmode: 'group',
+        legend: { x: 0, y: 1.15, orientation: 'h' }
     }, { responsive: true });
 }
 
-// ============================================================================
-// BACKTEST SENTIMENT HELPERS
-// ============================================================================
+async function runSensitivity() {
+    const chartContainer = document.getElementById('optimize-chart');
+    chartContainer.innerHTML = '<div class="placeholder-content"><span class="placeholder-icon">⏳</span><span>Running Sensitivity Analysis...</span></div>';
 
-async function fetchBacktestSentiment(days) {
+    const p1Select = document.getElementById('sens-param-1');
+    const p2Select = document.getElementById('sens-param-2');
+
+    const p1Opt = p1Select.options[p1Select.selectedIndex];
+    const param = {
+        name: p1Select.value,
+        min: parseFloat(p1Opt.dataset.min),
+        max: parseFloat(p1Opt.dataset.max),
+        step: parseFloat(p1Opt.dataset.step)
+    };
+
+    let param_y = null;
+    if (p2Select.value) {
+        const p2Opt = p2Select.options[p2Select.selectedIndex];
+        param_y = {
+            name: p2Select.value,
+            min: parseFloat(p2Opt.dataset.min),
+            max: parseFloat(p2Opt.dataset.max),
+            step: parseFloat(p2Opt.dataset.step)
+        };
+    }
+
+    const baseParams = getParams();
+    const fixed_params = { ...baseParams };
+    delete fixed_params[param.name];
+    if (param_y) delete fixed_params[param_y.name];
+
     try {
-        const response = await fetch(`/api/sentiment/history?days=${days}`);
-        const result = await response.json();
+        const res = await fetch(`${API_BASE}/sensitivity`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                strategy: AppState.strategy,
+                symbol: AppState.symbol,
+                interval: '1h',
+                days: 180,
+                param,
+                param_y,
+                fixed_params
+            })
+        });
 
-        if (result.success && result.stats) {
-            const stats = result.stats;
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error);
 
-            // Market Mood (Avg)
-            document.getElementById('bt-market-avg').textContent = Math.round(stats.average);
+        // Update metrics
+        if (data.results && data.results.length > 0) {
+            const bestResult = data.results.reduce((best, r) =>
+                r.sharpe_ratio > best.sharpe_ratio ? r : best, data.results[0]);
 
-            // Classification based on avg
-            let mood = "Neutral";
-            let moodClass = "neutral";
-            if (stats.average >= 55) { mood = "Greed"; moodClass = "greed"; }
-            if (stats.average >= 75) { mood = "Extreme Greed"; moodClass = "greed"; }
-            if (stats.average <= 45) { mood = "Fear"; moodClass = "fear"; }
-            if (stats.average <= 25) { mood = "Extreme Fear"; moodClass = "fear"; }
-
-            const moodEl = document.getElementById('bt-market-mood');
-            moodEl.textContent = mood;
-            moodEl.className = `metric-value ${moodClass}`;
-
-            document.getElementById('bt-fear-days').textContent = stats.days_in_fear;
-            document.getElementById('bt-greed-days').textContent = stats.days_in_greed;
+            let bestText = Object.entries(bestResult.params)
+                .map(([k, v]) => `${k}: ${v}`)
+                .join(', ');
+            document.getElementById('sens-best-param').textContent = bestText;
+            document.getElementById('sens-max-sharpe').textContent = bestResult.sharpe_ratio.toFixed(3);
         }
+
+        // Show results card
+        document.getElementById('sensitivity-results').classList.remove('hidden');
+        document.getElementById('wfa-results').classList.add('hidden');
+
+        // Render chart
+        if (data.heatmap) {
+            renderHeatmap(data.heatmap);
+            document.getElementById('optimize-chart-title').textContent = `Sharpe Ratio: ${data.heatmap.x_param} vs ${data.heatmap.y_param}`;
+        } else if (data.results && data.results.length > 0) {
+            renderSensitivityLineChart(data.results, param.name);
+            document.getElementById('optimize-chart-title').textContent = `Parameter Sensitivity: ${param.name}`;
+        }
+
     } catch (e) {
-        console.error("Failed to fetch backtest sentiment:", e);
+        alert('Sensitivity Analysis failed: ' + e.message);
+        console.error(e);
     }
 }
 
-function displayAssetSentiment(assetSentiment) {
-    if (!assetSentiment || !assetSentiment.current) return;
+function renderSensitivityLineChart(results, paramName) {
+    const sorted = [...results].sort((a, b) => a.params[paramName] - b.params[paramName]);
 
-    const current = assetSentiment.current;
+    const xValues = sorted.map(r => r.params[paramName]);
+    const sharpeValues = sorted.map(r => r.sharpe_ratio);
+    const returnValues = sorted.map(r => r.total_return * 100);
 
-    // Asset RSI
-    const rsiEl = document.getElementById('bt-asset-rsi');
-    rsiEl.textContent = current.rsi.toFixed(1);
-    // Color based on RSI zone
-    if (current.rsi > 70) rsiEl.className = 'metric-value negative'; // Overbought warning
-    else if (current.rsi < 30) rsiEl.className = 'metric-value positive'; // Oversold opportunity
-    else rsiEl.className = 'metric-value';
-
-    // Momentum
-    const momEl = document.getElementById('bt-asset-mom');
-    momEl.textContent = current.momentum.toFixed(2);
-    momEl.className = `metric-value ${current.momentum >= 0 ? 'positive' : 'negative'}`;
+    Plotly.newPlot('optimize-chart', [
+        {
+            x: xValues,
+            y: sharpeValues,
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'Sharpe Ratio',
+            line: { color: '#3b82f6', width: 2 },
+            marker: { size: 8 },
+            yaxis: 'y'
+        },
+        {
+            x: xValues,
+            y: returnValues,
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'Return (%)',
+            line: { color: '#10b981', width: 2 },
+            marker: { size: 8 },
+            yaxis: 'y2'
+        }
+    ], {
+        paper_bgcolor: '#1e293b',
+        plot_bgcolor: '#1e293b',
+        font: { color: '#94a3b8' },
+        margin: { t: 50, r: 80, b: 60, l: 60 },
+        xaxis: { title: paramName, gridcolor: '#334155' },
+        yaxis: { title: 'Sharpe Ratio', gridcolor: '#334155', side: 'left' },
+        yaxis2: { title: 'Return (%)', overlaying: 'y', side: 'right', gridcolor: '#334155' },
+        legend: { x: 0, y: 1.15, orientation: 'h' }
+    }, { responsive: true });
 }
 
-// ============================================================================
-// INIT
-// ============================================================================
+function renderHeatmap(heatmapData) {
+    if (!heatmapData || !heatmapData.sharpe_matrix || !heatmapData.x_values || !heatmapData.y_values) {
+        console.warn('Heatmap data missing required fields:', heatmapData);
+        return;
+    }
 
-document.addEventListener('DOMContentLoaded', () => {
-    initEquityChart();
-    initSymbolSearch();
-    updateParams();
-    checkHealth();
-    loadSymbols();
-    loadTradingPairs();
+    const zData = heatmapData.sharpe_matrix;
+    const xValues = heatmapData.x_values;
+    const yValues = heatmapData.y_values;
 
-    // Connect WebSocket for live updates
-    connectWebSocket();
+    const annotations = [];
+    for (let i = 0; i < yValues.length; i++) {
+        if (!zData[i]) continue;
+        for (let j = 0; j < xValues.length; j++) {
+            if (zData[i][j] === undefined || zData[i][j] === null) continue;
+            annotations.push({
+                x: xValues[j],
+                y: yValues[i],
+                text: zData[i][j].toFixed(3),
+                font: { color: 'white', size: 11 },
+                showarrow: false
+            });
+        }
+    }
 
-    document.getElementById('fetch-form').addEventListener('submit', fetchData);
-    document.getElementById('backtest-form').addEventListener('submit', runBacktest);
+    Plotly.newPlot('optimize-chart', [{
+        z: zData,
+        x: xValues,
+        y: yValues,
+        type: 'heatmap',
+        colorscale: [
+            [0, '#ef4444'],
+            [0.5, '#fbbf24'],
+            [1, '#10b981']
+        ],
+        colorbar: { title: 'Sharpe' },
+        hoverongaps: false
+    }], {
+        paper_bgcolor: '#1e293b',
+        plot_bgcolor: '#1e293b',
+        font: { color: '#94a3b8' },
+        xaxis: { title: heatmapData.x_param, tickformat: '.1f', tickmode: 'array', tickvals: xValues },
+        yaxis: { title: heatmapData.y_param, tickformat: '.1f', tickmode: 'array', tickvals: yValues },
+        margin: { t: 50, r: 100, b: 60, l: 70 },
+        annotations: annotations
+    }, { responsive: true });
+}
 
-    // Control panel event listeners
-    const startBtn = document.getElementById('btn-start');
-    const stopBtn = document.getElementById('btn-stop');
-    const panicBtn = document.getElementById('btn-panic');
+function applyBestParams() {
+    // Would update AppState.params with best found params
+    alert('Best parameters applied! Go to Build tab to see updated values.');
+    switchTab('build');
+}
 
-    if (startBtn) startBtn.addEventListener('click', startTrading);
-    if (stopBtn) stopBtn.addEventListener('click', stopTrading);
-    if (panicBtn) panicBtn.addEventListener('click', panicClose);
-});
+// ===========================
+// Deploy & Live Trading
+// ===========================
 
+function updateDeploySummary() {
+    document.getElementById('deploy-strategy').textContent = AppState.strategy;
+    document.getElementById('deploy-symbol').textContent = AppState.symbol || '—';
+
+    if (AppState.backtestResults) {
+        updateMetric('deploy-return', AppState.backtestResults.total_return * 100, '%');
+        document.getElementById('deploy-sharpe').textContent = AppState.backtestResults.sharpe_ratio?.toFixed(2) || '—';
+    } else {
+        document.getElementById('deploy-return').textContent = '—';
+        document.getElementById('deploy-sharpe').textContent = '—';
+    }
+}
+
+async function loadSentiment() {
+    try {
+        const res = await fetch(`${API_BASE}/sentiment/current`);
+        const data = await res.json();
+
+        if (data.value !== undefined) {
+            const value = data.value;
+            document.getElementById('gauge-value').textContent = value;
+            document.getElementById('gauge-label').textContent = data.classification || getSentimentLabel(value);
+            document.getElementById('gauge-fill').style.width = `${value}%`;
+        }
+    } catch (e) {
+        console.error('Failed to load sentiment:', e);
+    }
+}
+
+function getSentimentLabel(value) {
+    if (value <= 25) return 'Extreme Fear';
+    if (value <= 45) return 'Fear';
+    if (value <= 55) return 'Neutral';
+    if (value <= 75) return 'Greed';
+    return 'Extreme Greed';
+}
+
+let ws = null;
+let equityChart = null;
+
+function initWebSocket() {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`);
+
+    ws.onopen = () => {
+        console.log('WebSocket connected');
+        updateWsStatus(true);
+    };
+
+    ws.onclose = () => {
+        console.log('WebSocket disconnected');
+        updateWsStatus(false);
+        // Reconnect after 5 seconds
+        setTimeout(initWebSocket, 5000);
+    };
+
+    ws.onerror = (err) => {
+        console.error('WebSocket error:', err);
+    };
+
+    ws.onmessage = (event) => {
+        try {
+            const msg = JSON.parse(event.data);
+            handleWsMessage(msg);
+        } catch (e) {
+            console.error('Failed to parse WebSocket message:', e);
+        }
+    };
+}
+
+function updateWsStatus(connected) {
+    const el = document.getElementById('ws-status');
+    if (connected) {
+        el.className = 'status-badge connected';
+        el.innerHTML = '<span class="status-dot"></span><span>Live</span>';
+    } else {
+        el.className = 'status-badge disconnected';
+        el.innerHTML = '<span class="status-dot"></span><span>Live</span>';
+    }
+}
+
+function handleWsMessage(msg) {
+    switch (msg.type) {
+        case 'portfolio_update':
+            updatePortfolioDisplay(msg.data);
+            break;
+        case 'trade':
+            addTradeToHistory(msg.data);
+            break;
+        case 'log':
+            addLogEntry(msg.data);
+            break;
+    }
+}
+
+function updatePortfolioDisplay(data) {
+    document.getElementById('live-total-value').textContent = formatCurrency(data.total_value);
+    document.getElementById('live-cash').textContent = formatCurrency(data.cash);
+    document.getElementById('live-positions-value').textContent = formatCurrency(data.positions_value);
+    document.getElementById('live-pnl').textContent = formatCurrency(data.pnl);
+}
+
+function formatCurrency(value) {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+}
+
+function addLogEntry(entry) {
+    const console = document.getElementById('log-console');
+    const time = new Date().toLocaleTimeString();
+    const div = document.createElement('div');
+    div.className = `log-entry log-${entry.level || 'info'}`;
+    div.innerHTML = `<span class="log-time">${time}</span><span class="log-msg">${entry.message}</span>`;
+    console.appendChild(div);
+    console.scrollTop = console.scrollHeight;
+}
+
+function startTrading() {
+    if (!AppState.strategy || !AppState.symbol) {
+        alert('Please configure a strategy and symbol first');
+        return;
+    }
+
+    AppState.isTrading = true;
+
+    document.getElementById('btn-start').disabled = true;
+    document.getElementById('btn-stop').disabled = false;
+    document.getElementById('engine-status').textContent = 'Running';
+    document.getElementById('engine-status').className = 'engine-status running';
+
+    ws.send(JSON.stringify({
+        type: 'start_trading',
+        strategy: AppState.strategy,
+        symbol: AppState.symbol,
+        params: getParams(),
+        position_size: parseFloat(document.getElementById('position-size').value)
+    }));
+
+    addLogEntry({ message: `Started ${AppState.strategy} on ${AppState.symbol}`, level: 'success' });
+    updateContextBar();
+}
+
+function stopTrading() {
+    AppState.isTrading = false;
+
+    document.getElementById('btn-start').disabled = false;
+    document.getElementById('btn-stop').disabled = true;
+    document.getElementById('engine-status').textContent = 'Stopped';
+    document.getElementById('engine-status').className = 'engine-status stopped';
+
+    ws.send(JSON.stringify({ type: 'stop_trading' }));
+
+    addLogEntry({ message: 'Trading stopped', level: 'info' });
+    updateContextBar();
+}
+
+function panicClose() {
+    if (!confirm('Close all positions immediately?')) return;
+
+    ws.send(JSON.stringify({ type: 'panic_close' }));
+    addLogEntry({ message: '⚠️ PANIC CLOSE - All positions closed', level: 'error' });
+    stopTrading();
+}
+
+// ===========================
+// Database Status
+// ===========================
+
+async function checkDbStatus() {
+    try {
+        const res = await fetch(`${API_BASE}/health`);
+        const data = await res.json();
+
+        const el = document.getElementById('db-status');
+        if (data.database === 'connected') {
+            el.className = 'status-badge connected';
+            el.innerHTML = '<span class="status-dot"></span><span>DB</span>';
+        } else {
+            el.className = 'status-badge disconnected';
+            el.innerHTML = '<span class="status-dot"></span><span>DB</span>';
+        }
+    } catch (e) {
+        document.getElementById('db-status').className = 'status-badge disconnected';
+    }
+}

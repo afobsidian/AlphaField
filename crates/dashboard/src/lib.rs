@@ -10,6 +10,7 @@ pub mod mock_data;
 pub mod quality_api;
 pub mod sentiment_api;
 pub mod server;
+pub mod services;
 pub mod websocket;
 
 pub use analysis_api::*;

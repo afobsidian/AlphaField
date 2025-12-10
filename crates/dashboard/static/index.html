@@ -12,470 +12,473 @@
 
 <body>
     <div class="app-container">
-        <!-- Sidebar -->
-        <nav class="sidebar">
-            <div class="logo">
-                <span class="logo-icon">🚀</span>
-                <span class="logo-text">AlphaField</span>
+        <!-- Top Navigation Bar -->
+        <header class="top-nav">
+            <div class="nav-brand">
+                <span class="brand-icon">🚀</span>
+                <span class="brand-text">AlphaField</span>
             </div>
-            <ul class="nav-menu">
-                <li class="nav-item active" onclick="switchTab('data')">
-                    <span class="nav-icon">📊</span>
-                    <span class="nav-label">Data</span>
-                </li>
-                <li class="nav-item" onclick="switchTab('sentiment')">
-                    <span class="nav-icon">🧠</span>
-                    <span class="nav-label">Sentiment</span>
-                </li>
-                <li class="nav-item" onclick="switchTab('backtest')">
-                    <span class="nav-icon">📈</span>
-                    <span class="nav-label">Backtest</span>
-                </li>
-                <li class="nav-item" onclick="switchTab('live')">
-                    <span class="nav-icon">🔴</span>
-                    <span class="nav-label">Live</span>
-                </li>
-            </ul>
-            <div class="sidebar-footer">
+
+            <!-- Workflow Tabs -->
+            <nav class="workflow-tabs">
+                <button class="workflow-tab active" data-tab="build" onclick="switchTab('build')">
+                    <span class="tab-number">1</span>
+                    <span class="tab-label">Build</span>
+                </button>
+                <span class="tab-arrow">→</span>
+                <button class="workflow-tab" data-tab="backtest" onclick="switchTab('backtest')">
+                    <span class="tab-number">2</span>
+                    <span class="tab-label">Backtest</span>
+                </button>
+                <span class="tab-arrow">→</span>
+                <button class="workflow-tab" data-tab="optimize" onclick="switchTab('optimize')">
+                    <span class="tab-number">3</span>
+                    <span class="tab-label">Optimize</span>
+                </button>
+                <span class="tab-arrow">→</span>
+                <button class="workflow-tab" data-tab="deploy" onclick="switchTab('deploy')">
+                    <span class="tab-number">4</span>
+                    <span class="tab-label">Deploy</span>
+                </button>
+            </nav>
+
+            <!-- Status Indicators -->
+            <div class="nav-status">
                 <div id="db-status" class="status-badge disconnected">
                     <span class="status-dot"></span>
-                    <span>Checking...</span>
+                    <span>DB</span>
+                </div>
+                <div id="ws-status" class="status-badge disconnected">
+                    <span class="status-dot"></span>
+                    <span>Live</span>
                 </div>
             </div>
-        </nav>
+        </header>
 
-        <!-- Main Content -->
+        <!-- Strategy Context Bar -->
+        <div class="context-bar">
+            <div class="context-item">
+                <span class="context-label">Strategy:</span>
+                <span class="context-value" id="ctx-strategy">Not Selected</span>
+            </div>
+            <div class="context-item">
+                <span class="context-label">Symbol:</span>
+                <span class="context-value" id="ctx-symbol">—</span>
+            </div>
+            <div class="context-item">
+                <span class="context-label">Status:</span>
+                <span class="context-value" id="ctx-status">Configure strategy to begin</span>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
         <main class="main-content">
-            <!-- DATA MANAGER VIEW -->
-            <div id="data-view" class="view-section">
-                <header class="view-header">
-                    <h1>📊 Data Manager</h1>
-                    <p>Manage historical market data for backtesting</p>
-                </header>
 
-                <div class="content-grid">
-                    <!-- Fetch New Data Card -->
-                    <div class="card fetch-card">
-                        <h3>Fetch New Data</h3>
-                        <form id="fetch-form">
-                            <div class="form-row">
-                                <div class="form-group symbol-search">
-                                    <label>Symbol</label>
-                                    <div class="autocomplete-wrapper">
-                                        <input type="text" id="fetch-symbol" placeholder="Search symbols..."
-                                            autocomplete="off">
-                                        <div id="symbol-dropdown" class="symbol-dropdown"></div>
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label>Interval</label>
-                                    <select id="fetch-interval">
-                                        <option value="1h">1 Hour</option>
-                                        <option value="4h">4 Hours</option>
-                                        <option value="1d">1 Day</option>
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label>Days</label>
-                                    <input type="number" id="fetch-days" value="30" min="1" max="365">
-                                </div>
-                            </div>
-                            <button type="submit" class="btn btn-primary">
-                                <span>⬇️</span> Fetch Data
-                            </button>
-                        </form>
-                        <div id="fetch-status" class="status-message"></div>
-                    </div>
-
-                    <!-- Cached Data Card -->
-                    <div class="card data-card">
-                        <h3>Cached Data</h3>
-                        <div id="symbols-list" class="symbols-list">
-                            <div class="loading">Loading...</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- SENTIMENT VIEW -->
-            <div id="sentiment-view" class="view-section" style="display: none;">
-                <header class="view-header">
-                    <h1>🧠 Market Sentiment</h1>
-                    <p>Fear & Greed Index and sentiment analysis</p>
-                </header>
-
-                <div class="content-grid sentiment-grid">
-                    <!-- Current Sentiment Gauge -->
-                    <div class="card sentiment-gauge-card">
-                        <h3>Current Sentiment</h3>
-                        <div class="sentiment-gauge">
-                            <div id="gauge-container">
-                                <div id="gauge-value" class="gauge-value">--</div>
-                                <div id="gauge-label" class="gauge-label">Loading...</div>
-                                <div class="gauge-bar">
-                                    <div id="gauge-fill" class="gauge-fill" style="width: 0%"></div>
-                                    <div id="gauge-marker" class="gauge-marker" style="left: 0%"></div>
-                                </div>
-                                <div class="gauge-scale">
-                                    <span>Extreme Fear</span>
-                                    <span>Neutral</span>
-                                    <span>Extreme Greed</span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="sentiment-updated" id="sentiment-updated">Last updated: --</div>
-                    </div>
-
-                    <!-- Sentiment Stats -->
-                    <div class="card sentiment-stats-card">
-                        <h3>Statistics (30 days)</h3>
-                        <div class="metrics-grid">
-                            <div class="metric">
-                                <span class="metric-label">Average</span>
-                                <span class="metric-value" id="sent-avg">--</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">Min</span>
-                                <span class="metric-value" id="sent-min">--</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">Max</span>
-                                <span class="metric-value" id="sent-max">--</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">7-day SMA</span>
-                                <span class="metric-value" id="sent-sma7">--</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">Momentum</span>
-                                <span class="metric-value" id="sent-momentum">--</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">Days in Fear</span>
-                                <span class="metric-value" id="sent-fear-days">--</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Sentiment Zones -->
-                    <div class="card sentiment-zones-card">
-                        <h3>Zone Distribution</h3>
-                        <div class="zone-bars">
-                            <div class="zone-bar">
-                                <div class="zone-label">🔴 Fear</div>
-                                <div class="zone-progress">
-                                    <div id="zone-fear" class="zone-fill fear" style="width: 0%"></div>
-                                </div>
-                                <div id="zone-fear-pct" class="zone-pct">0%</div>
-                            </div>
-                            <div class="zone-bar">
-                                <div class="zone-label">⚪ Neutral</div>
-                                <div class="zone-progress">
-                                    <div id="zone-neutral" class="zone-fill neutral" style="width: 0%"></div>
-                                </div>
-                                <div id="zone-neutral-pct" class="zone-pct">0%</div>
-                            </div>
-                            <div class="zone-bar">
-                                <div class="zone-label">🟢 Greed</div>
-                                <div class="zone-progress">
-                                    <div id="zone-greed" class="zone-fill greed" style="width: 0%"></div>
-                                </div>
-                                <div id="zone-greed-pct" class="zone-pct">0%</div>
-                            </div>
-                        </div>
-                    </div>
+            <!-- ==================== TAB 1: BUILD ==================== -->
+            <section id="build-view" class="view-section active">
+                <div class="view-header">
+                    <h1>🔧 Strategy Builder</h1>
+                    <p>Configure your trading strategy and select the asset to trade</p>
                 </div>
 
-                <!-- Historical Chart -->
-                <div class="charts-section">
+                <div class="build-grid">
+                    <!-- Strategy Selection Card -->
+                    <div class="card strategy-card">
+                        <h3>Select Strategy</h3>
+                        <div class="strategy-options">
+                            <label class="strategy-option">
+                                <input type="radio" name="strategy" value="GoldenCross" checked>
+                                <div class="strategy-info">
+                                    <span class="strategy-name">Golden Cross</span>
+                                    <span class="strategy-desc">SMA crossover trend following</span>
+                                </div>
+                            </label>
+                            <label class="strategy-option">
+                                <input type="radio" name="strategy" value="Rsi">
+                                <div class="strategy-info">
+                                    <span class="strategy-name">RSI Reversal</span>
+                                    <span class="strategy-desc">Overbought/oversold mean reversion</span>
+                                </div>
+                            </label>
+                            <label class="strategy-option">
+                                <input type="radio" name="strategy" value="MeanReversion">
+                                <div class="strategy-info">
+                                    <span class="strategy-name">Mean Reversion</span>
+                                    <span class="strategy-desc">Bollinger Bands contrarian</span>
+                                </div>
+                            </label>
+                            <label class="strategy-option">
+                                <input type="radio" name="strategy" value="Momentum">
+                                <div class="strategy-info">
+                                    <span class="strategy-name">Momentum</span>
+                                    <span class="strategy-desc">MACD + EMA trend strength</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Symbol & Parameters Card -->
+                    <div class="card params-card">
+                        <h3>Configuration</h3>
+
+                        <!-- Symbol Selection -->
+                        <div class="form-group">
+                            <label>Trading Symbol</label>
+                            <div class="symbol-input-wrapper">
+                                <select id="build-symbol" class="form-select">
+                                    <option value="">Loading symbols...</option>
+                                </select>
+                                <button type="button" class="btn btn-secondary btn-sm" onclick="fetchDataForSymbol()">
+                                    📥 Fetch Data
+                                </button>
+                            </div>
+                            <div id="data-status" class="data-status">
+                                <span class="status-icon">⏳</span>
+                                <span class="status-text">Checking data availability...</span>
+                            </div>
+                        </div>
+
+                        <!-- Dynamic Strategy Parameters -->
+                        <div id="build-params" class="params-section">
+                            <!-- Populated dynamically based on strategy selection -->
+                        </div>
+
+                        <!-- Action Button -->
+                        <button type="button" class="btn btn-primary btn-action" onclick="goToBacktest()">
+                            Test Strategy →
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== TAB 2: BACKTEST ==================== -->
+            <section id="backtest-view" class="view-section">
+                <div class="view-header">
+                    <h1>📊 Backtest</h1>
+                    <p>Validate your strategy against historical data</p>
+                </div>
+
+                <div class="backtest-grid">
+                    <!-- Config Summary + Run -->
+                    <div class="card run-card">
+                        <h3>Run Backtest</h3>
+
+                        <div class="config-summary">
+                            <div class="summary-row">
+                                <span>Strategy:</span>
+                                <strong id="bt-summary-strategy">—</strong>
+                            </div>
+                            <div class="summary-row">
+                                <span>Symbol:</span>
+                                <strong id="bt-summary-symbol">—</strong>
+                            </div>
+                            <div class="summary-row">
+                                <span>Parameters:</span>
+                                <span id="bt-summary-params" class="params-inline">—</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Backtest Period</label>
+                            <div class="period-selector">
+                                <button type="button" class="period-btn active" data-days="30">30d</button>
+                                <button type="button" class="period-btn" data-days="90">90d</button>
+                                <button type="button" class="period-btn" data-days="180">180d</button>
+                                <button type="button" class="period-btn" data-days="365">1y</button>
+                            </div>
+                        </div>
+
+                        <button type="button" class="btn btn-primary btn-action" id="btn-run-backtest"
+                            onclick="runBacktest()">
+                            ▶️ Run Backtest
+                        </button>
+                    </div>
+
+                    <!-- Results Panel -->
+                    <div class="card results-card" id="backtest-results">
+                        <h3>Results</h3>
+                        <div id="results-placeholder" class="placeholder-content">
+                            <span class="placeholder-icon">📈</span>
+                            <span>Run a backtest to see results</span>
+                        </div>
+
+                        <div id="results-content" class="results-content hidden">
+                            <div class="metrics-grid">
+                                <div class="metric">
+                                    <span class="metric-label">Total Return</span>
+                                    <span class="metric-value" id="bt-return">—</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Sharpe Ratio</span>
+                                    <span class="metric-value" id="bt-sharpe">—</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Max Drawdown</span>
+                                    <span class="metric-value" id="bt-drawdown">—</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Win Rate</span>
+                                    <span class="metric-value" id="bt-winrate">—</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Total Trades</span>
+                                    <span class="metric-value" id="bt-trades">—</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">vs Benchmark</span>
+                                    <span class="metric-value" id="bt-alpha">—</span>
+                                </div>
+                            </div>
+
+                            <div class="action-buttons">
+                                <button type="button" class="btn btn-secondary" onclick="goToOptimize()">
+                                    🔧 Optimize Parameters
+                                </button>
+                                <button type="button" class="btn btn-primary" onclick="goToDeploy()">
+                                    🚀 Deploy Strategy
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Equity Chart -->
                     <div class="card chart-card-full">
-                        <h3>Historical Sentiment</h3>
-                        <div class="chart-controls">
-                            <select id="sentiment-days" onchange="loadSentimentHistory()">
-                                <option value="30">30 Days</option>
-                                <option value="90">90 Days</option>
-                                <option value="180">180 Days</option>
-                                <option value="365">1 Year</option>
-                            </select>
-                            <button class="btn btn-secondary" onclick="loadSentimentHistory()">
-                                🔄 Refresh
-                            </button>
-                        </div>
-                        <div id="sentiment-chart" style="width:100%;height:400px;"></div>
+                        <h3>Equity Curve</h3>
+                        <div id="equity-chart" style="width:100%;height:350px;"></div>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <!-- BACKTEST VIEW -->
-            <div id="backtest-view" class="view-section" style="display: none;">
-                <header class="view-header">
-                    <h1>📈 Strategy Backtester</h1>
-                    <p>Test trading strategies against historical data with comprehensive analytics</p>
-                </header>
+            <!-- ==================== TAB 3: OPTIMIZE ==================== -->
+            <section id="optimize-view" class="view-section">
+                <div class="view-header">
+                    <h1>⚡ Optimize & Tune</h1>
+                    <p>Find optimal parameters and test strategy robustness</p>
+                </div>
 
-                <div class="content-grid backtest-grid">
-                    <!-- Configuration -->
+                <div class="optimize-grid">
+                    <!-- Analysis Mode Selection -->
+                    <div class="card mode-card">
+                        <h3>Analysis Mode</h3>
+                        <div class="mode-options">
+                            <label class="mode-option active">
+                                <input type="radio" name="analysis-mode" value="walkforward" checked>
+                                <div class="mode-info">
+                                    <span class="mode-icon">🔄</span>
+                                    <span class="mode-name">Walk-Forward</span>
+                                    <span class="mode-desc">Test robustness with rolling windows</span>
+                                </div>
+                            </label>
+                            <label class="mode-option">
+                                <input type="radio" name="analysis-mode" value="sensitivity">
+                                <div class="mode-info">
+                                    <span class="mode-icon">📊</span>
+                                    <span class="mode-name">Sensitivity</span>
+                                    <span class="mode-desc">Parameter sweep heatmap</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Analysis Configuration -->
                     <div class="card config-card">
                         <h3>Configuration</h3>
-                        <form id="backtest-form">
+
+                        <!-- Walk-Forward Settings -->
+                        <div id="wfa-config" class="analysis-config">
+                            <p class="config-info">
+                                Tests strategy across 4 years of data using 6-month training windows
+                                and 2-month out-of-sample validation.
+                            </p>
+                            <button type="button" class="btn btn-primary btn-action" onclick="runWalkForward()">
+                                ▶️ Run Walk-Forward Analysis
+                            </button>
+                        </div>
+
+                        <!-- Sensitivity Settings -->
+                        <div id="sensitivity-config" class="analysis-config hidden">
                             <div class="form-group">
-                                <label>Strategy</label>
-                                <select id="bt-strategy" onchange="updateParams()">
-                                    <option value="GoldenCross">Golden Cross (SMA)</option>
-                                    <option value="Rsi">RSI Reversal</option>
-                                    <option value="MeanReversion">Mean Reversion (BB)</option>
-                                    <option value="Momentum">Momentum (MACD)</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Symbol</label>
-                                <select id="bt-symbol">
+                                <label>Primary Parameter</label>
+                                <select id="sens-param-1" class="form-select">
                                     <!-- Populated dynamically -->
                                 </select>
                             </div>
                             <div class="form-group">
-                                <label>Days to Test</label>
-                                <input type="number" id="bt-days" value="30" min="7" max="365">
+                                <label>Secondary Parameter (2D Heatmap)</label>
+                                <select id="sens-param-2" class="form-select">
+                                    <option value="">None (1D Sweep)</option>
+                                    <!-- Populated dynamically -->
+                                </select>
                             </div>
-                            <div class="form-group">
-                                <label>Start Date (Optional)</label>
-                                <input type="date" id="bt-start-date" class="form-control">
-                            </div>
-                            <div class="form-group">
-                                <label>End Date (Optional)</label>
-                                <input type="date" id="bt-end-date" class="form-control">
-                            </div>
-
-                            <div id="strategy-params" class="params-section">
-                                <!-- Dynamic params -->
-                            </div>
-
-                            <button type="submit" class="btn btn-primary btn-block">
-                                <span>▶️</span> Run Backtest
+                            <button type="button" class="btn btn-primary btn-action" onclick="runSensitivity()">
+                                ▶️ Run Sensitivity Analysis
                             </button>
-                        </form>
-                    </div>
-
-                    <!-- Core Metrics -->
-                    <div class="card results-card">
-                        <h3>Performance Metrics</h3>
-                        <div class="metrics-grid">
-                            <div class="metric">
-                                <span class="metric-label">Total Return</span>
-                                <span class="metric-value" id="bt-return">—</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">CAGR</span>
-                                <span class="metric-value" id="bt-cagr">—</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">Sharpe</span>
-                                <span class="metric-value" id="bt-sharpe">—</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">Sortino</span>
-                                <span class="metric-value" id="bt-sortino">—</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">Max Drawdown</span>
-                                <span class="metric-value" id="bt-drawdown">—</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">Calmar</span>
-                                <span class="metric-value" id="bt-calmar">—</span>
-                            </div>
                         </div>
                     </div>
 
-                    <!-- Benchmark Comparison -->
-                    <div class="card benchmark-card">
-                        <h3>vs BTC Buy & Hold</h3>
+                    <!-- Walk-Forward Results -->
+                    <div id="wfa-results" class="card results-card hidden">
+                        <h3>Walk-Forward Results</h3>
                         <div class="metrics-grid">
                             <div class="metric">
-                                <span class="metric-label">Alpha</span>
-                                <span class="metric-value" id="bt-alpha">—</span>
+                                <span class="metric-label">Stability Score</span>
+                                <span class="metric-value" id="wfa-stability">—</span>
                             </div>
                             <div class="metric">
-                                <span class="metric-label">Beta</span>
-                                <span class="metric-value" id="bt-beta">—</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">Excess Return</span>
-                                <span class="metric-value" id="bt-excess">—</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">Correlation</span>
-                                <span class="metric-value" id="bt-correlation">—</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Sentiment Analysis -->
-                    <div class="card sentiment-stats-card">
-                        <h3>Sentiment Context</h3>
-                        <div class="metrics-grid">
-                            <div class="metric">
-                                <span class="metric-label">Market Mood</span>
-                                <span class="metric-value" id="bt-market-mood">—</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">Avg Index</span>
-                                <span class="metric-value" id="bt-market-avg">—</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">Asset RSI</span>
-                                <span class="metric-value" id="bt-asset-rsi">—</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">Momentum</span>
-                                <span class="metric-value" id="bt-asset-mom">—</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">Fear Days</span>
-                                <span class="metric-value" id="bt-fear-days">—</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">Greed Days</span>
-                                <span class="metric-value" id="bt-greed-days">—</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Trade Stats -->
-                    <div class="card trade-stats-card">
-                        <h3>Trade Statistics</h3>
-                        <div class="metrics-grid">
-                            <div class="metric">
-                                <span class="metric-label">Total Trades</span>
-                                <span class="metric-value" id="bt-trades">—</span>
+                                <span class="metric-label">Avg OOS Return</span>
+                                <span class="metric-value" id="wfa-avg-return">—</span>
                             </div>
                             <div class="metric">
                                 <span class="metric-label">Win Rate</span>
-                                <span class="metric-value" id="bt-winrate">—</span>
+                                <span class="metric-value" id="wfa-win-rate">—</span>
                             </div>
                             <div class="metric">
-                                <span class="metric-label">Profit Factor</span>
-                                <span class="metric-value" id="bt-pf">—</span>
+                                <span class="metric-label">OOS Sharpe</span>
+                                <span class="metric-value" id="wfa-oos-sharpe">—</span>
+                            </div>
+                        </div>
+                        <div class="action-buttons">
+                            <button type="button" class="btn btn-primary" onclick="goToDeploy()">
+                                🚀 Deploy Strategy
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Sensitivity Results -->
+                    <div id="sensitivity-results" class="card results-card hidden">
+                        <h3>Best Parameters Found</h3>
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <span class="metric-label">Best Params</span>
+                                <span class="metric-value" id="sens-best-param">—</span>
                             </div>
                             <div class="metric">
-                                <span class="metric-label">Avg Duration</span>
-                                <span class="metric-value" id="bt-duration">—</span>
+                                <span class="metric-label">Max Sharpe</span>
+                                <span class="metric-value" id="sens-max-sharpe">—</span>
                             </div>
-                            <div class="metric">
-                                <span class="metric-label">Win Streak</span>
-                                <span class="metric-value" id="bt-winstreak">—</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">Loss Streak</span>
-                                <span class="metric-value" id="bt-lossstreak">—</span>
+                        </div>
+                        <div class="action-buttons">
+                            <button type="button" class="btn btn-secondary" onclick="applyBestParams()">
+                                ✓ Apply Best Parameters
+                            </button>
+                            <button type="button" class="btn btn-primary" onclick="goToDeploy()">
+                                🚀 Deploy Strategy
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Charts Area -->
+                    <div class="card chart-card-full" id="optimize-chart-card">
+                        <h3 id="optimize-chart-title">Analysis Results</h3>
+                        <div id="optimize-chart" style="width:100%;height:450px;">
+                            <div class="placeholder-content">
+                                <span class="placeholder-icon">📊</span>
+                                <span>Run an analysis to see results</span>
                             </div>
                         </div>
                     </div>
                 </div>
+            </section>
 
-                <!-- Charts Section -->
-                <div class="charts-section">
-                    <!-- Equity Curve with Benchmark -->
-                    <div class="card chart-card-full">
-                        <h3>Equity Curve vs Benchmark</h3>
-                        <div id="equity-chart" style="width:100%;height:400px;"></div>
-                    </div>
-
-                    <!-- Drawdown Chart -->
-                    <div class="card chart-card-half">
-                        <h3>Underwater (Drawdown)</h3>
-                        <div id="drawdown-chart" style="width:100%;height:300px;"></div>
-                    </div>
-
-                    <!-- Monthly Returns Heatmap -->
-                    <div class="card chart-card-half">
-                        <h3>Monthly Returns</h3>
-                        <div id="monthly-chart" style="width:100%;height:300px;"></div>
-                    </div>
-
-                    <!-- Rolling Sharpe -->
-                    <div class="card chart-card-half">
-                        <h3>Rolling Sharpe (20-bar)</h3>
-                        <div id="rolling-chart" style="width:100%;height:300px;"></div>
-                    </div>
-
-                    <!-- Trade Distribution -->
-                    <div class="card chart-card-half">
-                        <h3>Trade P&L Distribution</h3>
-                        <div id="trades-chart" style="width:100%;height:300px;"></div>
-                    </div>
+            <!-- ==================== TAB 4: DEPLOY ==================== -->
+            <section id="deploy-view" class="view-section">
+                <div class="view-header">
+                    <h1>🚀 Deploy</h1>
+                    <p>Go live with your validated strategy</p>
                 </div>
 
-                <!-- Status Bar -->
-                <div class="card status-bar-card">
-                    <div class="status-bar-content">
-                        <span id="bt-data-source">📊 Ready to run</span>
-                        <span id="bt-date-range">—</span>
-                        <span>⏱️ <strong id="bt-exec-time">—</strong> ms</span>
-                    </div>
-                </div>
-            </div>
-
-            <!-- LIVE VIEW -->
-            <div id="live-view" class="view-section" style="display: none;">
-                <header class="view-header">
-                    <div class="view-header-content">
-                        <h1>🔴 Live Trading</h1>
-                        <p>Monitor active strategies and positions</p>
-                    </div>
-                    <div id="ws-status" class="status-badge connecting">⟳ Connecting...</div>
-                </header>
-
-                <!-- Control Panel -->
-                <div class="control-panel">
-                    <div class="control-group">
-                        <label>Strategy</label>
-                        <select id="live-strategy">
-                            <option value="GoldenCross">Golden Cross</option>
-                            <option value="Rsi">RSI Reversal</option>
-                            <option value="MeanReversion">Mean Reversion</option>
-                            <option value="Momentum">Momentum</option>
-                        </select>
-                    </div>
-                    <div class="control-group">
-                        <label>Mode</label>
-                        <select id="live-mode">
-                            <option value="paper">Paper Trading</option>
-                            <option value="live" disabled>Live Trading</option>
-                        </select>
-                    </div>
-                    <div class="control-buttons">
-                        <button id="btn-start" class="btn btn-success">▶ Start</button>
-                        <button id="btn-stop" class="btn btn-secondary" disabled>⏹ Stop</button>
-                        <button id="btn-panic" class="btn btn-danger">⚠ Panic Close</button>
-                    </div>
-                    <div id="engine-status" class="engine-stopped">Stopped</div>
-                </div>
-
-                <!-- Summary Cards -->
-                <div class="summary-cards">
+                <div class="deploy-grid">
+                    <!-- Strategy Summary & Market Sentiment -->
                     <div class="card summary-card">
-                        <h4>Total Value</h4>
-                        <div class="value" id="live-total-value">$0.00</div>
-                    </div>
-                    <div class="card summary-card">
-                        <h4>Cash</h4>
-                        <div class="value" id="live-cash">$0.00</div>
-                    </div>
-                    <div class="card summary-card">
-                        <h4>Positions Value</h4>
-                        <div class="value" id="live-positions-value">$0.00</div>
-                    </div>
-                    <div class="card summary-card">
-                        <h4>P&L</h4>
-                        <div class="value" id="live-pnl">$0.00</div>
-                    </div>
-                </div>
+                        <h3>Strategy Summary</h3>
+                        <div class="deploy-summary">
+                            <div class="summary-row">
+                                <span>Strategy:</span>
+                                <strong id="deploy-strategy">—</strong>
+                            </div>
+                            <div class="summary-row">
+                                <span>Symbol:</span>
+                                <strong id="deploy-symbol">—</strong>
+                            </div>
+                            <div class="summary-row">
+                                <span>Backtest Return:</span>
+                                <span id="deploy-return" class="metric-value">—</span>
+                            </div>
+                            <div class="summary-row">
+                                <span>Backtest Sharpe:</span>
+                                <span id="deploy-sharpe">—</span>
+                            </div>
+                        </div>
 
-                <div class="content-grid live-grid">
-                    <!-- Equity Chart -->
-                    <div class="card chart-card">
-                        <h3>Equity Curve</h3>
+                        <!-- Market Sentiment Gauge -->
+                        <div class="sentiment-section">
+                            <h4>Market Sentiment</h4>
+                            <div class="sentiment-gauge-mini">
+                                <div id="gauge-value" class="gauge-value">--</div>
+                                <div id="gauge-label" class="gauge-label">Loading...</div>
+                                <div class="gauge-bar">
+                                    <div id="gauge-fill" class="gauge-fill" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Trading Controls -->
+                    <div class="card controls-card">
+                        <h3>Trading Controls</h3>
+                        <div class="form-group">
+                            <label>Trading Mode</label>
+                            <select id="trade-mode" class="form-select">
+                                <option value="paper">📝 Paper Trading</option>
+                                <option value="live" disabled>🔴 Live Trading (Coming Soon)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Position Size</label>
+                            <input type="number" id="position-size" class="form-input" value="0.5" step="0.1" min="0.1"
+                                max="1.0">
+                            <span class="input-hint">Fraction of capital per trade (0.1 - 1.0)</span>
+                        </div>
+
+                        <div class="control-buttons">
+                            <button type="button" class="btn btn-success btn-lg" id="btn-start"
+                                onclick="startTrading()">
+                                ▶️ Start Trading
+                            </button>
+                            <button type="button" class="btn btn-secondary btn-lg" id="btn-stop" onclick="stopTrading()"
+                                disabled>
+                                ⏹ Stop
+                            </button>
+                            <button type="button" class="btn btn-danger" id="btn-panic" onclick="panicClose()">
+                                ⚠️ Panic Close
+                            </button>
+                        </div>
+                        <div id="engine-status" class="engine-status stopped">Stopped</div>
+                    </div>
+
+                    <!-- Live Stats -->
+                    <div class="live-stats">
+                        <div class="stat-card">
+                            <span class="stat-label">Total Value</span>
+                            <span class="stat-value" id="live-total-value">$100,000</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Cash</span>
+                            <span class="stat-value" id="live-cash">$100,000</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">Positions</span>
+                            <span class="stat-value" id="live-positions-value">$0</span>
+                        </div>
+                        <div class="stat-card">
+                            <span class="stat-label">P&L</span>
+                            <span class="stat-value" id="live-pnl">$0.00</span>
+                        </div>
+                    </div>
+
+                    <!-- Live Equity Chart -->
+                    <div class="card chart-card-wide">
+                        <h3>Live Equity</h3>
                         <div class="chart-container">
                             <canvas id="equityChart"></canvas>
                         </div>
@@ -495,7 +498,7 @@
                                     <th>%</th>
                                 </tr>
                             </thead>
-                            <tbody id="live-positions-table">
+                            <tbody id="positions-table">
                                 <tr>
                                     <td colspan="6" class="empty">No open positions</td>
                                 </tr>
@@ -525,18 +528,19 @@
                         </table>
                     </div>
 
-                    <!-- Log Console -->
+                    <!-- Activity Log -->
                     <div class="card log-card">
                         <h3>Activity Log</h3>
                         <div id="log-console" class="log-console">
                             <div class="log-entry log-info">
                                 <span class="log-time">--:--:--</span>
-                                <span class="log-msg">Waiting for connection...</span>
+                                <span class="log-msg">Configure and start trading to see activity...</span>
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            </section>
+
         </main>
     </div>
     <script src="app.js"></script>

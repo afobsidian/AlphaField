@@ -1228,22 +1228,78 @@ impl UnifiedDataClient {
                         symbol.to_string()
                     };
 
-                    let start_ts = start_time.map(|t| t.timestamp_millis());
-                    let end_ts = end_time.map(|t| t.timestamp_millis());
-
-                    match client.get_klines(&pair, interval, start_ts, end_ts, limit).await {
-                        Ok(bars) => return Ok(bars),
-                        Err(e) => {
-                            tracing::warn!(source = "Binance", error = %e, "Failed to fetch bars");
-                            // If rate limited, mark key
-                            if e.to_string().contains("429") || e.to_string().contains("418") {
-                                if let Some(k) = key {
-                                    self.binance_keys
-                                        .mark_rate_limited(&k, Duration::from_secs(60));
+                    // Paginated fetch for large date ranges
+                    let mut all_bars: Vec<Bar> = Vec::new();
+                    let mut current_start = start_time.map(|t| t.timestamp_millis());
+                    let final_end = end_time.map(|t| t.timestamp_millis());
+                    let max_bars_per_request = 1000;
+                    let max_total_bars = 50000; // Safety limit
+                    
+                    loop {
+                        let batch_result = client.get_klines(
+                            &pair, 
+                            interval, 
+                            current_start, 
+                            final_end, 
+                            Some(max_bars_per_request)
+                        ).await;
+                        
+                        match batch_result {
+                            Ok(bars) => {
+                                if bars.is_empty() {
+                                    break; // No more data
                                 }
+                                
+                                let batch_len = bars.len();
+                                let last_ts = bars.last().map(|b| b.timestamp.timestamp_millis());
+                                
+                                all_bars.extend(bars);
+                                tracing::info!(
+                                    batch_size = batch_len,
+                                    total = all_bars.len(),
+                                    "Fetched batch of Binance bars"
+                                );
+                                
+                                // Check if we've reached the end or hit limits
+                                if batch_len < max_bars_per_request as usize {
+                                    break; // Received less than requested, must be at end
+                                }
+                                
+                                if all_bars.len() >= max_total_bars as usize {
+                                    tracing::warn!("Hit max bar limit of {}", max_total_bars);
+                                    break;
+                                }
+                                
+                                // Move start to after last bar for next batch
+                                if let Some(last) = last_ts {
+                                    current_start = Some(last + 1); // +1ms to avoid duplicate
+                                } else {
+                                    break;
+                                }
+                                
+                                // Small delay to avoid rate limiting
+                                tokio::time::sleep(Duration::from_millis(100)).await;
                             }
-                            last_error = Some(e);
+                            Err(e) => {
+                                tracing::warn!(source = "Binance", error = %e, "Failed to fetch bars");
+                                // If rate limited, mark key
+                                if e.to_string().contains("429") || e.to_string().contains("418") {
+                                    if let Some(k) = key {
+                                        self.binance_keys
+                                            .mark_rate_limited(&k, Duration::from_secs(60));
+                                    }
+                                }
+                                if all_bars.is_empty() {
+                                    last_error = Some(e);
+                                }
+                                break;
+                            }
                         }
+                    }
+                    
+                    if !all_bars.is_empty() {
+                        tracing::info!(total = all_bars.len(), "Completed paginated Binance fetch");
+                        return Ok(all_bars);
                     }
                 }
                 DataSource::CoinGecko => {

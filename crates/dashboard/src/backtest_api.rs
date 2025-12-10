@@ -2,18 +2,18 @@ use axum::{extract::State, response::Json};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 use alphafield_backtest::{
     AssetSentimentCalculator, AssetSentimentSummary,
     BacktestEngine, BenchmarkComparison, DrawdownAnalysis, DrawdownPoint,
     MonthlyReturn, PerformanceMetrics, RollingStats, SlippageModel, StrategyAdapter, Trade,
 };
-use alphafield_core::Strategy;
-use alphafield_data::{DatabaseClient, SentimentClient, UnifiedDataClient};
-use alphafield_strategy::{GoldenCrossStrategy, MeanReversionStrategy, MomentumStrategy, RsiStrategy};
+use alphafield_data::SentimentClient;
 
 use crate::api::AppState;
+use crate::services::data_service::{fetch_data_with_cache, DataStatus};
+use crate::services::strategy_service::StrategyFactory;
 
 #[derive(Debug, Deserialize)]
 pub struct BacktestRequest {
@@ -61,16 +61,7 @@ pub struct BacktestResponse {
     pub execution_time_ms: u64,
 }
 
-/// Data fetching status info
-#[derive(Serialize, Default)]
-pub struct DataStatus {
-    pub source: String,         // "cache" or "api"
-    pub bars_loaded: usize,
-    pub bars_requested: u32,
-    pub date_range_start: Option<String>,
-    pub date_range_end: Option<String>,
-    pub cached_after: bool,     // Whether data was cached after fetch
-}
+
 
 /// Global market sentiment data
 #[derive(Serialize)]
@@ -162,39 +153,7 @@ impl TradeSummary {
     }
 }
 
-struct StrategyFactory;
 
-impl StrategyFactory {
-    fn create(name: &str, params: &HashMap<String, f64>) -> Option<Box<dyn Strategy>> {
-        debug!(strategy = name, ?params, "Creating strategy");
-        match name {
-            "GoldenCross" => {
-                let fast = params.get("fast_period").copied().unwrap_or(10.0) as usize;
-                let slow = params.get("slow_period").copied().unwrap_or(30.0) as usize;
-                Some(Box::new(GoldenCrossStrategy::new(fast, slow)))
-            }
-            "Rsi" => {
-                let period = params.get("period").copied().unwrap_or(14.0) as usize;
-                let lower = params.get("lower_bound").copied().unwrap_or(30.0);
-                let upper = params.get("upper_bound").copied().unwrap_or(70.0);
-                Some(Box::new(RsiStrategy::new(period, lower, upper)))
-            }
-            "MeanReversion" => {
-                let period = params.get("period").copied().unwrap_or(20.0) as usize;
-                let std_dev = params.get("std_dev").copied().unwrap_or(2.0);
-                Some(Box::new(MeanReversionStrategy::new(period, std_dev)))
-            }
-            "Momentum" => {
-                let ema_period = params.get("ema_period").copied().unwrap_or(50.0) as usize;
-                let macd_fast = params.get("macd_fast").copied().unwrap_or(12.0) as usize;
-                let macd_slow = params.get("macd_slow").copied().unwrap_or(26.0) as usize;
-                let macd_signal = params.get("macd_signal").copied().unwrap_or(9.0) as usize;
-                Some(Box::new(MomentumStrategy::new(ema_period, macd_fast, macd_slow, macd_signal)))
-            }
-            _ => None,
-        }
-    }
-}
 
 fn build_equity_curve(history: &[(i64, f64)]) -> Vec<EquityPoint> {
     if history.is_empty() {
@@ -399,70 +358,7 @@ async fn fetch_market_sentiment(days: u32) -> Option<MarketSentimentData> {
     }
 }
 
-/// Fetch data from cache first, then API if needed
-async fn fetch_data_with_cache(
-    symbol: String,
-    interval: String,
-    start_time: chrono::DateTime<chrono::Utc>,
-    end_time: chrono::DateTime<chrono::Utc>,
-) -> Result<(Vec<alphafield_core::Bar>, DataStatus), String> {
-    // Try database first with strict range check
-    if let Ok(db) = DatabaseClient::new_from_env().await {
-        if let Ok(cached_bars) = db.load_bars_range(&symbol, &interval, start_time, end_time).await {
-             // Heuristic: If we have bars covering at least 90% of the requested time range?
-             // Or simpler: do we have any bars? And does the first/last bar match reasonably well?
-             if !cached_bars.is_empty() {
-                 let first_ts = cached_bars.first().unwrap().timestamp;
-                 let last_ts = cached_bars.last().unwrap().timestamp;
-                 
-                 // If the gap between requested start and found start isn't massive (e.g. < 2x interval)
-                 // This logic could be complex. For now, if we found data in the range, use it.
-                 // A stronger check would be needed for production (checking gaps).
-                 
-                 let status = DataStatus {
-                    source: "cache".to_string(),
-                    bars_loaded: cached_bars.len(),
-                    bars_requested: 0, // Not applicable with range fetch
-                    date_range_start: Some(first_ts.to_rfc3339()),
-                    date_range_end: Some(last_ts.to_rfc3339()),
-                    cached_after: false,
-                };
-                
-                info!(source = "cache", count = cached_bars.len(), "Loaded data from database cache");
-                return Ok((cached_bars, status));
-             }
-        }
-    }
 
-    // Fallback to API
-    let client = UnifiedDataClient::new_from_env();
-    
-    // API request needs limit primarily for Binance? No, updated get_bars to take times.
-    let bars = client.get_bars(&symbol, &interval, Some(start_time), Some(end_time), None).await
-        .map_err(|e| e.to_string())?;
-    
-    info!(source = "api", count = bars.len(), "Fetched data from API");
-
-    // Cache the data for future use
-    let mut cached_after = false;
-    if let Ok(db) = DatabaseClient::new_from_env().await {
-        if db.save_bars(&symbol, &interval, &bars).await.is_ok() {
-            cached_after = true;
-            info!("Cached {} bars to database", bars.len());
-        }
-    }
-
-    let status = DataStatus {
-        source: "api".to_string(),
-        bars_loaded: bars.len(),
-        bars_requested: 0,
-        date_range_start: bars.first().map(|b| b.timestamp.to_rfc3339()),
-        date_range_end: bars.last().map(|b| b.timestamp.to_rfc3339()),
-        cached_after,
-    };
-
-    Ok((bars, status))
-}
 
 fn empty_response(execution_time_ms: u64) -> BacktestResponse {
     BacktestResponse {
