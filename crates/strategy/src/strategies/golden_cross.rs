@@ -28,6 +28,7 @@ pub struct GoldenCrossStrategy {
     slow_sma: Sma,
     last_fast: Option<f64>,
     last_slow: Option<f64>,
+    entry_price: Option<f64>,
 }
 
 impl GoldenCrossStrategy {
@@ -54,6 +55,7 @@ impl GoldenCrossStrategy {
             config,
             last_fast: None,
             last_slow: None,
+            entry_price: None,
         }
     }
 
@@ -74,36 +76,78 @@ impl Strategy for GoldenCrossStrategy {
 
         let fast = fast_opt?;
         let slow = slow_opt?;
+        let price = bar.close;
 
-        let mut signal = None;
+        // EXIT LOGIC FIRST
+        if let Some(entry) = self.entry_price {
+            // Exit 1: Death cross
+            if let Some(prev_fast) = self.last_fast {
+                if let Some(prev_slow) = self.last_slow {
+                    if prev_fast >= prev_slow && fast < slow {
+                        self.entry_price = None;
+                        self.last_fast = Some(fast);
+                        self.last_slow = Some(slow);
+                        return Some(vec![Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: 1.0,
+                            metadata: Some(format!("Death Cross: Fast {:.2} < Slow {:.2}", fast, slow)),
+                        }]);
+                    }
+                }
+            }
+            
+            // Exit 2: Take profit at 5%
+            let profit_pct = (price - entry) / entry * 100.0;
+            if profit_pct >= 5.0 {
+                self.entry_price = None;
+                self.last_fast = Some(fast);
+                self.last_slow = Some(slow);
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Sell,
+                    strength: 1.0,
+                    metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
+                }]);
+            }
+            
+            // Exit 3: Stop loss at 5%
+            if profit_pct <= -5.0 {
+                self.entry_price = None;
+                self.last_fast = Some(fast);
+                self.last_slow = Some(slow);
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Sell,
+                    strength: 1.0,
+                    metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                }]);
+            }
+        }
 
+        // ENTRY LOGIC
         if let (Some(prev_fast), Some(prev_slow)) = (self.last_fast, self.last_slow) {
-            // Check for crossover
-            if prev_fast <= prev_slow && fast > slow {
-                // Golden Cross (Bullish)
-                signal = Some(Signal {
+            if prev_fast <= prev_slow && fast > slow && self.entry_price.is_none() {
+                // Golden Cross - Entry
+                self.entry_price = Some(price);
+                self.last_fast = Some(fast);
+                self.last_slow = Some(slow);
+                return Some(vec![Signal {
                     timestamp: bar.timestamp,
                     symbol: "UNKNOWN".to_string(),
                     signal_type: SignalType::Buy,
                     strength: 1.0,
                     metadata: Some(format!("Golden Cross: Fast {:.2} > Slow {:.2}", fast, slow)),
-                });
-            } else if prev_fast >= prev_slow && fast < slow {
-                // Death Cross (Bearish)
-                signal = Some(Signal {
-                    timestamp: bar.timestamp,
-                    symbol: "UNKNOWN".to_string(),
-                    signal_type: SignalType::Sell,
-                    strength: 1.0,
-                    metadata: Some(format!("Death Cross: Fast {:.2} < Slow {:.2}", fast, slow)),
-                });
+                }]);
             }
         }
 
         self.last_fast = Some(fast);
         self.last_slow = Some(slow);
-
-        signal.map(|s| vec![s])
+        None
     }
 }
 

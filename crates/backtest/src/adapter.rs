@@ -2,27 +2,54 @@ use crate::error::Result;
 use crate::strategy::{OrderRequest, OrderSide, OrderType, Strategy as BacktestStrategy};
 use alphafield_core::{Bar, Tick};
 
+/// Position state for the adapter
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum PositionState {
+    Flat,
+    Long,
+    #[allow(dead_code)]
+    Short,
+}
+
 /// Adapter to bridge alphafield_core::Strategy (Signal-based) to alphafield_backtest::Strategy (Order-based)
+/// 
+/// This adapter tracks position state to ensure:
+/// - Buy signals only create orders when flat (not already long)
+/// - Sell signals close long positions or open short (depending on mode)
 pub struct StrategyAdapter<T>
 where
     T: alphafield_core::Strategy,
 {
     inner: T,
     symbol: String,
-    /// Base quantity to trade (e.g. number of units)
-    quantity: f64,
+    /// Starting capital for position sizing
+    capital: f64,
+    /// Percentage of capital to use per trade (e.g., 0.1 = 10%)
+    trade_pct: f64,
+    /// Current position state
+    position: PositionState,
+    /// Quantity held in current position (for proper exit sizing)
+    position_quantity: f64,
 }
 
 impl<T> StrategyAdapter<T>
 where
     T: alphafield_core::Strategy,
 {
-    pub fn new(strategy: T, symbol: impl Into<String>, quantity: f64) -> Self {
+    pub fn new(strategy: T, symbol: impl Into<String>, capital: f64) -> Self {
         Self {
             inner: strategy,
             symbol: symbol.into(),
-            quantity,
+            capital,
+            trade_pct: 0.10,  // Default to 10% of capital per trade
+            position: PositionState::Flat,
+            position_quantity: 0.0,
         }
+    }
+
+    /// Helper to round quantity to 9 decimal places to match backtest engine precision
+    fn round_quantity(quantity: f64) -> f64 {
+        (quantity * 1_000_000_000.0).round() / 1_000_000_000.0
     }
 }
 
@@ -38,26 +65,42 @@ where
             for sig in sigs {
                 match sig.signal_type {
                     alphafield_core::SignalType::Buy => {
-                        // Use fixed quantity scaled by signal strength
-                        let quantity = self.quantity * sig.strength;
+                        // Only buy if we're flat (not already in a position)
+                        if self.position == PositionState::Flat {
+                            // Calculate quantity based on % of capital at current price
+                            let trade_value = self.capital * self.trade_pct * sig.strength;
+                            let quantity = trade_value / bar.close;
+                            let quantity = Self::round_quantity(quantity);
 
-                        orders.push(OrderRequest {
-                            symbol: self.symbol.clone(),
-                            side: OrderSide::Buy,
-                            quantity,
-                            order_type: OrderType::Market,
-                        });
+                            if quantity > 0.0 {
+                                orders.push(OrderRequest {
+                                    symbol: self.symbol.clone(),
+                                    side: OrderSide::Buy,
+                                    quantity,
+                                    order_type: OrderType::Market,
+                                });
+                                self.position = PositionState::Long;
+                                self.position_quantity = quantity;
+                            }
+                        }
                     }
                     alphafield_core::SignalType::Sell => {
-                        // Sell signal - close position or short
-                        let quantity = -self.quantity * sig.strength;
+                        // Only sell if we're long (to close position)
+                        // Use the FULL position quantity, not a new calculated amount
+                        if self.position == PositionState::Long && self.position_quantity > 0.0 {
+                            let quantity = Self::round_quantity(self.position_quantity);  // Sell entire position
 
-                        orders.push(OrderRequest {
-                            symbol: self.symbol.clone(),
-                            side: OrderSide::Sell,
-                            quantity: quantity.abs(),
-                            order_type: OrderType::Market,
-                        });
+                            if quantity > 0.0 {
+                                orders.push(OrderRequest {
+                                    symbol: self.symbol.clone(),
+                                    side: OrderSide::Sell,
+                                    quantity,
+                                    order_type: OrderType::Market,
+                                });
+                                self.position = PositionState::Flat;
+                                self.position_quantity = 0.0;
+                            }
+                        }
                     }
                     alphafield_core::SignalType::Hold => {}
                 }
@@ -73,24 +116,39 @@ where
         if let Some(sig) = signal {
             match sig.signal_type {
                 alphafield_core::SignalType::Buy => {
-                    let quantity = self.quantity * sig.strength;
+                    if self.position == PositionState::Flat {
+                        // Calculate quantity based on % of capital at current price
+                        let trade_value = self.capital * self.trade_pct * sig.strength;
+                        let quantity = Self::round_quantity(trade_value / tick.price);
 
-                    Ok(vec![OrderRequest {
-                        symbol: self.symbol.clone(),
-                        side: OrderSide::Buy,
-                        quantity,
-                        order_type: OrderType::Market,
-                    }])
+                        self.position = PositionState::Long;
+                        self.position_quantity = quantity;
+
+                        Ok(vec![OrderRequest {
+                            symbol: self.symbol.clone(),
+                            side: OrderSide::Buy,
+                            quantity,
+                            order_type: OrderType::Market,
+                        }])
+                    } else {
+                        Ok(Vec::new())
+                    }
                 }
                 alphafield_core::SignalType::Sell => {
-                    let quantity = -self.quantity * sig.strength;
+                    if self.position == PositionState::Long && self.position_quantity > 0.0 {
+                        let quantity = Self::round_quantity(self.position_quantity);  // Sell entire position
+                        self.position = PositionState::Flat;
+                        self.position_quantity = 0.0;
 
-                    Ok(vec![OrderRequest {
-                        symbol: self.symbol.clone(),
-                        side: OrderSide::Sell,
-                        quantity: quantity.abs(),
-                        order_type: OrderType::Market,
-                    }])
+                        Ok(vec![OrderRequest {
+                            symbol: self.symbol.clone(),
+                            side: OrderSide::Sell,
+                            quantity,
+                            order_type: OrderType::Market,
+                        }])
+                    } else {
+                        Ok(Vec::new())
+                    }
                 }
                 alphafield_core::SignalType::Hold => Ok(Vec::new()),
             }

@@ -78,7 +78,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let adapter = StrategyAdapter::new(
         golden_cross,
         symbol,
-        0.01, // Trade 0.01 BTC per signal (~$1k at $100k/BTC)
+        100_000.0,
     );
 
     engine.set_strategy(Box::new(adapter));

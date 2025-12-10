@@ -281,12 +281,9 @@ pub async fn run_sensitivity(
                 p.insert(py.name.clone(), v2);
                 
                 // Use create_backtest for properly adapted strategies
-                StrategyFactory::create_backtest(&s_name, &p, &sym, 0.5)
-                    .unwrap_or_else(|| {
-                        // Fallback to default params for invalid combos
-                        StrategyFactory::create_backtest(&s_name, &fixed_params, &sym, 0.5)
-                            .expect("Base strategy should be valid")
-                    })
+                // If invalid params, return strategy with default params but mark as invalid or let it fail?
+                // Better to return None and handle it in result processing
+                StrategyFactory::create_backtest(&s_name, &p, &sym, 100_000.0)
             })
         }));
         
@@ -310,11 +307,7 @@ pub async fn run_sensitivity(
                 p.insert(req.param.name.clone(), v1);
                 
                 // Use create_backtest for properly adapted strategies
-                StrategyFactory::create_backtest(&s_name, &p, &sym, 0.5)
-                    .unwrap_or_else(|| {
-                        StrategyFactory::create_backtest(&s_name, &fixed_params, &sym, 0.5)
-                            .expect("Base strategy should be valid")
-                    })
+                StrategyFactory::create_backtest(&s_name, &p, &sym, 100_000.0)
             })
         }));
         
@@ -406,27 +399,37 @@ pub async fn run_walk_forward(
 
     info!(bars_fetched = bars.len(), source = %data_status.source, "Data fetch complete");
 
-    // Need at least 1 year of hourly data for meaningful WFA
-    let min_bars = 365 * 24; // 8760 bars for hourly
-    if bars.len() < min_bars {
+    // 2. Configure Analysis
+    // Dynamic bars per day calculation
+    let bars_per_day = match req.interval.as_str() {
+        "1m" => 1440,
+        "5m" => 288,
+        "15m" => 96,
+        "1h" => 24,
+        "4h" => 6,
+        "1d" => 1,
+        _ => if req.interval.ends_with('h') { 24 } else { 1 }, // Fallback
+    };
+    
+    let train_window_bars = req.train_window_days.unwrap_or(365) * bars_per_day;
+    let test_window_bars = req.test_window_days.unwrap_or(90) * bars_per_day;
+    let required_bars = train_window_bars + test_window_bars;
+
+    if bars.len() < required_bars {
         return Json(WalkForwardResponse {
             success: false,
             result: None,
             error: Some(format!(
-                "Insufficient data: have {} bars, need at least {} for walk-forward analysis. Data is being fetched from API, please try again in a moment.",
-                bars.len(), min_bars
+                "Insufficient data: have {} bars, need at least {} (train + test window). Fetch more data or reduce window sizes.",
+                bars.len(), required_bars
             )),
         });
     }
-
-    // 2. Configure Analysis
-    // Convert days to bars (assuming hourly for now, should be dynamic based on interval)
-    let bars_per_day = if req.interval == "1h" { 24 } else { 1 };
     
     let config = WalkForwardConfig {
-        train_window: req.train_window_days.unwrap_or(365) * bars_per_day,
-        test_window: req.test_window_days.unwrap_or(90) * bars_per_day,
-        step_size: 30 * bars_per_day, // 1 month step
+        train_window: train_window_bars,
+        test_window: test_window_bars,
+        step_size: 30 * bars_per_day, // 1 month step default
         initial_capital: 10000.0,
         fee_rate: 0.001,
     };
@@ -436,11 +439,21 @@ pub async fn run_walk_forward(
     let strategy_params = req.params.clone();
     let req_symbol = req.symbol.clone();
     
+    // Safely handle strategy creation
+    if StrategyFactory::create(&strategy_name, &strategy_params).is_none() {
+         return Json(WalkForwardResponse {
+            success: false,
+            result: None,
+            error: Some(format!("Invalid strategy parameters for {}", strategy_name)),
+        });
+    }
+    
     let factory = move || -> Box<dyn BacktestStrategy> {
+        // We verified it above, but factory runs in thread, so unwrap is "safer" but lets still be careful
         let core_strat = StrategyFactory::create(&strategy_name, &strategy_params)
-            .unwrap_or_else(|| panic!("Unknown strategy: {}", strategy_name));
+            .expect("Strategy creation failed in factory execution");
         
-        let adapter = StrategyAdapter::new(core_strat, req_symbol.clone(), 0.5);
+        let adapter = StrategyAdapter::new(core_strat, req_symbol.clone(), 100_000.0);
         Box::new(adapter)
     };
 

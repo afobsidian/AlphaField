@@ -123,6 +123,7 @@ impl Portfolio {
         quantity: f64,
         price: f64,
         fee: f64,
+        exit_reason: Option<String>,
     ) -> Result<()> {
         let cost = quantity * price;
 
@@ -220,6 +221,7 @@ impl Portfolio {
                     mae,
                     mfe,
                     duration_secs,
+                    exit_reason: exit_reason.or_else(|| Some("Signal".to_string())),
                 });
             }
         } else if (prev_quantity > 0.0 && quantity > 0.0) || (prev_quantity < 0.0 && quantity < 0.0) {

@@ -29,7 +29,6 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Build dependencies (cached layer)
-# Build dependencies (cached layer)
 COPY --from=planner /app/recipe.json recipe.json
 # Ensure sqlx doesn't try to connect to DB during compilation
 ENV SQLX_OFFLINE=true
@@ -44,10 +43,16 @@ RUN cargo build --release --bin dashboard_server
 # -----------------------------------------------------------------------------
 FROM debian:bookworm-slim AS runtime
 
+# OCI Labels
+LABEL org.opencontainers.image.source="https://github.com/adamf123git/AlphaField" \
+      org.opencontainers.image.description="AlphaField Trading Dashboard" \
+      org.opencontainers.image.licenses="MIT"
+
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user

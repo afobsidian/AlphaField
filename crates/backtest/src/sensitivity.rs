@@ -135,18 +135,19 @@ impl SensitivityAnalyzer {
         strategy_factory: F,
     ) -> Result<SensitivityResult, String>
     where
-        F: Fn(f64) -> Box<dyn Strategy>,
+        F: Fn(f64) -> Option<Box<dyn Strategy>>,
     {
         let mut results = Vec::new();
 
         for value in param.values() {
-            let strategy = strategy_factory(value);
-            let metrics = self.run_backtest(data, symbol, strategy)?;
+            if let Some(strategy) = strategy_factory(value) {
+                let metrics = self.run_backtest(data, symbol, strategy)?;
 
-            let mut params = HashMap::new();
-            params.insert(param.name.clone(), value);
+                let mut params = HashMap::new();
+                params.insert(param.name.clone(), value);
 
-            results.push(ParameterResult { params, metrics });
+                results.push(ParameterResult { params, metrics });
+            }
         }
 
         Ok(self.aggregate_results(results, None))
@@ -169,7 +170,7 @@ impl SensitivityAnalyzer {
         strategy_factory: F,
     ) -> Result<SensitivityResult, String>
     where
-        F: Fn(f64, f64) -> Box<dyn Strategy>,
+        F: Fn(f64, f64) -> Option<Box<dyn Strategy>>,
     {
         let x_values = param_x.values();
         let y_values = param_y.values();
@@ -181,18 +182,19 @@ impl SensitivityAnalyzer {
 
         for (xi, &x_val) in x_values.iter().enumerate() {
             for (yi, &y_val) in y_values.iter().enumerate() {
-                let strategy = strategy_factory(x_val, y_val);
-                let metrics = self.run_backtest(data, symbol, strategy)?;
+                if let Some(strategy) = strategy_factory(x_val, y_val) {
+                    let metrics = self.run_backtest(data, symbol, strategy)?;
 
-                sharpe_matrix[xi][yi] = metrics.sharpe_ratio;
-                return_matrix[xi][yi] = metrics.total_return;
-                drawdown_matrix[xi][yi] = metrics.max_drawdown;
+                    sharpe_matrix[xi][yi] = metrics.sharpe_ratio;
+                    return_matrix[xi][yi] = metrics.total_return;
+                    drawdown_matrix[xi][yi] = metrics.max_drawdown;
 
-                let mut params = HashMap::new();
-                params.insert(param_x.name.clone(), x_val);
-                params.insert(param_y.name.clone(), y_val);
+                    let mut params = HashMap::new();
+                    params.insert(param_x.name.clone(), x_val);
+                    params.insert(param_y.name.clone(), y_val);
 
-                results.push(ParameterResult { params, metrics });
+                    results.push(ParameterResult { params, metrics });
+                }
             }
         }
 

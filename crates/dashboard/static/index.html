@@ -5,12 +5,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AlphaField Dashboard</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&display=swap"
+        rel="stylesheet">
+
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 </head>
 
 <body>
+    <div class="app-background">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
     <div class="app-container">
         <!-- Top Navigation Bar -->
         <header class="top-nav">
@@ -122,22 +136,26 @@
                         <h3>Configuration</h3>
 
                         <!-- Symbol Selection -->
-                        <div class="form-group">
-                            <label>Trading Symbol</label>
-                            <div class="symbol-input-wrapper">
-                                <select id="build-symbol" class="form-select">
-                                    <option value="">Loading symbols...</option>
-                                </select>
-                                <button type="button" class="btn btn-secondary btn-sm" onclick="fetchDataForSymbol()">
-                                    📥 Fetch Data
-                                </button>
+                        <label>Trading Symbol</label>
+                        <div class="custom-select-wrapper" id="symbol-select-wrapper">
+                            <div class="custom-select-trigger" id="symbol-trigger">
+                                <span id="selected-symbol-text">Select Symbol...</span>
                             </div>
-                            <div id="data-status" class="data-status">
-                                <span class="status-icon">⏳</span>
-                                <span class="status-text">Checking data availability...</span>
+                            <div class="custom-options">
+                                <div class="symbol-search-box">
+                                    <input type="text" class="symbol-search-input" id="symbol-search-input"
+                                        placeholder="Search symbol (e.g. BTC)..." autocomplete="off">
+                                </div>
+                                <div class="options-list" id="symbol-options-list">
+                                    <!-- Options injected by JS -->
+                                    <div class="placeholder-content" style="min-height: 100px;">
+                                        <span class="text-muted">Loading...</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-
+                        <!-- Hidden input to store value -->
+                        <input type="hidden" id="build-symbol">
                         <!-- Dynamic Strategy Parameters -->
                         <div id="build-params" class="params-section">
                             <!-- Populated dynamically based on strategy selection -->
@@ -181,10 +199,20 @@
                         <div class="form-group">
                             <label>Backtest Period</label>
                             <div class="period-selector">
-                                <button type="button" class="period-btn active" data-days="30">30d</button>
-                                <button type="button" class="period-btn" data-days="90">90d</button>
+                                <button type="button" class="period-btn active" data-days="90">90d</button>
                                 <button type="button" class="period-btn" data-days="180">180d</button>
                                 <button type="button" class="period-btn" data-days="365">1y</button>
+                                <button type="button" class="period-btn" data-days="1095">3y</button>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Data Interval</label>
+                            <div class="interval-selector">
+                                <button type="button" class="interval-btn" data-interval="15m">15m</button>
+                                <button type="button" class="interval-btn active" data-interval="1h">1h</button>
+                                <button type="button" class="interval-btn" data-interval="4h">4h</button>
+                                <button type="button" class="interval-btn" data-interval="1d">1d</button>
                             </div>
                         </div>
 
@@ -257,119 +285,133 @@
                 </div>
 
                 <div class="optimize-grid">
-                    <!-- Analysis Mode Selection -->
-                    <div class="card mode-card">
-                        <h3>Analysis Mode</h3>
-                        <div class="mode-options">
-                            <label class="mode-option active">
-                                <input type="radio" name="analysis-mode" value="walkforward" checked>
-                                <div class="mode-info">
-                                    <span class="mode-icon">🔄</span>
-                                    <span class="mode-name">Walk-Forward</span>
-                                    <span class="mode-desc">Test robustness with rolling windows</span>
+                    <!-- Combined Analysis & Config Control -->
+                    <div class="card optimize-controls">
+                        <h3>Analysis Setup</h3>
+
+                        <!-- Analysis Mode Selection -->
+                        <div class="control-section">
+                            <h4 class="section-title">Mode</h4>
+                            <div class="mode-options">
+                                <label class="mode-option active">
+                                    <div class="mode-info">
+                                        <input type="radio" name="analysis-mode" value="walkforward" checked>
+                                        <span class="mode-icon">🔄</span>
+                                        <span class="mode-name">Walk-Forward</span>
+                                    </div>
+                                </label>
+                                <label class="mode-option">
+                                    <div class="mode-info">
+                                        <input type="radio" name="analysis-mode" value="sensitivity">
+                                        <span class="mode-icon">📊</span>
+                                        <span class="mode-name">Sensitivity</span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="divider"></div>
+
+                        <!-- Analysis Configuration -->
+                        <div class="control-section">
+                            <h4 class="section-title">Configuration</h4>
+
+                            <!-- Walk-Forward Settings -->
+                            <div id="wfa-config" class="analysis-config">
+                                <p class="config-info">
+                                    Tests strategy across 4 years of data using 6-month training windows
+                                    and 2-month out-of-sample validation.
+                                </p>
+                                <button type="button" class="btn btn-primary btn-action" onclick="runWalkForward()">
+                                    ▶️ Run Analysis
+                                </button>
+                            </div>
+
+                            <!-- Sensitivity Settings -->
+                            <div id="sensitivity-config" class="analysis-config hidden">
+                                <div class="form-group">
+                                    <label>Primary Parameter</label>
+                                    <select id="sens-param-1" class="form-select">
+                                        <!-- Populated dynamically -->
+                                    </select>
                                 </div>
-                            </label>
-                            <label class="mode-option">
-                                <input type="radio" name="analysis-mode" value="sensitivity">
-                                <div class="mode-info">
-                                    <span class="mode-icon">📊</span>
-                                    <span class="mode-name">Sensitivity</span>
-                                    <span class="mode-desc">Parameter sweep heatmap</span>
+                                <div class="form-group">
+                                    <label>Secondary Parameter</label>
+                                    <select id="sens-param-2" class="form-select">
+                                        <option value="">None (1D Sweep)</option>
+                                        <!-- Populated dynamically -->
+                                    </select>
                                 </div>
-                            </label>
+                                <button type="button" class="btn btn-primary btn-action" onclick="runSensitivity()">
+                                    ▶️ Run Analysis
+                                </button>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Analysis Configuration -->
-                    <div class="card config-card">
-                        <h3>Configuration</h3>
+                    <!-- Persistent Analysis Results Output -->
+                    <div class="card results-card" id="optimize-results-container">
+                        <h3>Analysis Results</h3>
 
-                        <!-- Walk-Forward Settings -->
-                        <div id="wfa-config" class="analysis-config">
-                            <p class="config-info">
-                                Tests strategy across 4 years of data using 6-month training windows
-                                and 2-month out-of-sample validation.
-                            </p>
-                            <button type="button" class="btn btn-primary btn-action" onclick="runWalkForward()">
-                                ▶️ Run Walk-Forward Analysis
-                            </button>
+                        <!-- Placeholder -->
+                        <div id="results-placeholder" class="placeholder-content">
+                            <span class="placeholder-icon">ℹ️</span>
+                            <span>Run analysis to see performance metrics</span>
                         </div>
 
-                        <!-- Sensitivity Settings -->
-                        <div id="sensitivity-config" class="analysis-config hidden">
-                            <div class="form-group">
-                                <label>Primary Parameter</label>
-                                <select id="sens-param-1" class="form-select">
-                                    <!-- Populated dynamically -->
-                                </select>
+                        <!-- Walk-Forward Results (Inner Content) -->
+                        <div id="wfa-results" class="results-block hidden">
+                            <div class="metrics-grid">
+                                <div class="metric">
+                                    <span class="metric-label">Stability Score</span>
+                                    <span class="metric-value" id="wfa-stability">—</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Avg OOS Return</span>
+                                    <span class="metric-value" id="wfa-avg-return">—</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Win Rate</span>
+                                    <span class="metric-value" id="wfa-win-rate">—</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">OOS Sharpe</span>
+                                    <span class="metric-value" id="wfa-oos-sharpe">—</span>
+                                </div>
                             </div>
-                            <div class="form-group">
-                                <label>Secondary Parameter (2D Heatmap)</label>
-                                <select id="sens-param-2" class="form-select">
-                                    <option value="">None (1D Sweep)</option>
-                                    <!-- Populated dynamically -->
-                                </select>
+                            <div class="action-buttons">
+                                <button type="button" class="btn btn-primary" onclick="goToDeploy()">
+                                    🚀 Deploy Strategy
+                                </button>
                             </div>
-                            <button type="button" class="btn btn-primary btn-action" onclick="runSensitivity()">
-                                ▶️ Run Sensitivity Analysis
-                            </button>
                         </div>
-                    </div>
 
-                    <!-- Walk-Forward Results -->
-                    <div id="wfa-results" class="card results-card hidden">
-                        <h3>Walk-Forward Results</h3>
-                        <div class="metrics-grid">
-                            <div class="metric">
-                                <span class="metric-label">Stability Score</span>
-                                <span class="metric-value" id="wfa-stability">—</span>
+                        <!-- Sensitivity Results (Inner Content) -->
+                        <div id="sensitivity-results" class="results-block hidden">
+                            <div class="metrics-grid">
+                                <div class="metric">
+                                    <span class="metric-label">Best Params</span>
+                                    <span class="metric-value" id="sens-best-param">—</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Max Sharpe</span>
+                                    <span class="metric-value" id="sens-max-sharpe">—</span>
+                                </div>
                             </div>
-                            <div class="metric">
-                                <span class="metric-label">Avg OOS Return</span>
-                                <span class="metric-value" id="wfa-avg-return">—</span>
+                            <div class="action-buttons">
+                                <button type="button" class="btn btn-secondary" onclick="applyBestParams()">
+                                    ✓ Apply Best Parameters
+                                </button>
+                                <button type="button" class="btn btn-primary" onclick="goToDeploy()">
+                                    🚀 Deploy Strategy
+                                </button>
                             </div>
-                            <div class="metric">
-                                <span class="metric-label">Win Rate</span>
-                                <span class="metric-value" id="wfa-win-rate">—</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">OOS Sharpe</span>
-                                <span class="metric-value" id="wfa-oos-sharpe">—</span>
-                            </div>
-                        </div>
-                        <div class="action-buttons">
-                            <button type="button" class="btn btn-primary" onclick="goToDeploy()">
-                                🚀 Deploy Strategy
-                            </button>
-                        </div>
-                    </div>
-
-                    <!-- Sensitivity Results -->
-                    <div id="sensitivity-results" class="card results-card hidden">
-                        <h3>Best Parameters Found</h3>
-                        <div class="metrics-grid">
-                            <div class="metric">
-                                <span class="metric-label">Best Params</span>
-                                <span class="metric-value" id="sens-best-param">—</span>
-                            </div>
-                            <div class="metric">
-                                <span class="metric-label">Max Sharpe</span>
-                                <span class="metric-value" id="sens-max-sharpe">—</span>
-                            </div>
-                        </div>
-                        <div class="action-buttons">
-                            <button type="button" class="btn btn-secondary" onclick="applyBestParams()">
-                                ✓ Apply Best Parameters
-                            </button>
-                            <button type="button" class="btn btn-primary" onclick="goToDeploy()">
-                                🚀 Deploy Strategy
-                            </button>
                         </div>
                     </div>
 
                     <!-- Charts Area -->
                     <div class="card chart-card-full" id="optimize-chart-card">
-                        <h3 id="optimize-chart-title">Analysis Results</h3>
+                        <h3 id="optimize-chart-title">Analysis Display</h3>
                         <div id="optimize-chart" style="width:100%;height:450px;">
                             <div class="placeholder-content">
                                 <span class="placeholder-icon">📊</span>
@@ -410,17 +452,7 @@
                             </div>
                         </div>
 
-                        <!-- Market Sentiment Gauge -->
-                        <div class="sentiment-section">
-                            <h4>Market Sentiment</h4>
-                            <div class="sentiment-gauge-mini">
-                                <div id="gauge-value" class="gauge-value">--</div>
-                                <div id="gauge-label" class="gauge-label">Loading...</div>
-                                <div class="gauge-bar">
-                                    <div id="gauge-fill" class="gauge-fill" style="width: 0%"></div>
-                                </div>
-                            </div>
-                        </div>
+
                     </div>
 
                     <!-- Trading Controls -->
@@ -454,6 +486,48 @@
                             </button>
                         </div>
                         <div id="engine-status" class="engine-status stopped">Stopped</div>
+                    </div>
+
+                    <!-- Market Sentiment Dashboard -->
+                    <div class="card sentiment-dashboard">
+                        <div class="sentiment-header">
+                            <h3>Market Sentiment Analysis</h3>
+                            <div class="sentiment-badge" id="detailed-sentiment-badge">Loading...</div>
+                        </div>
+
+                        <div class="sentiment-content-grid">
+                            <!-- Gauge Section -->
+                            <div class="sentiment-gauge-section">
+                                <div class="gauge-value-large" id="gauge-large-value">--</div>
+                                <div class="gauge-label-large" id="gauge-large-label">--</div>
+                                <div class="gauge-progress-bar">
+                                    <div id="gauge-large-fill" class="fill" style="width: 0%"></div>
+                                </div>
+                            </div>
+
+                            <!-- Detailed Stats -->
+                            <div class="sentiment-stats-grid">
+                                <div class="stat-pill">
+                                    <span class="label">Daily Change</span>
+                                    <span class="value" id="sent-change">--</span>
+                                </div>
+                                <div class="stat-pill">
+                                    <span class="label">7-Day Avg</span>
+                                    <span class="value" id="sent-sma7">--</span>
+                                </div>
+                                <div class="stat-pill">
+                                    <span class="label">Momentum</span>
+                                    <span class="value" id="sent-momentum">--</span>
+                                </div>
+                                <div class="stat-pill">
+                                    <span class="label">Dominance</span>
+                                    <span class="value" id="sent-dominance">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- History Chart -->
+                        <div id="sentiment-history-chart" style="width:100%; height:300px; margin-top:20px;"></div>
                     </div>
 
                     <!-- Live Stats -->

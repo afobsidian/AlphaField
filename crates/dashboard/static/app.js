@@ -13,7 +13,8 @@ const AppState = {
     strategy: 'GoldenCross',
     symbol: '',
     params: {},
-    backtestDays: 30,
+    backtestDays: 90,
+    backtestInterval: '1h',
     backtestResults: null,
     optimizeResults: null,
     isTrading: false,
@@ -61,6 +62,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize backtest period buttons
     initPeriodSelector();
+
+    // Initialize interval selector
+    initIntervalSelector();
 
     // Initialize analysis mode toggle
     initAnalysisModeToggle();
@@ -233,98 +237,161 @@ function updateContextBar() {
 // Symbol Loading
 // ===========================
 
+// ===========================
+// Symbol Loading & Custom Select
+// ===========================
+
+// State for symbol data
+let allSymbols = [];
+
 async function loadSymbols() {
     try {
         const res = await fetch(`${API_BASE}/data/pairs`);
         const data = await res.json();
 
-        const select = document.getElementById('build-symbol');
-        select.innerHTML = '';
-
-        if (data.pairs && data.pairs.length > 0) {
-            data.pairs.slice(0, 50).forEach(pair => {
-                const option = document.createElement('option');
-                option.value = pair.symbol;
-                option.textContent = `${pair.symbol} (${pair.base}/${pair.quote})`;
-                select.appendChild(option);
-            });
+        // Handle inconsistent API responses (array of strings vs object with pairs array)
+        if (Array.isArray(data)) {
+            allSymbols = data;
+        } else if (data.pairs && Array.isArray(data.pairs)) {
+            allSymbols = data.pairs.map(p => typeof p === 'string' ? p : p.symbol);
         } else {
-            select.innerHTML = '<option value="BTC">BTC (Default)</option>';
+            // Fallback for unexpected structure
+            allSymbols = [];
+            console.warn('Unexpected symbol data structure:', data);
         }
 
-        // Set default selection
-        AppState.symbol = select.value;
-
-        // Listen for changes
-        select.addEventListener('change', (e) => {
-            AppState.symbol = e.target.value;
-            updateContextBar();
-            checkDataStatus();
-        });
-
-        // Check initial data status
-        checkDataStatus();
+        // Default popular symbols if we have data
+        if (allSymbols.length > 0) {
+            initCustomSelect();
+        } else {
+            document.getElementById('selected-symbol-text').textContent = "No symbols found";
+        }
 
     } catch (e) {
         console.error('Failed to load symbols:', e);
-        document.getElementById('build-symbol').innerHTML = '<option value="BTC">BTC</option>';
-        AppState.symbol = 'BTC';
+        document.getElementById('selected-symbol-text').textContent = "Error loading symbols";
+        // Fallback
+        allSymbols = ["BTC", "ETH"];
+        initCustomSelect();
     }
 }
 
-async function checkDataStatus() {
-    const statusEl = document.getElementById('data-status');
-    statusEl.className = 'data-status';
-    statusEl.innerHTML = '<span class="status-icon">⏳</span><span class="status-text">Checking data...</span>';
+function initCustomSelect() {
+    const wrapper = document.getElementById('symbol-select-wrapper');
+    const trigger = document.getElementById('symbol-trigger');
+    const optionsList = document.getElementById('symbol-options-list');
+    const searchInput = document.getElementById('symbol-search-input');
+    const hiddenInput = document.getElementById('build-symbol');
+    const selectedText = document.getElementById('selected-symbol-text');
 
-    try {
-        const res = await fetch(`${API_BASE}/data/symbols`);
-        const data = await res.json();
-
-        const hasCached = data.symbols && data.symbols.some(s => s.symbol === AppState.symbol);
-
-        if (hasCached) {
-            statusEl.className = 'data-status ready';
-            statusEl.innerHTML = '<span class="status-icon">✓</span><span class="status-text">Data cached and ready</span>';
-        } else {
-            statusEl.className = 'data-status missing';
-            statusEl.innerHTML = '<span class="status-icon">⚠</span><span class="status-text">No cached data - click Fetch Data</span>';
+    // Toggle dropdown
+    trigger.addEventListener('click', () => {
+        wrapper.classList.toggle('open');
+        if (wrapper.classList.contains('open')) {
+            searchInput.focus();
         }
-    } catch (e) {
-        statusEl.className = 'data-status missing';
-        statusEl.innerHTML = '<span class="status-icon">⚠</span><span class="status-text">Unable to check data status</span>';
-    }
-}
+    });
 
-async function fetchDataForSymbol() {
-    const statusEl = document.getElementById('data-status');
-    statusEl.className = 'data-status';
-    statusEl.innerHTML = '<span class="status-icon">⏳</span><span class="status-text">Fetching data...</span>';
+    // Close when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!wrapper.contains(e.target)) {
+            wrapper.classList.remove('open');
+        }
+    });
 
-    try {
-        const res = await fetch(`${API_BASE}/data/fetch`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                symbol: AppState.symbol,
-                interval: '1h',
-                days: 365
-            })
+    // Filter function
+    function filterSymbols(query) {
+        const q = query.toLowerCase();
+        const POPULAR = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'DOT', 'LINK', 'MATIC'];
+
+        let filtered = allSymbols.filter(s => s.toLowerCase().includes(q));
+
+        // Sort: Popular first, then alphabetical
+        filtered.sort((a, b) => {
+            const aPop = POPULAR.indexOf(a);
+            const bPop = POPULAR.indexOf(b);
+
+            if (aPop !== -1 && bPop !== -1) return aPop - bPop;
+            if (aPop !== -1) return -1;
+            if (bPop !== -1) return 1;
+            return a.localeCompare(b);
         });
 
-        const data = await res.json();
+        renderOptions(filtered);
+    }
 
-        if (data.success) {
-            statusEl.className = 'data-status ready';
-            statusEl.innerHTML = `<span class="status-icon">✓</span><span class="status-text">Fetched ${data.bars_fetched} bars</span>`;
-        } else {
-            throw new Error(data.message || 'Fetch failed');
+    // Render options to the list
+    function renderOptions(symbols) {
+        optionsList.innerHTML = '';
+
+        if (symbols.length === 0) {
+            optionsList.innerHTML = '<div class="option" style="cursor: default; opacity: 0.5;">No matches found</div>';
+            return;
         }
-    } catch (e) {
-        statusEl.className = 'data-status missing';
-        statusEl.innerHTML = `<span class="status-icon">❌</span><span class="status-text">Error: ${e.message}</span>`;
+
+        // Limit rendering for performance if list is huge
+        const displaySymbols = symbols.slice(0, 100);
+
+        displaySymbols.forEach(symbol => {
+            const div = document.createElement('div');
+            div.className = 'option';
+            if (symbol === AppState.symbol) div.classList.add('selected');
+
+            div.innerHTML = `
+                <span class="option-ticker">${symbol}</span>
+                <span class="option-name">USDT</span>
+            `;
+
+            div.addEventListener('click', () => {
+                selectSymbol(symbol);
+            });
+
+            optionsList.appendChild(div);
+        });
+
+        if (symbols.length > 100) {
+            const more = document.createElement('div');
+            more.className = 'option';
+            more.style.opacity = '0.5';
+            more.style.fontStyle = 'italic';
+            more.textContent = `...and ${symbols.length - 100} more`;
+            optionsList.appendChild(more);
+        }
+    }
+
+    // Selection handler
+    function selectSymbol(symbol) {
+        AppState.symbol = symbol;
+        hiddenInput.value = symbol;
+        selectedText.textContent = symbol;
+        wrapper.classList.remove('open');
+
+        // Update UI state
+        updateContextBar();
+
+        // Re-render to update selected styling
+        filterSymbols(searchInput.value);
+    }
+
+    // Search input handler
+    searchInput.addEventListener('input', (e) => {
+        filterSymbols(e.target.value);
+    });
+
+    // Initial render
+    filterSymbols('');
+
+    // Select default or first available
+    if (!AppState.symbol && allSymbols.length > 0) {
+        // Default to BTC if available, or first item
+        const defaultSym = allSymbols.includes('BTC') ? 'BTC' : allSymbols[0];
+        selectSymbol(defaultSym);
+    } else if (AppState.symbol) {
+        selectSymbol(AppState.symbol);
     }
 }
+
+
 
 // ===========================
 // Workflow Navigation
@@ -358,6 +425,16 @@ function initPeriodSelector() {
     });
 }
 
+function initIntervalSelector() {
+    document.querySelectorAll('.interval-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.interval-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            AppState.backtestInterval = btn.dataset.interval;
+        });
+    });
+}
+
 function updateBacktestSummary() {
     document.getElementById('bt-summary-strategy').textContent = AppState.strategy;
     document.getElementById('bt-summary-symbol').textContent = AppState.symbol || '—';
@@ -384,7 +461,7 @@ async function runBacktest() {
             body: JSON.stringify({
                 strategy: AppState.strategy,
                 symbol: AppState.symbol,
-                interval: '1h',
+                interval: AppState.backtestInterval,
                 days: AppState.backtestDays,
                 params: params,
                 include_benchmark: true
@@ -407,15 +484,21 @@ async function runBacktest() {
         document.getElementById('bt-trades').textContent = data.metrics.total_trades;
 
         // Alpha calculation
-        if (data.benchmark) {
-            const alpha = (data.metrics.total_return - data.benchmark.total_return) * 100;
-            updateMetric('bt-alpha', alpha, '%', false);
+        // Fix: Benchmark metrics are nested in data.benchmark.comparison and use benchmark_return
+        if (data.benchmark && data.benchmark.comparison && data.benchmark.comparison.benchmark_return !== undefined) {
+            const alpha = (data.metrics.total_return - data.benchmark.comparison.benchmark_return) * 100;
+            if (isNaN(alpha)) {
+                document.getElementById('bt-alpha').textContent = '—';
+            } else {
+                updateMetric('bt-alpha', alpha, '%', false);
+            }
         } else {
+            console.warn('Benchmark data missing or invalid structure', data.benchmark);
             document.getElementById('bt-alpha').textContent = '—';
         }
 
-        // Render equity chart
-        renderEquityChart(data.equity_curve, data.benchmark?.equity_curve);
+        // Render equity chart with trade markers
+        renderEquityChart(data.equity_curve, data.benchmark?.curve, data.trades);
 
         // Show results
         placeholderEl.classList.add('hidden');
@@ -436,11 +519,18 @@ function updateMetric(id, value, suffix = '', invert = false) {
     const el = document.getElementById(id);
     if (!el) return;
 
+    // Handle NaN or undefined values
+    if (isNaN(value) || value === undefined || value === null) {
+        el.textContent = '—';
+        el.className = 'metric-value';
+        return;
+    }
+
     el.textContent = `${value >= 0 ? '+' : ''}${value.toFixed(2)}${suffix}`;
     el.className = `metric-value ${invert ? (value <= 0 ? 'positive' : 'negative') : (value >= 0 ? 'positive' : 'negative')}`;
 }
 
-function renderEquityChart(equityCurve, benchmarkCurve) {
+function renderEquityChart(equityCurve, benchmarkCurve, trades = []) {
     if (!equityCurve || equityCurve.length === 0) return;
 
     const timestamps = equityCurve.map(p => new Date(p.timestamp));
@@ -452,7 +542,8 @@ function renderEquityChart(equityCurve, benchmarkCurve) {
         type: 'scatter',
         mode: 'lines',
         name: 'Strategy',
-        line: { color: '#3b82f6', width: 2 }
+        line: { color: '#3b82f6', width: 2 },
+        hoverlabel: { bgcolor: '#1e293b' }
     }];
 
     if (benchmarkCurve && benchmarkCurve.length > 0) {
@@ -462,17 +553,103 @@ function renderEquityChart(equityCurve, benchmarkCurve) {
             type: 'scatter',
             mode: 'lines',
             name: 'Buy & Hold',
-            line: { color: '#6b7280', width: 1, dash: 'dot' }
+            line: { color: '#6b7280', width: 1, dash: 'dot' },
+            hoverlabel: { bgcolor: '#1e293b' }
+        });
+    }
+
+    // Add trade entry markers (green triangles pointing up)
+    if (trades && trades.length > 0) {
+        const entryX = [];
+        const entryY = [];
+        const entryText = [];
+        const exitX = [];
+        const exitY = [];
+        const exitText = [];
+
+        trades.forEach(trade => {
+            // Find closest equity point for entry
+            const entryTime = new Date(trade.entry_time);
+            const exitTime = new Date(trade.exit_time);
+
+            // Find equity value at entry time
+            let entryEquity = null;
+            for (let i = 0; i < equityCurve.length; i++) {
+                if (new Date(equityCurve[i].timestamp) >= entryTime) {
+                    entryEquity = equityCurve[i].equity;
+                    break;
+                }
+            }
+            if (entryEquity === null && equityCurve.length > 0) {
+                entryEquity = equityCurve[0].equity;
+            }
+
+            // Find equity value at exit time
+            let exitEquity = null;
+            for (let i = 0; i < equityCurve.length; i++) {
+                if (new Date(equityCurve[i].timestamp) >= exitTime) {
+                    exitEquity = equityCurve[i].equity;
+                    break;
+                }
+            }
+            if (exitEquity === null && equityCurve.length > 0) {
+                exitEquity = equityCurve[equityCurve.length - 1].equity;
+            }
+
+            entryX.push(entryTime);
+            entryY.push(entryEquity);
+            entryText.push(`Entry: $${trade.entry_price?.toFixed(2) || '?'}<br>Qty: ${trade.quantity?.toFixed(4) || '?'}`);
+
+            exitX.push(exitTime);
+            exitY.push(exitEquity);
+            const pnlColor = (trade.pnl || 0) >= 0 ? '#10b981' : '#ef4444';
+            exitText.push(`Exit: $${trade.exit_price?.toFixed(2) || '?'}<br>Reason: ${trade.exit_reason || 'Unknown'}<br>PnL: <span style="color:${pnlColor}">$${trade.pnl?.toFixed(2) || '?'}</span>`);
+        });
+
+        // Entry markers
+        traces.push({
+            x: entryX,
+            y: entryY,
+            type: 'scatter',
+            mode: 'markers',
+            name: 'Entry',
+            marker: {
+                color: '#10b981',
+                size: 12,
+                symbol: 'triangle-up',
+                line: { color: 'white', width: 1 }
+            },
+            text: entryText,
+            hoverinfo: 'text+x',
+            hoverlabel: { bgcolor: '#1e293b', bordercolor: '#10b981' }
+        });
+
+        // Exit markers
+        traces.push({
+            x: exitX,
+            y: exitY,
+            type: 'scatter',
+            mode: 'markers',
+            name: 'Exit',
+            marker: {
+                color: '#ef4444',
+                size: 12,
+                symbol: 'triangle-down',
+                line: { color: 'white', width: 1 }
+            },
+            text: exitText,
+            hoverinfo: 'text+x',
+            hoverlabel: { bgcolor: '#1e293b', bordercolor: '#ef4444' }
         });
     }
 
     Plotly.newPlot('equity-chart', traces, {
-        paper_bgcolor: '#1e293b',
-        plot_bgcolor: '#1e293b',
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
         font: { color: '#94a3b8' },
         margin: { t: 20, r: 20, b: 40, l: 60 },
-        xaxis: { gridcolor: '#334155' },
-        yaxis: { gridcolor: '#334155', title: 'Equity ($)' },
+        xaxis: { gridcolor: 'rgba(255, 255, 255, 0.05)' },
+        yaxis: { gridcolor: 'rgba(255, 255, 255, 0.05)', title: 'Equity ($)' },
         legend: { x: 0, y: 1, orientation: 'h' }
     }, { responsive: true });
 }
@@ -496,9 +673,10 @@ function initAnalysisModeToggle() {
             document.getElementById('wfa-config').classList.toggle('hidden', mode !== 'walkforward');
             document.getElementById('sensitivity-config').classList.toggle('hidden', mode !== 'sensitivity');
 
-            // Hide results
+            // Hide results and show placeholder
             document.getElementById('wfa-results').classList.add('hidden');
             document.getElementById('sensitivity-results').classList.add('hidden');
+            document.getElementById('results-placeholder').classList.remove('hidden');
         });
     });
 }
@@ -534,6 +712,7 @@ async function runWalkForward() {
             body: JSON.stringify({
                 strategy: AppState.strategy,
                 symbol: AppState.symbol,
+                interval: '1h',
                 params: getParams()
             })
         });
@@ -549,7 +728,8 @@ async function runWalkForward() {
         document.getElementById('wfa-win-rate').textContent = `${((result.aggregate_oos?.win_rate || 0) * 100).toFixed(0)}%`;
         document.getElementById('wfa-oos-sharpe').textContent = (result.aggregate_oos?.mean_sharpe || 0).toFixed(2);
 
-        // Show results card
+        // Show results block
+        document.getElementById('results-placeholder').classList.add('hidden');
         document.getElementById('wfa-results').classList.remove('hidden');
         document.getElementById('sensitivity-results').classList.add('hidden');
 
@@ -591,12 +771,12 @@ function renderWFAChart(windows) {
             marker: { color: barColors }
         }
     ], {
-        paper_bgcolor: '#1e293b',
-        plot_bgcolor: '#1e293b',
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
         font: { color: '#94a3b8' },
         margin: { t: 40, r: 20, b: 60, l: 60 },
-        xaxis: { gridcolor: '#334155', tickangle: -45 },
-        yaxis: { gridcolor: '#334155', title: 'Return (%)' },
+        xaxis: { gridcolor: 'rgba(255, 255, 255, 0.05)', tickangle: -45 },
+        yaxis: { gridcolor: 'rgba(255, 255, 255, 0.05)', title: 'Return (%)' },
         barmode: 'group',
         legend: { x: 0, y: 1.15, orientation: 'h' }
     }, { responsive: true });
@@ -663,7 +843,8 @@ async function runSensitivity() {
             document.getElementById('sens-max-sharpe').textContent = bestResult.sharpe_ratio.toFixed(3);
         }
 
-        // Show results card
+        // Show results block
+        document.getElementById('results-placeholder').classList.add('hidden');
         document.getElementById('sensitivity-results').classList.remove('hidden');
         document.getElementById('wfa-results').classList.add('hidden');
 
@@ -711,13 +892,13 @@ function renderSensitivityLineChart(results, paramName) {
             yaxis: 'y2'
         }
     ], {
-        paper_bgcolor: '#1e293b',
-        plot_bgcolor: '#1e293b',
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
         font: { color: '#94a3b8' },
         margin: { t: 50, r: 80, b: 60, l: 60 },
-        xaxis: { title: paramName, gridcolor: '#334155' },
-        yaxis: { title: 'Sharpe Ratio', gridcolor: '#334155', side: 'left' },
-        yaxis2: { title: 'Return (%)', overlaying: 'y', side: 'right', gridcolor: '#334155' },
+        xaxis: { title: paramName, gridcolor: 'rgba(255, 255, 255, 0.05)' },
+        yaxis: { title: 'Sharpe Ratio', gridcolor: 'rgba(255, 255, 255, 0.05)', side: 'left' },
+        yaxis2: { title: 'Return (%)', overlaying: 'y', side: 'right', gridcolor: 'rgba(255, 255, 255, 0.05)' },
         legend: { x: 0, y: 1.15, orientation: 'h' }
     }, { responsive: true });
 }
@@ -760,8 +941,8 @@ function renderHeatmap(heatmapData) {
         colorbar: { title: 'Sharpe' },
         hoverongaps: false
     }], {
-        paper_bgcolor: '#1e293b',
-        plot_bgcolor: '#1e293b',
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
         font: { color: '#94a3b8' },
         xaxis: { title: heatmapData.x_param, tickformat: '.1f', tickmode: 'array', tickvals: xValues },
         yaxis: { title: heatmapData.y_param, tickformat: '.1f', tickmode: 'array', tickvals: yValues },
@@ -794,27 +975,162 @@ function updateDeploySummary() {
 }
 
 async function loadSentiment() {
+    const badge = document.getElementById('detailed-sentiment-badge');
+    badge.textContent = 'Loading...';
+    badge.className = 'sentiment-badge';
+
     try {
-        const res = await fetch(`${API_BASE}/sentiment/current`);
+        // Fetch 365 days history for chart + stats
+        const res = await fetch(`${API_BASE}/sentiment/history?days=365`);
         const data = await res.json();
 
-        if (data.value !== undefined) {
-            const value = data.value;
-            document.getElementById('gauge-value').textContent = value;
-            document.getElementById('gauge-label').textContent = data.classification || getSentimentLabel(value);
-            document.getElementById('gauge-fill').style.width = `${value}%`;
+        if (data.success && data.data && data.data.length > 0) {
+            const history = data.data;
+            // Backend returns data.stats with pre-calculated metrics
+            const stats = data.stats || {};
+
+            // 1. Current Value (First item is usually latest from API, but let's verify sort)
+            // Backend api.rs uses data.first() as current.
+            const current = history[0];
+            const value = current.value;
+
+            // Update Badge
+            badge.textContent = current.classification;
+            badge.className = `sentiment-badge ${getSentimentClass(value)}`;
+
+            // Update Large Gauge
+            document.getElementById('gauge-large-value').textContent = value;
+            document.getElementById('gauge-large-label').textContent = current.classification;
+            document.getElementById('gauge-large-fill').style.width = `${value}%`;
+
+            // 2. Key Stats
+            // Daily Change (Current - Prev)
+            let change = 0;
+            if (history.length > 1) {
+                change = value - history[1].value;
+            }
+            updateStatPill('sent-change', change, '', true);
+
+            // 7-Day SMA
+            const sma7 = stats.sma_7 !== undefined ? stats.sma_7 : calculateSMA(history, 7);
+            updateStatPill('sent-sma7', sma7, '');
+
+            // Momentum (Current - 7 Days Ago)
+            const momentum = stats.momentum_7 !== undefined ? stats.momentum_7 : calculateMomentum(history, 7);
+            updateStatPill('sent-momentum', momentum, '', true);
+
+            // Dominance (Fear vs Greed days)
+            const fearDays = stats.days_in_fear || 0;
+            const greedDays = stats.days_in_greed || 0;
+            const total = fearDays + greedDays + (stats.days_neutral || 0);
+            let dominanceText = "Neutral";
+            if (fearDays > greedDays) dominanceText = `${((fearDays / total) * 100).toFixed(0)}% Fear`;
+            if (greedDays > fearDays) dominanceText = `${((greedDays / total) * 100).toFixed(0)}% Greed`;
+            document.getElementById('sent-dominance').textContent = dominanceText;
+
+            // 3. Render Chart
+            renderSentimentChart(history);
+
+        } else {
+            console.warn('Sentiment data unavailable');
+            badge.textContent = 'Unavailable';
         }
     } catch (e) {
         console.error('Failed to load sentiment:', e);
+        badge.textContent = 'Error';
     }
 }
 
-function getSentimentLabel(value) {
-    if (value <= 25) return 'Extreme Fear';
-    if (value <= 45) return 'Fear';
-    if (value <= 55) return 'Neutral';
-    if (value <= 75) return 'Greed';
-    return 'Extreme Greed';
+function updateStatPill(id, value, suffix, colorize = false) {
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    if (value === undefined || value === null || isNaN(value)) {
+        el.textContent = '--';
+        return;
+    }
+
+    const formatted = Math.abs(value) < 10 ? value.toFixed(1) : value.toFixed(0);
+    const sign = value > 0 ? '+' : '';
+    el.textContent = `${sign}${formatted}${suffix}`;
+
+    if (colorize) {
+        el.style.color = value > 0 ? '#10b981' : (value < 0 ? '#ef4444' : 'var(--text-primary)');
+    }
+}
+
+function calculateSMA(data, period) {
+    if (data.length < period) return null;
+    const slice = data.slice(0, period);
+    const sum = slice.reduce((acc, curr) => acc + curr.value, 0);
+    return sum / period;
+}
+
+function calculateMomentum(data, period) {
+    if (data.length <= period) return null;
+    return data[0].value - data[period].value;
+}
+
+function getSentimentClass(value) {
+    if (value <= 25) return 'text-danger'; // Extreme Fear
+    if (value <= 45) return 'text-warning'; // Fear
+    if (value <= 55) return 'text-muted';  // Neutral
+    if (value <= 75) return 'text-success'; // Greed
+    return 'text-success'; // Extreme Greed
+}
+
+function renderSentimentChart(history) {
+    // History needs to be reversed for chart (oldest to newest)
+    const sorted = [...history].sort((a, b) => a.timestamp - b.timestamp);
+
+    const x = sorted.map(d => new Date(d.timestamp * 1000));
+    const y = sorted.map(d => d.value);
+    const colors = y.map(v => {
+        if (v <= 25) return '#ef4444';
+        if (v <= 45) return '#f97316';
+        if (v <= 55) return '#94a3b8';
+        if (v <= 75) return '#84cc16';
+        return '#10b981';
+    });
+
+    const trace = {
+        x: x,
+        y: y,
+        type: 'scatter',
+        mode: 'lines+markers',
+        line: { color: '#64748b', width: 2 },
+        marker: {
+            color: colors,
+            size: 8,
+            line: { color: 'white', width: 1 }
+        },
+        hovertemplate: '%{x|%b %d}<br>Score: %{y}<br>%{text}<extra></extra>',
+        text: sorted.map(d => d.classification)
+    };
+
+    const layout = {
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        height: 300,
+        margin: { t: 20, r: 20, b: 40, l: 40 },
+        font: { color: '#94a3b8' },
+        xaxis: {
+            gridcolor: 'rgba(255, 255, 255, 0.05)',
+            showgrid: false
+        },
+        yaxis: {
+            range: [0, 100],
+            gridcolor: 'rgba(255, 255, 255, 0.05)',
+            dtick: 25
+        },
+        shapes: [
+            // Zones
+            { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 0, y1: 25, fillcolor: 'rgba(239, 68, 68, 0.1)', line: { width: 0 } },
+            { type: 'rect', xref: 'paper', yref: 'y', x0: 0, x1: 1, y0: 75, y1: 100, fillcolor: 'rgba(16, 185, 129, 0.1)', line: { width: 0 } }
+        ]
+    };
+
+    Plotly.newPlot('sentiment-history-chart', [trace], layout, { responsive: true, displayModeBar: false });
 }
 
 let ws = null;

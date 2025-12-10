@@ -21,6 +21,7 @@ AlphaField features a robust multi-source data layer, modular strategy system, e
 | **Advanced Analytics** | Monte Carlo, Walk-Forward, Sensitivity Analysis, Correlation Matrix |
 | **Data Quality Monitoring** | Gap detection, outlier detection, ingestion alerting |
 | **Risk Management** | Circuit breakers, position limits, drift monitoring |
+| **Walk Forward Analysis** | Rolling window training/testing for robustness validation |
 
 ---
 
@@ -184,6 +185,17 @@ Axum web server with REST API and WebSocket streaming.
 |----------|-------------|
 | `/api/ws` | Real-time updates (portfolio, positions, trades, logs) |
 
+### 🖥️ Dashboard UI
+
+The `crates/dashboard` crate serves a React/Vanilla JS frontend at `http://localhost:8080`.
+
+**Key Views:**
+- **Dashboard**: Real-time portfolio metrics, equity curve, and position monitoring.
+- **Data Manager**: Interface to fetch, view, and inspect market data (gaps, outliers).
+- **Backtest**: Configure and run simulations with visual results (charts, trade lists).
+- **Analysis**: Advanced tools for Monte Carlo simulation, Correlation matrix, and Walk Forward Analysis.
+- **Sentiment**: Fear & Greed index history and asset-specific sentiment metrics.
+
 ---
 
 ## 🚀 Getting Started
@@ -250,6 +262,10 @@ RUST_LOG=info
 | `make fmt` | Format code |
 | `make lint` | Run clippy |
 | `make clean` | Remove build artifacts |
+| `make ci` | Run local CI (fmt+lint+test) |
+| `make docker-build` | Build Docker image |
+| `make docker-up` | Start local Docker env |
+| `make docker-down` | Stop local Docker env |
 
 ### Running Examples
 

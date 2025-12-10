@@ -85,9 +85,15 @@ impl BacktestEngine {
                     let price = self.exchange.calculate_price(bar.close, order.quantity);
                     let fee = self.exchange.calculate_fee(price, order.quantity);
 
+                    let fill_quantity = if order.side == crate::strategy::OrderSide::Sell {
+                        -order.quantity
+                    } else {
+                        order.quantity
+                    };
+
                     match self
                         .portfolio
-                        .update_from_fill(&order.symbol, order.quantity, price, fee)
+                        .update_from_fill(&order.symbol, fill_quantity, price, fee, None)
                     {
                         Ok(_) => {
                             debug!(
@@ -117,6 +123,28 @@ impl BacktestEngine {
                             orders_skipped += 1;
                         }
                         Err(e) => return Err(e),
+                    }
+                }
+            }
+        }
+
+        // Force-close any open positions at the end of the backtest
+        // to ensure they are recorded as completed trades
+        if let Some(last_bar) = bars.last() {
+            let mut current_prices = HashMap::new();
+            current_prices.insert(driver_symbol.clone(), last_bar.close);
+            
+            let open_symbols: Vec<String> = self.portfolio.positions.keys().cloned().collect();
+            for symbol in open_symbols {
+                if let Some(pos) = self.portfolio.positions.get(&symbol) {
+                    if pos.quantity.abs() > 1e-9 {
+                        let close_quantity = -pos.quantity;
+                        let price = last_bar.close;
+                        let fee = self.exchange.calculate_fee(price, close_quantity.abs());
+                        
+                        // Force close the position
+                        let _ = self.portfolio.update_from_fill(&symbol, close_quantity, price, fee, Some("Force-Close".to_string()));
+                        debug!(symbol = symbol, quantity = close_quantity, "Force-closed open position at backtest end");
                     }
                 }
             }

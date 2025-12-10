@@ -219,6 +219,42 @@ Run parameter sensitivity analysis.
 }
 ```
 
+### POST /api/walk-forward
+
+Run Walk-Forward Analysis (WFA) to validate strategy robustness.
+
+**Request:**
+```json
+{
+  "strategy": "GoldenCross",
+  "symbol": "BTC",
+  "interval": "1h",
+  "params": {
+    "short_period": 50,
+    "long_period": 200
+  },
+  "train_window_days": 365,
+  "test_window_days": 90
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "result": {
+    "windows": [
+      {
+        "train_start": "2024-01-01",
+        "test_end": "2024-04-01",
+        "metrics": { ... }
+      }
+    ],
+    "overall_metrics": { ... }
+  }
+}
+```
+
 ---
 
 ## Data Management
@@ -304,27 +340,21 @@ Get historical sentiment data.
 - `end_date` (optional): End date YYYY-MM-DD.
 
 **Response:**
+      "trend": "Stable"
+  }
+}
+```
+
+### POST /api/sentiment/sync
+
+Trigger a synchronization of historical sentiment data from external providers.
+
+**Response:**
 ```json
 {
   "success": true,
-  "data": [
-    {
-      "value": 65,
-      "classification": "Greed",
-      "timestamp": "2025-12-09T00:00:00Z"
-    },
-    {
-      "value": 60,
-      "classification": "Greed",
-      "timestamp": "2025-12-08T00:00:00Z"
-    }
-  ],
-  "stats": {
-    "average": 62.5,
-    "days_in_fear": 0,
-    "days_in_greed": 2,
-    "trend": "Stable"
-  }
+  "message": "Synced 365 days of sentiment data",
+  "count": 365
 }
 ```
 

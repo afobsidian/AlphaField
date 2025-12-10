@@ -25,6 +25,7 @@ pub struct RsiStrategy {
     config: RsiConfig,
     rsi: Rsi,
     position: SignalType, // Track current position to avoid spamming signals
+    entry_price: Option<f64>,  // Track entry price for exit logic
 }
 
 impl RsiStrategy {
@@ -50,6 +51,7 @@ impl RsiStrategy {
             rsi: Rsi::new(config.period),
             config,
             position: SignalType::Hold,
+            entry_price: None,
         }
     }
 
@@ -66,24 +68,76 @@ impl Strategy for RsiStrategy {
 
     fn on_bar(&mut self, bar: &Bar) -> Option<Vec<Signal>> {
         let rsi_val = self.rsi.update(bar.close)?;
+        let price = bar.close;
 
+        // EXIT LOGIC FIRST
+        if self.position == SignalType::Buy {
+            if let Some(entry) = self.entry_price {
+                // Exit 1: RSI returns to neutral zone (40-60)
+                if rsi_val >= 40.0 && rsi_val <= 60.0 {
+                    self.position = SignalType::Hold;
+                    self.entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Sell,
+                        strength: 1.0,
+                        metadata: Some(format!("RSI Neutral Exit: {:.2}", rsi_val)),
+                    }]);
+                }
+                
+                // Exit 2: RSI overbought (take profit)
+                if rsi_val > self.config.upper_bound {
+                    self.position = SignalType::Hold;
+                    self.entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Sell,
+                        strength: 1.0,
+                        metadata: Some(format!("RSI Overbought Exit: {:.2}", rsi_val)),
+                    }]);
+                }
+                
+                // Exit 3: Take profit at 3%
+                let profit_pct = (price - entry) / entry * 100.0;
+                if profit_pct >= 3.0 {
+                    self.position = SignalType::Hold;
+                    self.entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Sell,
+                        strength: 1.0,
+                        metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
+                    }]);
+                }
+                
+                // Exit 4: Stop loss at 5%
+                if profit_pct <= -5.0 {
+                    self.position = SignalType::Hold;
+                    self.entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Sell,
+                        strength: 1.0,
+                        metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                    }]);
+                }
+            }
+        }
+
+        // ENTRY LOGIC - only when not in position
         if rsi_val < self.config.lower_bound && self.position != SignalType::Buy {
             self.position = SignalType::Buy;
+            self.entry_price = Some(price);
             return Some(vec![Signal {
                 timestamp: bar.timestamp,
                 symbol: "UNKNOWN".to_string(),
                 signal_type: SignalType::Buy,
                 strength: (self.config.lower_bound - rsi_val) / self.config.lower_bound,
-                metadata: Some(format!("RSI Oversold: {:.2}", rsi_val)),
-            }]);
-        } else if rsi_val > self.config.upper_bound && self.position != SignalType::Sell {
-            self.position = SignalType::Sell;
-            return Some(vec![Signal {
-                timestamp: bar.timestamp,
-                symbol: "UNKNOWN".to_string(),
-                signal_type: SignalType::Sell,
-                strength: (rsi_val - self.config.upper_bound) / (100.0 - self.config.upper_bound),
-                metadata: Some(format!("RSI Overbought: {:.2}", rsi_val)),
+                metadata: Some(format!("RSI Oversold Entry: {:.2}", rsi_val)),
             }]);
         }
 

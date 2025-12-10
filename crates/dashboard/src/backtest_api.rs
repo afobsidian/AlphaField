@@ -247,7 +247,7 @@ pub async fn run_backtest(
             let adapter = StrategyAdapter::new(
                 strategy,
                 &req.symbol,
-                0.5,
+                100_000.0,
             );
             engine.set_strategy(Box::new(adapter));
         } else {

@@ -3,7 +3,25 @@
 .PHONY: all build test clean fmt lint run-demo run-backtest reset help
 
 # Default target
+# Default target
 all: build
+
+# --- DevOps ---
+
+## Run local CI (fmt, lint, test)
+ci: fmt lint test
+
+## Build Docker image
+docker-build:
+	docker build -t alphafield:latest .
+
+## Start Docker environment
+docker-up:
+	docker-compose up -d
+
+## Stop Docker environment
+docker-down:
+	docker-compose down
 
 # --- Development ---
 

@@ -40,6 +40,9 @@ pub struct Trade {
     pub mfe: f64,
     /// Duration in seconds
     pub duration_secs: i64,
+    /// Exit reason (e.g., "Signal", "Force-Close", "Take-Profit", "Stop-Loss")
+    #[serde(default)]
+    pub exit_reason: Option<String>,
 }
 
 impl Trade {
@@ -189,6 +192,7 @@ mod tests {
             mae: 5.0,
             mfe: 15.0,
             duration_secs,
+            exit_reason: Some("Signal".to_string()),
         }
     }
 

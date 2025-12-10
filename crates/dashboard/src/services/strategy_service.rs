@@ -60,7 +60,7 @@ impl StrategyFactory {
 
     /// Create a backtest-ready strategy wrapped in StrategyAdapter
     /// This returns the backtest Strategy trait (produces OrderRequests from Signals)
-    pub fn create_backtest(name: &str, params: &HashMap<String, f64>, symbol: &str, quantity: f64) -> Option<Box<dyn BacktestStrategy>> {
+    pub fn create_backtest(name: &str, params: &HashMap<String, f64>, symbol: &str, capital: f64) -> Option<Box<dyn BacktestStrategy>> {
         debug!(strategy = name, ?params, "Creating backtest strategy");
         match name {
             "GoldenCross" => {
@@ -70,7 +70,7 @@ impl StrategyFactory {
                     return None;
                 }
                 let strat = GoldenCrossStrategy::new(fast, slow);
-                Some(Box::new(StrategyAdapter::new(strat, symbol, quantity)))
+                Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
             }
             "Rsi" => {
                 let period = params.get("period").copied().unwrap_or(14.0) as usize;
@@ -80,7 +80,7 @@ impl StrategyFactory {
                     return None;
                 }
                 let strat = RsiStrategy::new(period, lower, upper);
-                Some(Box::new(StrategyAdapter::new(strat, symbol, quantity)))
+                Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
             }
             "MeanReversion" => {
                 let period = params.get("period").copied().unwrap_or(20.0) as usize;
@@ -89,7 +89,7 @@ impl StrategyFactory {
                     return None;
                 }
                 let strat = MeanReversionStrategy::new(period, std_dev);
-                Some(Box::new(StrategyAdapter::new(strat, symbol, quantity)))
+                Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
             }
             "Momentum" => {
                 let ema_period = params.get("ema_period").copied().unwrap_or(50.0) as usize;
@@ -100,7 +100,7 @@ impl StrategyFactory {
                     return None;
                 }
                 let strat = MomentumStrategy::new(ema_period, macd_fast, macd_slow, macd_signal);
-                Some(Box::new(StrategyAdapter::new(strat, symbol, quantity)))
+                Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
             }
             _ => None,
         }

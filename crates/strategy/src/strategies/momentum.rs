@@ -117,7 +117,7 @@ impl Strategy for MomentumStrategy {
 
         let price = bar.close;
 
-        // Bullish: Price above EMA and MACD crosses above signal
+        // Entry: Bullish - Price above EMA and MACD crosses above signal
         if price > ema_val && macd_line > signal_line && self.last_position != SignalType::Buy {
             self.last_position = SignalType::Buy;
             return Some(vec![Signal {
@@ -126,25 +126,38 @@ impl Strategy for MomentumStrategy {
                 signal_type: SignalType::Buy,
                 strength: ((macd_line - signal_line) / macd_line.abs()).abs().min(1.0),
                 metadata: Some(format!(
-                    "Bullish Momentum: Price {:.2} > EMA {:.2}, MACD {:.4} > Signal {:.4}",
+                    "Bullish Momentum Entry: Price {:.2} > EMA {:.2}, MACD {:.4} > Signal {:.4}",
                     price, ema_val, macd_line, signal_line
                 )),
             }]);
         }
 
-        // Bearish: Price below EMA and MACD crosses below signal
-        if price < ema_val && macd_line < signal_line && self.last_position != SignalType::Sell {
+        // Exit long: When in long position and MACD crosses below signal (momentum weakening)
+        if self.last_position == SignalType::Buy && macd_line < signal_line {
+            self.last_position = SignalType::Hold;
+            return Some(vec![Signal {
+                timestamp: bar.timestamp,
+                symbol: "UNKNOWN".to_string(),
+                signal_type: SignalType::Sell,
+                strength: 0.8,
+                metadata: Some(format!(
+                    "Momentum Exit: MACD {:.4} < Signal {:.4}",
+                    macd_line, signal_line
+                )),
+            }]);
+        }
+        
+        // Exit long: When in long position and price drops below EMA (trend broken)
+        if self.last_position == SignalType::Buy && price < ema_val {
             self.last_position = SignalType::Sell;
             return Some(vec![Signal {
                 timestamp: bar.timestamp,
                 symbol: "UNKNOWN".to_string(),
                 signal_type: SignalType::Sell,
-                strength: ((signal_line - macd_line) / signal_line.abs())
-                    .abs()
-                    .min(1.0),
+                strength: 0.9,
                 metadata: Some(format!(
-                    "Bearish Momentum: Price {:.2} < EMA {:.2}, MACD {:.4} < Signal {:.4}",
-                    price, ema_val, macd_line, signal_line
+                    "Trend Break Exit: Price {:.2} < EMA {:.2}",
+                    price, ema_val
                 )),
             }]);
         }
