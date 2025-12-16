@@ -38,7 +38,8 @@ impl GoldenCrossStrategy {
     /// * `fast_period` - Period for fast moving average
     /// * `slow_period` - Period for slow moving average
     pub fn new(fast_period: usize, slow_period: usize) -> Self {
-        let config = GoldenCrossConfig::new(fast_period, slow_period);
+        // Default to 5% TP/SL for backward compatibility in constructor
+        let config = GoldenCrossConfig::new(fast_period, slow_period, 5.0, 5.0);
         Self::from_config(config)
     }
 
@@ -98,9 +99,9 @@ impl Strategy for GoldenCrossStrategy {
                 }
             }
             
-            // Exit 2: Take profit at 5%
+            // Exit 2: Take profit
             let profit_pct = (price - entry) / entry * 100.0;
-            if profit_pct >= 5.0 {
+            if profit_pct >= self.config.take_profit {
                 self.entry_price = None;
                 self.last_fast = Some(fast);
                 self.last_slow = Some(slow);
@@ -113,8 +114,8 @@ impl Strategy for GoldenCrossStrategy {
                 }]);
             }
             
-            // Exit 3: Stop loss at 5%
-            if profit_pct <= -5.0 {
+            // Exit 3: Stop loss
+            if profit_pct <= -self.config.stop_loss {
                 self.entry_price = None;
                 self.last_fast = Some(fast);
                 self.last_slow = Some(slow);
@@ -157,22 +158,29 @@ mod tests {
 
     #[test]
     fn test_golden_cross_creation() {
-        let strategy = GoldenCrossStrategy::new(10, 30);
+        let strategy = GoldenCrossStrategy::new(10, 30, 5.0, 5.0);
         assert_eq!(strategy.name(), "Golden Cross");
     }
 
     #[test]
+    fn test_golden_cross_config_valid() {
+        let config = GoldenCrossConfig::new(10, 30, 5.0, 5.0);
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
     fn test_golden_cross_from_config() {
-        let config = GoldenCrossConfig::new(5, 20);
+        let config = GoldenCrossConfig::new(5, 20, 10.0, 5.0);
         let strategy = GoldenCrossStrategy::from_config(config);
         assert_eq!(strategy.config().fast_period, 5);
         assert_eq!(strategy.config().slow_period, 20);
+        assert_eq!(strategy.config().take_profit, 10.0);
     }
 
     #[test]
     #[should_panic(expected = "Invalid GoldenCrossConfig")]
     fn test_golden_cross_invalid_config() {
-        let config = GoldenCrossConfig::new(50, 20); // Invalid: fast > slow
+        let config = GoldenCrossConfig::new(50, 20, 5.0, 5.0); // Invalid: fast > slow
         GoldenCrossStrategy::from_config(config);
     }
 }

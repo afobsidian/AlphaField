@@ -255,7 +255,7 @@ pub async fn run_sensitivity(
 
     // 2. Configure Analyzer
     let config = SensitivityConfig {
-        initial_capital: 10000.0,
+        initial_capital: 100_000.0,
         fee_rate: 0.001,
         parallel: true,
     };
@@ -430,7 +430,7 @@ pub async fn run_walk_forward(
         train_window: train_window_bars,
         test_window: test_window_bars,
         step_size: 30 * bars_per_day, // 1 month step default
-        initial_capital: 10000.0,
+        initial_capital: 100_000.0,
         fee_rate: 0.001,
     };
 

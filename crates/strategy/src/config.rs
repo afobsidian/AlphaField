@@ -32,6 +32,10 @@ pub struct GoldenCrossConfig {
     pub fast_period: usize,
     /// Slow moving average period
     pub slow_period: usize,
+    /// Take Profit percentage (e.g., 5.0 for 5%)
+    pub take_profit: f64,
+    /// Stop Loss percentage (e.g., 5.0 for 5%)
+    pub stop_loss: f64,
 }
 
 impl GoldenCrossConfig {
@@ -47,10 +51,12 @@ impl GoldenCrossConfig {
     /// let config = GoldenCrossConfig::new(10, 30);
     /// assert!(config.validate().is_ok());
     /// ```
-    pub fn new(fast_period: usize, slow_period: usize) -> Self {
+    pub fn new(fast_period: usize, slow_period: usize, take_profit: f64, stop_loss: f64) -> Self {
         Self {
             fast_period,
             slow_period,
+            take_profit,
+            stop_loss,
         }
     }
 
@@ -59,6 +65,8 @@ impl GoldenCrossConfig {
         Self {
             fast_period: 50,
             slow_period: 200,
+            take_profit: 5.0,
+            stop_loss: 5.0,
         }
     }
 }
@@ -78,6 +86,12 @@ impl StrategyConfig for GoldenCrossConfig {
         if self.fast_period >= self.slow_period {
             return Err("Fast period must be less than slow period".to_string());
         }
+        if self.take_profit <= 0.0 {
+            return Err("Take profit must be greater than 0".to_string());
+        }
+        if self.stop_loss <= 0.0 {
+            return Err("Stop loss must be greater than 0".to_string());
+        }
         Ok(())
     }
 
@@ -90,8 +104,8 @@ impl fmt::Display for GoldenCrossConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "GoldenCross(fast={}, slow={})",
-            self.fast_period, self.slow_period
+            "GoldenCross(fast={}, slow={}, tp={:.1}%, sl={:.1}%)",
+            self.fast_period, self.slow_period, self.take_profit, self.stop_loss
         )
     }
 }
@@ -105,6 +119,10 @@ pub struct RsiConfig {
     pub lower_bound: f64,
     /// Upper threshold for overbought condition
     pub upper_bound: f64,
+    /// Take Profit percentage
+    pub take_profit: f64,
+    /// Stop Loss percentage
+    pub stop_loss: f64,
 }
 
 impl RsiConfig {
@@ -121,11 +139,13 @@ impl RsiConfig {
     /// let config = RsiConfig::new(14, 30.0, 70.0);
     /// assert!(config.validate().is_ok());
     /// ```
-    pub fn new(period: usize, lower_bound: f64, upper_bound: f64) -> Self {
+    pub fn new(period: usize, lower_bound: f64, upper_bound: f64, take_profit: f64, stop_loss: f64) -> Self {
         Self {
             period,
             lower_bound,
             upper_bound,
+            take_profit,
+            stop_loss,
         }
     }
 
@@ -135,6 +155,8 @@ impl RsiConfig {
             period: 14,
             lower_bound: 30.0,
             upper_bound: 70.0,
+            take_profit: 3.0,
+            stop_loss: 5.0,
         }
     }
 }
@@ -157,6 +179,12 @@ impl StrategyConfig for RsiConfig {
         if self.lower_bound >= self.upper_bound {
             return Err("Lower bound must be less than upper bound".to_string());
         }
+        if self.take_profit <= 0.0 {
+            return Err("Take profit must be greater than 0".to_string());
+        }
+        if self.stop_loss <= 0.0 {
+            return Err("Stop loss must be greater than 0".to_string());
+        }
         Ok(())
     }
 
@@ -169,8 +197,8 @@ impl fmt::Display for RsiConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "RSI(period={}, lower={:.1}, upper={:.1})",
-            self.period, self.lower_bound, self.upper_bound
+            "RSI(period={}, lower={:.1}, upper={:.1}, tp={:.1}%, sl={:.1}%)",
+            self.period, self.lower_bound, self.upper_bound, self.take_profit, self.stop_loss
         )
     }
 }
@@ -181,25 +209,25 @@ mod tests {
 
     #[test]
     fn test_golden_cross_config_valid() {
-        let config = GoldenCrossConfig::new(10, 30);
+        let config = GoldenCrossConfig::new(10, 30, 5.0, 5.0);
         assert!(config.validate().is_ok());
     }
 
     #[test]
     fn test_golden_cross_config_invalid_order() {
-        let config = GoldenCrossConfig::new(50, 20);
+        let config = GoldenCrossConfig::new(50, 20, 5.0, 5.0);
         assert!(config.validate().is_err());
     }
 
     #[test]
     fn test_rsi_config_valid() {
-        let config = RsiConfig::new(14, 30.0, 70.0);
+        let config = RsiConfig::new(14, 30.0, 70.0, 3.0, 5.0);
         assert!(config.validate().is_ok());
     }
 
     #[test]
     fn test_rsi_config_invalid_bounds() {
-        let config = RsiConfig::new(14, 80.0, 70.0);
+        let config = RsiConfig::new(14, 80.0, 70.0, 3.0, 5.0);
         assert!(config.validate().is_err());
     }
 }

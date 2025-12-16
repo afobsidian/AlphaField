@@ -25,22 +25,30 @@ const AppState = {
 const STRATEGY_PARAMS = {
     GoldenCross: [
         { name: 'fast_period', label: 'Fast Period', default: 10, min: 5, max: 50, step: 5 },
-        { name: 'slow_period', label: 'Slow Period', default: 30, min: 20, max: 120, step: 10 }
+        { name: 'slow_period', label: 'Slow Period', default: 30, min: 20, max: 120, step: 10 },
+        { name: 'take_profit', label: 'Take Profit (%)', default: 5.0, min: 1.0, max: 50.0, step: 1.0 },
+        { name: 'stop_loss', label: 'Stop Loss (%)', default: 5.0, min: 1.0, max: 20.0, step: 0.5 }
     ],
     Rsi: [
         { name: 'period', label: 'RSI Period', default: 14, min: 5, max: 30, step: 1 },
         { name: 'lower_bound', label: 'Oversold Level', default: 30, min: 10, max: 40, step: 5 },
-        { name: 'upper_bound', label: 'Overbought Level', default: 70, min: 60, max: 90, step: 5 }
+        { name: 'upper_bound', label: 'Overbought Level', default: 70, min: 60, max: 90, step: 5 },
+        { name: 'take_profit', label: 'Take Profit (%)', default: 3.0, min: 1.0, max: 50.0, step: 0.5 },
+        { name: 'stop_loss', label: 'Stop Loss (%)', default: 5.0, min: 1.0, max: 20.0, step: 0.5 }
     ],
     MeanReversion: [
         { name: 'period', label: 'BB Period', default: 20, min: 10, max: 50, step: 5 },
-        { name: 'std_dev', label: 'Std Deviations', default: 2.0, min: 1.0, max: 3.0, step: 0.5 }
+        { name: 'std_dev', label: 'Std Deviations', default: 2.0, min: 1.0, max: 3.0, step: 0.5 },
+        { name: 'take_profit', label: 'Take Profit (%)', default: 3.0, min: 1.0, max: 50.0, step: 0.5 },
+        { name: 'stop_loss', label: 'Stop Loss (%)', default: 5.0, min: 1.0, max: 20.0, step: 0.5 }
     ],
     Momentum: [
         { name: 'ema_period', label: 'EMA Period', default: 50, min: 20, max: 100, step: 10 },
         { name: 'macd_fast', label: 'MACD Fast', default: 12, min: 5, max: 20, step: 1 },
         { name: 'macd_slow', label: 'MACD Slow', default: 26, min: 20, max: 40, step: 1 },
-        { name: 'macd_signal', label: 'Signal Line', default: 9, min: 5, max: 15, step: 1 }
+        { name: 'macd_signal', label: 'Signal Line', default: 9, min: 5, max: 15, step: 1 },
+        { name: 'take_profit', label: 'Take Profit (%)', default: 5.0, min: 1.0, max: 50.0, step: 0.5 },
+        { name: 'stop_loss', label: 'Stop Loss (%)', default: 5.0, min: 1.0, max: 20.0, step: 0.5 }
     ]
 };
 
@@ -449,8 +457,8 @@ async function runBacktest() {
     btn.disabled = true;
     btn.innerHTML = '⏳ Running...';
 
-    const placeholderEl = document.getElementById('results-placeholder');
-    const contentEl = document.getElementById('results-content');
+    const placeholderEl = document.getElementById('backtest-results-placeholder');
+    const contentEl = document.getElementById('backtest-results-content');
 
     try {
         const params = getParams();
@@ -703,7 +711,27 @@ function updateSensitivityParams() {
 
 async function runWalkForward() {
     const chartContainer = document.getElementById('optimize-chart');
-    chartContainer.innerHTML = '<div class="placeholder-content"><span class="placeholder-icon">⏳</span><span>Running Walk-Forward Analysis...</span></div>';
+    const resultsPlaceholder = document.getElementById('optimize-results-placeholder');
+    const originalContent = chartContainer.innerHTML;
+    const originalPlaceholder = resultsPlaceholder.innerHTML;
+
+    // Show loading state with more detail in Chart
+    chartContainer.innerHTML = `
+        <div class="placeholder-content">
+            <span class="placeholder-icon">⏳</span>
+            <span>Running Walk-Forward Analysis...</span>
+            <span style="font-size: 12px; margin-top: 8px; opacity: 0.7;">Fetching 4 years of data and simulating. This may take 10-20 seconds.</span>
+        </div>`;
+
+    // Update Results Placeholder to match
+    resultsPlaceholder.innerHTML = `
+        <span class="placeholder-icon">⏳</span>
+        <span>Calculating Metrics...</span>
+    `;
+
+    // Disable button to prevent double-submit
+    const btn = document.querySelector('button[onclick="runWalkForward()"]');
+    if (btn) btn.disabled = true;
 
     try {
         const res = await fetch(`${API_BASE}/walk-forward`, {
@@ -718,7 +746,10 @@ async function runWalkForward() {
         });
 
         const data = await res.json();
-        if (!data.success) throw new Error(data.error || 'Analysis failed');
+
+        if (!data.success) {
+            throw new Error(data.error || 'Analysis failed');
+        }
 
         const result = data.result;
 
@@ -729,7 +760,7 @@ async function runWalkForward() {
         document.getElementById('wfa-oos-sharpe').textContent = (result.aggregate_oos?.mean_sharpe || 0).toFixed(2);
 
         // Show results block
-        document.getElementById('results-placeholder').classList.add('hidden');
+        resultsPlaceholder.classList.add('hidden');
         document.getElementById('wfa-results').classList.remove('hidden');
         document.getElementById('sensitivity-results').classList.add('hidden');
 
@@ -739,14 +770,35 @@ async function runWalkForward() {
         document.getElementById('optimize-chart-title').textContent = 'Walk-Forward Window Returns';
 
     } catch (e) {
-        alert('Walk-Forward Analysis failed: ' + e.message);
-        console.error(e);
+        console.error("WFA Error:", e);
+        // Show error in the chart container
+        chartContainer.innerHTML = `
+            <div class="placeholder-content" style="color: #ef4444;">
+                <span class="placeholder-icon">⚠️</span>
+                <span>Analysis Failed</span>
+                <span style="font-size: 14px; margin-top: 8px; max-width: 80%; text-align: center;">${e.message}</span>
+                <button class="btn-primary" style="margin-top: 16px;" onclick="runWalkForward()">Try Again</button>
+            </div>`;
+
+        // Show error in results placeholder too
+        resultsPlaceholder.innerHTML = `
+            <span class="placeholder-icon" style="color: #ef4444;">⚠️</span>
+            <span style="color: #ef4444;">Analysis Failed</span>
+        `;
+        resultsPlaceholder.classList.remove('hidden'); // Ensure it's visible if we came from success state
+        document.getElementById('wfa-results').classList.add('hidden');
+
+    } finally {
+        if (btn) btn.disabled = false;
     }
 }
 
 function renderWFAChart(windows) {
+    const container = document.getElementById('optimize-chart');
+    container.innerHTML = ''; // Clear loading state explicitly
+
     if (!windows || windows.length === 0) {
-        document.getElementById('optimize-chart').innerHTML = '<div class="placeholder-content"><span class="placeholder-icon">📊</span><span>No window data available</span></div>';
+        container.innerHTML = '<div class="placeholder-content"><span class="placeholder-icon">📊</span><span>No window data available</span></div>';
         return;
     }
 
@@ -841,10 +893,13 @@ async function runSensitivity() {
                 .join(', ');
             document.getElementById('sens-best-param').textContent = bestText;
             document.getElementById('sens-max-sharpe').textContent = bestResult.sharpe_ratio.toFixed(3);
+
+            // Store best params for "Apply" button
+            AppState.bestSensitivityParams = bestResult.params;
         }
 
         // Show results block
-        document.getElementById('results-placeholder').classList.add('hidden');
+        document.getElementById('optimize-results-placeholder').classList.add('hidden');
         document.getElementById('sensitivity-results').classList.remove('hidden');
         document.getElementById('wfa-results').classList.add('hidden');
 
@@ -864,6 +919,8 @@ async function runSensitivity() {
 }
 
 function renderSensitivityLineChart(results, paramName) {
+    document.getElementById('optimize-chart').innerHTML = ''; // Clear loading state
+
     const sorted = [...results].sort((a, b) => a.params[paramName] - b.params[paramName]);
 
     const xValues = sorted.map(r => r.params[paramName]);
@@ -913,26 +970,20 @@ function renderHeatmap(heatmapData) {
     const xValues = heatmapData.x_values;
     const yValues = heatmapData.y_values;
 
-    const annotations = [];
-    for (let i = 0; i < yValues.length; i++) {
-        if (!zData[i]) continue;
-        for (let j = 0; j < xValues.length; j++) {
-            if (zData[i][j] === undefined || zData[i][j] === null) continue;
-            annotations.push({
-                x: xValues[j],
-                y: yValues[i],
-                text: zData[i][j].toFixed(3),
-                font: { color: 'white', size: 11 },
-                showarrow: false
-            });
-        }
-    }
+    document.getElementById('optimize-chart').innerHTML = ''; // Clear loading state
 
     Plotly.newPlot('optimize-chart', [{
         z: zData,
         x: xValues,
         y: yValues,
         type: 'heatmap',
+        texttemplate: '%{z:.3f}',
+        textfont: {
+            family: 'Inter, sans-serif',
+            size: 11,
+            color: 'white',
+            weight: 600 // Plotly uses integer weights or 'bold' string in newer versions, but font object usually takes styling
+        },
         colorscale: [
             [0, '#ef4444'],
             [0.5, '#fbbf24'],
@@ -946,13 +997,22 @@ function renderHeatmap(heatmapData) {
         font: { color: '#94a3b8' },
         xaxis: { title: heatmapData.x_param, tickformat: '.1f', tickmode: 'array', tickvals: xValues },
         yaxis: { title: heatmapData.y_param, tickformat: '.1f', tickmode: 'array', tickvals: yValues },
-        margin: { t: 50, r: 100, b: 60, l: 70 },
-        annotations: annotations
+        margin: { t: 50, r: 100, b: 60, l: 70 }
     }, { responsive: true });
 }
 
 function applyBestParams() {
-    // Would update AppState.params with best found params
+    if (!AppState.bestSensitivityParams) {
+        alert('No sensitivity results available.');
+        return;
+    }
+
+    // Update global state params
+    AppState.params = { ...AppState.params, ...AppState.bestSensitivityParams };
+
+    // Refresh the Build tab UI
+    updateParamsUI();
+
     alert('Best parameters applied! Go to Build tab to see updated values.');
     switchTab('build');
 }

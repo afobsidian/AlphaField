@@ -885,13 +885,14 @@ body {
     /* Deep bg */
     backdrop-filter: blur(20px);
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
-    z-index: 1000;
+    z-index: 9999;
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
     transform: translateY(-10px);
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     max-height: 350px;
+    overflow-y: auto;
     display: flex;
     flex-direction: column;
 }

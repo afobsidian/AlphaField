@@ -35,8 +35,9 @@ impl RsiStrategy {
     /// * `period` - RSI calculation period
     /// * `lower_bound` - Oversold threshold
     /// * `upper_bound` - Overbought threshold
+    /// * `upper_bound` - Overbought threshold
     pub fn new(period: usize, lower_bound: f64, upper_bound: f64) -> Self {
-        let config = RsiConfig::new(period, lower_bound, upper_bound);
+        let config = RsiConfig::new(period, lower_bound, upper_bound, 3.0, 5.0);
         Self::from_config(config)
     }
 
@@ -99,9 +100,9 @@ impl Strategy for RsiStrategy {
                     }]);
                 }
                 
-                // Exit 3: Take profit at 3%
+                // Exit 3: Take profit
                 let profit_pct = (price - entry) / entry * 100.0;
-                if profit_pct >= 3.0 {
+                if profit_pct >= self.config.take_profit {
                     self.position = SignalType::Hold;
                     self.entry_price = None;
                     return Some(vec![Signal {
@@ -113,8 +114,8 @@ impl Strategy for RsiStrategy {
                     }]);
                 }
                 
-                // Exit 4: Stop loss at 5%
-                if profit_pct <= -5.0 {
+                // Exit 4: Stop loss
+                if profit_pct <= -self.config.stop_loss {
                     self.position = SignalType::Hold;
                     self.entry_price = None;
                     return Some(vec![Signal {
@@ -157,7 +158,7 @@ mod tests {
 
     #[test]
     fn test_rsi_strategy_from_config() {
-        let config = RsiConfig::new(10, 25.0, 75.0);
+        let config = RsiConfig::new(10, 25.0, 75.0, 3.0, 5.0);
         let strategy = RsiStrategy::from_config(config);
         assert_eq!(strategy.config().period, 10);
         assert_eq!(strategy.config().lower_bound, 25.0);
@@ -167,7 +168,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "Invalid RsiConfig")]
     fn test_rsi_strategy_invalid_config() {
-        let config = RsiConfig::new(14, 80.0, 70.0); // Invalid: lower > upper
+        let config = RsiConfig::new(14, 80.0, 70.0, 3.0, 5.0); // Invalid: lower > upper
         RsiStrategy::from_config(config);
     }
 }

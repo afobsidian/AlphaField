@@ -16,6 +16,10 @@ pub struct MeanReversionConfig {
     pub period: usize,
     /// Number of standard deviations
     pub num_std_dev: f64,
+    /// Take Profit percentage
+    pub take_profit: f64,
+    /// Stop Loss percentage
+    pub stop_loss: f64,
 }
 
 impl MeanReversionConfig {
@@ -23,6 +27,17 @@ impl MeanReversionConfig {
         Self {
             period,
             num_std_dev,
+            take_profit: 3.0, // Default to 3% for backward compatibility
+            stop_loss: 5.0,
+        }
+    }
+
+    pub fn new_with_exits(period: usize, num_std_dev: f64, take_profit: f64, stop_loss: f64) -> Self {
+        Self {
+            period,
+            num_std_dev,
+            take_profit,
+            stop_loss,
         }
     }
 
@@ -30,6 +45,8 @@ impl MeanReversionConfig {
         Self {
             period: 20,
             num_std_dev: 2.0,
+            take_profit: 3.0,
+            stop_loss: 5.0,
         }
     }
 
@@ -40,6 +57,12 @@ impl MeanReversionConfig {
         if self.num_std_dev <= 0.0 {
             return Err("Standard deviations must be positive".to_string());
         }
+        if self.take_profit <= 0.0 {
+            return Err("Take profit must be greater than 0".to_string());
+        }
+        if self.stop_loss <= 0.0 {
+            return Err("Stop loss must be greater than 0".to_string());
+        }
         Ok(())
     }
 }
@@ -48,8 +71,8 @@ impl fmt::Display for MeanReversionConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "MeanReversion(period={}, std_dev={:.1})",
-            self.period, self.num_std_dev
+            "MeanReversion(period={}, std_dev={:.1}, tp={:.1}%, sl={:.1}%)",
+            self.period, self.num_std_dev, self.take_profit, self.stop_loss
         )
     }
 }
@@ -80,7 +103,7 @@ impl MeanReversionStrategy {
     /// * `period` - Bollinger Bands period
     /// * `num_std_dev` - Number of standard deviations for bands
     pub fn new(period: usize, num_std_dev: f64) -> Self {
-        let config = MeanReversionConfig::new(period, num_std_dev);
+        let config = MeanReversionConfig::new_with_exits(period, num_std_dev, 3.0, 5.0);
         Self::from_config(config)
     }
 
@@ -116,7 +139,7 @@ impl Strategy for MeanReversionStrategy {
             if let Some(entry) = self.entry_price {
                 // Exit condition 1: Price reached middle band (mean reversion complete)
                 let exit_diff = price - middle;
-                // debug!(price = price, middle = middle, diff = exit_diff, "Checking Mean Reversion Exit");
+                debug!(price = price, middle = middle, diff = exit_diff, "Checking Mean Reversion Exit");
                 
                 if price >= middle {
                     debug!(price = price, middle = middle, "Mean Reversion Exit Triggered!");
@@ -134,9 +157,9 @@ impl Strategy for MeanReversionStrategy {
                     }]);
                 }
                 
-                // Exit condition 2: Take profit at 3% gain
+                // Exit condition 2: Take profit
                 let profit_pct = (price - entry) / entry * 100.0;
-                if profit_pct >= 3.0 {
+                if profit_pct >= self.config.take_profit {
                     self.last_position = SignalType::Hold;
                     self.entry_price = None;
                     return Some(vec![Signal {
@@ -151,8 +174,8 @@ impl Strategy for MeanReversionStrategy {
                     }]);
                 }
                 
-                // Exit condition 3: Stop loss at 5% loss
-                if profit_pct <= -5.0 {
+                // Exit condition 3: Stop loss
+                if profit_pct <= -self.config.stop_loss {
                     self.last_position = SignalType::Hold;
                     self.entry_price = None;
                     return Some(vec![Signal {
@@ -205,7 +228,7 @@ mod tests {
         let config = MeanReversionConfig::new(20, 2.0);
         assert!(config.validate().is_ok());
 
-        let invalid_config = MeanReversionConfig::new(0, 2.0);
+        let invalid_config = MeanReversionConfig::new_with_exits(0, 2.0, 3.0, 5.0);
         assert!(invalid_config.validate().is_err());
     }
 }
