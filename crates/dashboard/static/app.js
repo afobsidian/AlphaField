@@ -1875,3 +1875,229 @@ function initOptimizeSymbolSelect() {
     // Initial render
     filterSymbols('');
 }
+
+// ===========================
+// Auto-Optimize Function (Simplified UI)
+// ===========================
+
+async function runAutoOptimize() {
+    const resultsPlaceholder = document.getElementById("optimize-results-placeholder");
+    const allResults = document.getElementById("all-results");
+
+    // Show loading state
+    resultsPlaceholder.innerHTML = `
+        <span class="placeholder-icon">⏳</span>
+        <span>Running comprehensive optimization...</span>
+        <span style="font-size: 12px; margin-top: 8px; opacity: 0.7;">
+            This includes parameter sweep, sensitivity analysis, and walk-forward validation.
+            May take 30-60 seconds.
+        </span>
+    `;
+
+    // Disable button
+    const btn = document.querySelector("button[onclick='runAutoOptimize()']");
+    if (btn) btn.disabled = true;
+
+    try {
+        // Get symbol from optimize tab
+        const optimizeSymbol = document.getElementById("optimize-symbol").value;
+        if (!optimizeSymbol) {
+            throw new Error("Please select a trading symbol first");
+        }
+        
+        // Update AppState with the selected symbol
+        AppState.symbol = optimizeSymbol;
+        
+        const res = await fetch(`${API_BASE}/backtest/workflow`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                strategy: AppState.strategy,
+                symbol: optimizeSymbol,
+                interval: AppState.backtestInterval,
+                days: 730, // Use 2 years for comprehensive analysis
+                include_3d_sensitivity: true, // Always include 3D sensitivity
+                train_window_days: 252,
+                test_window_days: 63
+            })
+        });
+
+        const data = await res.json();
+
+        if (!data.success) {
+            throw new Error(data.error || "Workflow failed");
+        }
+
+        // Store results globally
+        comprehensiveWorkflowResults = data;
+
+        // Automatically apply optimized parameters to AppState
+        AppState.params = data.optimized_params;
+        updateContextBar();
+
+        // Hide placeholder, show all results
+        resultsPlaceholder.classList.add("hidden");
+        allResults.classList.remove("hidden");
+
+        // Update summary metrics
+        const robustnessScore = data.robustness_score;
+        const robustnessEl = document.getElementById("comp-robustness");
+        robustnessEl.textContent = robustnessScore.toFixed(1);
+        
+        // Color code the robustness score
+        if (robustnessScore >= 70) {
+            robustnessEl.style.color = "#10b981"; // Green
+        } else if (robustnessScore >= 50) {
+            robustnessEl.style.color = "#f59e0b"; // Orange
+        } else {
+            robustnessEl.style.color = "#ef4444"; // Red
+        }
+
+        document.getElementById("comp-sharpe").textContent = data.best_sharpe.toFixed(2);
+        document.getElementById("comp-wf-stability").textContent = data.walk_forward_stability_score.toFixed(2);
+        document.getElementById("comp-param-cv").textContent = data.parameter_dispersion.sharpe_cv.toFixed(2);
+        document.getElementById("comp-positive-pct").textContent = data.parameter_dispersion.positive_sharpe_pct.toFixed(0) + "%";
+        document.getElementById("comp-iterations").textContent = data.sweep_results.length;
+
+        // Show optimized parameters
+        const paramSummary = document.getElementById("comp-param-summary");
+        let paramsHtml = '<div style="margin-top: 12px; padding: 12px; background: rgba(16, 185, 129, 0.1); border-radius: 8px;">';
+        paramsHtml += '<strong style="color: #10b981;">✓ Optimized Parameters (Auto-Applied):</strong><br>';
+        for (const [key, value] of Object.entries(data.optimized_params)) {
+            paramsHtml += `<span style="display: inline-block; margin: 4px 8px 4px 0;">${key}: <strong>${value.toFixed(2)}</strong></span>`;
+        }
+        paramsHtml += "</div>";
+        paramSummary.innerHTML = paramsHtml;
+
+        // Walk-Forward inline metrics
+        const wfResult = data.walk_forward_validation || {};
+        const wfAgg = wfResult.aggregate_oos || {};
+        document.getElementById("wfa-stability-inline").textContent = (data.walk_forward_stability_score || 0).toFixed(2);
+        document.getElementById("wfa-avg-return-inline").textContent = ((wfAgg.mean_return || 0) * 100).toFixed(2) + "%";
+        document.getElementById("wfa-win-rate-inline").textContent = ((wfAgg.win_rate || 0) * 100).toFixed(0) + "%";
+        document.getElementById("wfa-oos-sharpe-inline").textContent = (wfAgg.mean_sharpe || 0).toFixed(2);
+
+        // Parameter dispersion details
+        const disp = data.parameter_dispersion || {};
+        document.getElementById("disp-sharpe-std").textContent = (disp.sharpe_std || 0).toFixed(3);
+        document.getElementById("disp-return-std").textContent = ((disp.return_std || 0) * 100).toFixed(2) + "%";
+        document.getElementById("disp-sharpe-range").textContent = (disp.sharpe_range || 0).toFixed(2);
+        document.getElementById("disp-return-range").textContent = ((disp.return_range || 0) * 100).toFixed(2) + "%";
+
+        // Render Parameter Sweep Chart
+        renderParameterSweepChart(data.sweep_results);
+
+        // Render 3D Sensitivity Heatmap
+        if (data.sensitivity_heatmap) {
+            renderSensitivityHeatmapChart(data.sensitivity_heatmap);
+        }
+
+        // Render Walk-Forward Chart
+        if (wfResult.windows) {
+            renderWalkForwardChart(wfResult.windows);
+        }
+
+    } catch (e) {
+        console.error("Auto-Optimize Error:", e);
+        resultsPlaceholder.innerHTML = `
+            <div class="placeholder-content" style="color: #ef4444;">
+                <span class="placeholder-icon">⚠️</span>
+                <span>Optimization Failed</span>
+                <span style="font-size: 14px; margin-top: 8px; max-width: 80%; text-align: center;">${e.message}</span>
+                <button class="btn-primary" style="margin-top: 16px;" onclick="runAutoOptimize()">Try Again</button>
+            </div>`;
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function renderParameterSweepChart(sweepResults) {
+    const data = [{
+        x: sweepResults.map(r => r.sharpe),
+        y: sweepResults.map(r => r.total_return * 100),
+        mode: "markers",
+        type: "scatter",
+        marker: {
+            size: 8,
+            color: sweepResults.map(r => r.score),
+            colorscale: "Viridis",
+            colorbar: {
+                title: "Score"
+            }
+        },
+        text: sweepResults.map(r => `Sharpe: ${r.sharpe.toFixed(2)}<br>Return: ${(r.total_return * 100).toFixed(2)}%<br>Trades: ${r.total_trades}`),
+        hovertemplate: "%{text}<extra></extra>"
+    }];
+
+    const layout = {
+        title: "",
+        xaxis: { title: "Sharpe Ratio" },
+        yaxis: { title: "Total Return (%)" },
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        font: { color: "#e5e7eb" }
+    };
+
+    Plotly.newPlot("param-sweep-chart", data, layout, { responsive: true });
+}
+
+function renderSensitivityHeatmapChart(heatmap) {
+    if (!heatmap) return;
+    
+    const data = [{
+        z: heatmap.sharpe_matrix,
+        x: heatmap.x_values,
+        y: heatmap.y_values,
+        type: "heatmap",
+        colorscale: "RdYlGn",
+        colorbar: {
+            title: "Sharpe"
+        }
+    }];
+
+    const layout = {
+        title: "",
+        xaxis: { title: heatmap.x_param },
+        yaxis: { title: heatmap.y_param },
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        font: { color: "#e5e7eb" }
+    };
+
+    Plotly.newPlot("sensitivity-chart", data, layout, { responsive: true });
+}
+
+function renderWalkForwardChart(windows) {
+    if (!windows || windows.length === 0) return;
+
+    const data = [
+        {
+            x: windows.map((w, i) => `Window ${i + 1}`),
+            y: windows.map(w => (w.oos_metrics.total_return || 0) * 100),
+            name: "OOS Return",
+            type: "bar",
+            marker: { color: "#60a5fa" }
+        },
+        {
+            x: windows.map((w, i) => `Window ${i + 1}`),
+            y: windows.map(w => w.oos_metrics.sharpe_ratio || 0),
+            name: "OOS Sharpe",
+            type: "bar",
+            marker: { color: "#34d399" },
+            yaxis: "y2"
+        }
+    ];
+
+    const layout = {
+        title: "",
+        xaxis: { title: "Walk-Forward Window" },
+        yaxis: { title: "Return (%)", side: "left" },
+        yaxis2: { title: "Sharpe Ratio", overlaying: "y", side: "right" },
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        font: { color: "#e5e7eb" },
+        barmode: "group"
+    };
+
+    Plotly.newPlot("walk-forward-chart", data, layout, { responsive: true });
+}
