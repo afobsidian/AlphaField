@@ -37,9 +37,7 @@ pub use ingestion_monitor::{
 };
 
 pub mod sentiment;
-pub use sentiment::{
-    FearGreedData, SentimentClassification, SentimentClient, SentimentIndicator,
-};
+pub use sentiment::{FearGreedData, SentimentClassification, SentimentClient, SentimentIndicator};
 
 // ============================================================================
 // COINLAYER API CLIENT
@@ -1234,49 +1232,51 @@ impl UnifiedDataClient {
                     let final_end = end_time.map(|t| t.timestamp_millis());
                     let max_bars_per_request = 1000;
                     let max_total_bars = 50000; // Safety limit
-                    
+
                     loop {
-                        let batch_result = client.get_klines(
-                            &pair, 
-                            interval, 
-                            current_start, 
-                            final_end, 
-                            Some(max_bars_per_request)
-                        ).await;
-                        
+                        let batch_result = client
+                            .get_klines(
+                                &pair,
+                                interval,
+                                current_start,
+                                final_end,
+                                Some(max_bars_per_request),
+                            )
+                            .await;
+
                         match batch_result {
                             Ok(bars) => {
                                 if bars.is_empty() {
                                     break; // No more data
                                 }
-                                
+
                                 let batch_len = bars.len();
                                 let last_ts = bars.last().map(|b| b.timestamp.timestamp_millis());
-                                
+
                                 all_bars.extend(bars);
                                 tracing::info!(
                                     batch_size = batch_len,
                                     total = all_bars.len(),
                                     "Fetched batch of Binance bars"
                                 );
-                                
+
                                 // Check if we've reached the end or hit limits
                                 if batch_len < max_bars_per_request as usize {
                                     break; // Received less than requested, must be at end
                                 }
-                                
+
                                 if all_bars.len() >= max_total_bars as usize {
                                     tracing::warn!("Hit max bar limit of {}", max_total_bars);
                                     break;
                                 }
-                                
+
                                 // Move start to after last bar for next batch
                                 if let Some(last) = last_ts {
                                     current_start = Some(last + 1); // +1ms to avoid duplicate
                                 } else {
                                     break;
                                 }
-                                
+
                                 // Small delay to avoid rate limiting
                                 tokio::time::sleep(Duration::from_millis(100)).await;
                             }
@@ -1296,7 +1296,7 @@ impl UnifiedDataClient {
                             }
                         }
                     }
-                    
+
                     if !all_bars.is_empty() {
                         tracing::info!(total = all_bars.len(), "Completed paginated Binance fetch");
                         return Ok(all_bars);
@@ -1357,7 +1357,7 @@ impl UnifiedDataClient {
                                 Err(e) => {
                                     tracing::warn!(source = "Coinlayer", error = %e, "Failed to fetch bars");
                                     last_error = Some(e);
-                                },
+                                }
                             }
                         } else {
                             // Coinlayer doesn't support intraday
@@ -1435,18 +1435,21 @@ impl UnifiedDataClient {
     pub async fn get_exchange_info(&self) -> Result<Vec<String>> {
         let key = self.binance_keys.get_next_key();
         let client = BinanceClient::new(key, None);
-        
+
         match client.get_exchange_info().await {
             Ok(info) => {
                 // Extract unique base assets from USDT pairs
-                let mut symbols: Vec<String> = info.symbols
+                let mut symbols: Vec<String> = info
+                    .symbols
                     .into_iter()
                     .filter(|s| s.quote_asset == "USDT" && s.status == "TRADING")
                     .map(|s| s.base_asset)
                     .collect();
-                
+
                 // Sort with popular first
-                let popular = ["BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "AVAX", "DOT", "LINK", "MATIC"];
+                let popular = [
+                    "BTC", "ETH", "SOL", "XRP", "ADA", "DOGE", "AVAX", "DOT", "LINK", "MATIC",
+                ];
                 symbols.sort_by(|a, b| {
                     let a_pop = popular.iter().position(|p| p == a);
                     let b_pop = popular.iter().position(|p| p == b);
@@ -1457,10 +1460,10 @@ impl UnifiedDataClient {
                         (None, None) => a.cmp(b),
                     }
                 });
-                
+
                 // Deduplicate
                 symbols.dedup();
-                
+
                 Ok(symbols)
             }
             Err(e) => Err(e),

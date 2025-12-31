@@ -257,15 +257,19 @@ RUST_LOG=info
 
 | Command | Description |
 |---------|-------------|
-| `make build` | Build all crates |
+| `make build` | Build all crates (debug) |
 | `make test` | Run all tests |
 | `make fmt` | Format code |
-| `make lint` | Run clippy |
+| `make lint` | Run Clippy (matches CI) |
+| `make ci` | Run local CI (fmt + lint + test) |
 | `make clean` | Remove build artifacts |
-| `make ci` | Run local CI (fmt+lint+test) |
+| `make run-demo` | Run data demo |
+| `make run-backtest` | Run Golden Cross backtest example |
+| `make run-dashboard` | Run dashboard server |
 | `make docker-build` | Build Docker image |
 | `make docker-up` | Start local Docker env |
 | `make docker-down` | Stop local Docker env |
+| `make docker-reset` | Reset local Docker env |
 
 ### Running Examples
 
@@ -274,10 +278,10 @@ RUST_LOG=info
 cargo run --bin data-demo --release
 
 # Golden Cross backtest
-cargo run --example golden_cross_backtest -p alphafield-backtest
+cargo run --example golden_cross_backtest -p alphafield-backtest --release
 
 # Dashboard server
-cargo run --bin dashboard_server
+cargo run --bin dashboard_server --release
 ```
 
 ### Docker Deployment

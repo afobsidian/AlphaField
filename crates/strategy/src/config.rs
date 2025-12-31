@@ -48,7 +48,7 @@ impl GoldenCrossConfig {
     /// # Example
     /// ```
     /// use alphafield_strategy::config::{GoldenCrossConfig, StrategyConfig};
-    /// let config = GoldenCrossConfig::new(10, 30);
+    /// let config = GoldenCrossConfig::new(10, 30, 5.0, 5.0);
     /// assert!(config.validate().is_ok());
     /// ```
     pub fn new(fast_period: usize, slow_period: usize, take_profit: f64, stop_loss: f64) -> Self {
@@ -136,10 +136,16 @@ impl RsiConfig {
     /// # Example
     /// ```
     /// use alphafield_strategy::config::{RsiConfig, StrategyConfig};
-    /// let config = RsiConfig::new(14, 30.0, 70.0);
+    /// let config = RsiConfig::new(14, 30.0, 70.0, 3.0, 5.0);
     /// assert!(config.validate().is_ok());
     /// ```
-    pub fn new(period: usize, lower_bound: f64, upper_bound: f64, take_profit: f64, stop_loss: f64) -> Self {
+    pub fn new(
+        period: usize,
+        lower_bound: f64,
+        upper_bound: f64,
+        take_profit: f64,
+        stop_loss: f64,
+    ) -> Self {
         Self {
             period,
             lower_bound,

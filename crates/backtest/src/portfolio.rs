@@ -162,36 +162,47 @@ impl Portfolio {
             .positions
             .entry(symbol.to_string())
             .or_insert(Position::new(symbol, 0.0, 0.0));
-        
+
         let _entry_price_before = position.avg_price;
         position.update(quantity, price);
 
         // Track trades: opening new position
         if prev_quantity.abs() < 1e-9 && quantity.abs() > 1e-9 {
             // New position opened
-            let side = if quantity > 0.0 { TradeSide::Long } else { TradeSide::Short };
+            let side = if quantity > 0.0 {
+                TradeSide::Long
+            } else {
+                TradeSide::Short
+            };
             let entry_time = Utc.timestamp_millis_opt(self.current_timestamp).unwrap();
-            
-            self.open_trades.insert(symbol.to_string(), OpenTrade {
-                symbol: symbol.to_string(),
-                side,
-                entry_time,
-                entry_price: price,
-                quantity: quantity.abs(),
-                fees_paid: fee,
-                best_price: price,
-                worst_price: price,
-            });
+
+            self.open_trades.insert(
+                symbol.to_string(),
+                OpenTrade {
+                    symbol: symbol.to_string(),
+                    side,
+                    entry_time,
+                    entry_price: price,
+                    quantity: quantity.abs(),
+                    fees_paid: fee,
+                    best_price: price,
+                    worst_price: price,
+                },
+            );
         } else if position.quantity.abs() < 1e-9 {
             // Position closed - record completed trade
             if let Some(open) = self.open_trades.remove(symbol) {
                 let exit_time = Utc.timestamp_millis_opt(self.current_timestamp).unwrap();
                 let duration_secs = (exit_time - open.entry_time).num_seconds();
-                
+
                 // Calculate PnL
                 let pnl = match open.side {
-                    TradeSide::Long => (price - open.entry_price) * open.quantity - open.fees_paid - fee,
-                    TradeSide::Short => (open.entry_price - price) * open.quantity - open.fees_paid - fee,
+                    TradeSide::Long => {
+                        (price - open.entry_price) * open.quantity - open.fees_paid - fee
+                    }
+                    TradeSide::Short => {
+                        (open.entry_price - price) * open.quantity - open.fees_paid - fee
+                    }
                 };
 
                 // Calculate MAE/MFE as dollar amounts
@@ -224,7 +235,8 @@ impl Portfolio {
                     exit_reason: exit_reason.or_else(|| Some("Signal".to_string())),
                 });
             }
-        } else if (prev_quantity > 0.0 && quantity > 0.0) || (prev_quantity < 0.0 && quantity < 0.0) {
+        } else if (prev_quantity > 0.0 && quantity > 0.0) || (prev_quantity < 0.0 && quantity < 0.0)
+        {
             // Adding to existing position - update fees
             if let Some(open) = self.open_trades.get_mut(symbol) {
                 open.fees_paid += fee;

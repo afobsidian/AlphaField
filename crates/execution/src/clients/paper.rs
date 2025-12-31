@@ -20,15 +20,19 @@ impl PaperTradingClient {
     }
 }
 
+impl Default for PaperTradingClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[async_trait]
 impl ExecutionService for PaperTradingClient {
     async fn submit_order(&self, order: &Order) -> Result<String> {
-        let mut orders = self.orders.lock().map_err(|_| {
-            QuantError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Lock poisoned",
-            ))
-        })?;
+        let mut orders = self
+            .orders
+            .lock()
+            .map_err(|_| QuantError::Io(std::io::Error::other("Lock poisoned")))?;
 
         // Generate a simulated Order ID
         let order_id = Uuid::new_v4().to_string();
@@ -50,12 +54,10 @@ impl ExecutionService for PaperTradingClient {
     }
 
     async fn cancel_order(&self, order_id: &str, _symbol: &str) -> Result<()> {
-        let mut orders = self.orders.lock().map_err(|_| {
-            QuantError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Lock poisoned",
-            ))
-        })?;
+        let mut orders = self
+            .orders
+            .lock()
+            .map_err(|_| QuantError::Io(std::io::Error::other("Lock poisoned")))?;
 
         if let Some(order) = orders.get_mut(order_id) {
             if order.status == OrderStatus::New || order.status == OrderStatus::PartiallyFilled {
@@ -76,12 +78,10 @@ impl ExecutionService for PaperTradingClient {
     }
 
     async fn get_order(&self, order_id: &str, _symbol: &str) -> Result<Order> {
-        let orders = self.orders.lock().map_err(|_| {
-            QuantError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Lock poisoned",
-            ))
-        })?;
+        let orders = self
+            .orders
+            .lock()
+            .map_err(|_| QuantError::Io(std::io::Error::other("Lock poisoned")))?;
 
         orders
             .get(order_id)

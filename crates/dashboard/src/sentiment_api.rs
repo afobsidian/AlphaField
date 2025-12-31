@@ -107,7 +107,11 @@ pub async fn get_sentiment_history(
 
     match client.get_history(query.days).await {
         Ok(data) => {
-            info!(days = query.days, count = data.len(), "Fetched sentiment history");
+            info!(
+                days = query.days,
+                count = data.len(),
+                "Fetched sentiment history"
+            );
 
             let indicator = SentimentIndicator::new(data.clone());
             let now = chrono::Utc::now();
@@ -120,12 +124,8 @@ pub async fn get_sentiment_history(
                 let max = *values.iter().max().unwrap_or(&0);
                 let current = data.first().map(|d| d.value).unwrap_or(0);
 
-                let days_in_fear = data.iter()
-                    .filter(|d| d.classification.is_fear())
-                    .count();
-                let days_in_greed = data.iter()
-                    .filter(|d| d.classification.is_greed())
-                    .count();
+                let days_in_fear = data.iter().filter(|d| d.classification.is_fear()).count();
+                let days_in_greed = data.iter().filter(|d| d.classification.is_greed()).count();
                 let days_neutral = data.len() - days_in_fear - days_in_greed;
 
                 Some(SentimentStats {

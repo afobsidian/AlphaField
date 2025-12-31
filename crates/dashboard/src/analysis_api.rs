@@ -7,7 +7,7 @@ use tracing::{info, instrument, warn};
 
 use alphafield_backtest::{
     monte_carlo::{MonteCarloConfig, MonteCarloSimulator, Trade as McTrade},
-    sensitivity::{HeatmapData, SensitivityAnalyzer, SensitivityConfig, ParameterRange},
+    sensitivity::{HeatmapData, ParameterRange, SensitivityAnalyzer, SensitivityConfig},
     walk_forward::{WalkForwardAnalyzer, WalkForwardConfig, WalkForwardResult},
     CorrelationAnalyzer, CorrelationConfig, CorrelationResult, MonteCarloResult, StrategyAdapter,
 };
@@ -54,7 +54,7 @@ pub async fn run_monte_carlo(
     Json(req): Json<MonteCarloRequest>,
 ) -> Json<MonteCarloResponse> {
     info!("Monte Carlo API request received");
-    
+
     if req.trades.is_empty() {
         warn!("No trades provided for Monte Carlo simulation");
         return Json(MonteCarloResponse {
@@ -84,7 +84,10 @@ pub async fn run_monte_carlo(
     let simulator = MonteCarloSimulator::new(config);
     let result = simulator.simulate(&trades);
 
-    info!(simulations = result.num_simulations, "Monte Carlo simulation completed");
+    info!(
+        simulations = result.num_simulations,
+        "Monte Carlo simulation completed"
+    );
 
     Json(MonteCarloResponse {
         success: true,
@@ -124,7 +127,7 @@ pub async fn calculate_correlation(
     Json(req): Json<CorrelationRequest>,
 ) -> Json<CorrelationResponse> {
     info!("Correlation API request received");
-    
+
     if req.curves.len() < 2 {
         warn!("Insufficient curves for correlation analysis");
         return Json(CorrelationResponse {
@@ -220,7 +223,10 @@ pub async fn run_sensitivity(
     State(_state): State<Arc<AppState>>,
     Json(req): Json<SensitivityRequest>,
 ) -> Json<SensitivityResponse> {
-    info!("Sensitivity Analysis requested for {} {}", req.symbol, req.strategy);
+    info!(
+        "Sensitivity Analysis requested for {} {}",
+        req.symbol, req.strategy
+    );
 
     // 1. Fetch Data
     let days = if req.days > 0 { req.days } else { 180 };
@@ -231,20 +237,24 @@ pub async fn run_sensitivity(
         req.symbol.clone(),
         req.interval.clone(),
         start_time,
-        end_time
-    ).await {
+        end_time,
+    )
+    .await
+    {
         Ok(res) => res,
-        Err(e) => return Json(SensitivityResponse {
-            success: false,
-            results: vec![],
-            best_params: None,
-            heatmap: None,
-            error: Some(format!("Failed to fetch data: {}", e)),
-        }),
+        Err(e) => {
+            return Json(SensitivityResponse {
+                success: false,
+                results: vec![],
+                best_params: None,
+                heatmap: None,
+                error: Some(format!("Failed to fetch data: {}", e)),
+            })
+        }
     };
 
     if bars.len() < 100 {
-         return Json(SensitivityResponse {
+        return Json(SensitivityResponse {
             success: false,
             results: vec![],
             best_params: None,
@@ -265,76 +275,91 @@ pub async fn run_sensitivity(
     let strategy_name = req.strategy.clone();
     let fixed_params = req.fixed_params.clone();
     let req_symbol = req.symbol.clone();
-    
-    let range_x = ParameterRange::new(&req.param.name, req.param.min, req.param.max, req.param.step);
-    
+
+    let range_x = ParameterRange::new(
+        &req.param.name,
+        req.param.min,
+        req.param.max,
+        req.param.step,
+    );
+
     let result_raw = if let Some(py) = &req.param_y {
         let range_y = ParameterRange::new(&py.name, py.min, py.max, py.step);
         let sym = req_symbol.clone();
         let s_name = strategy_name.clone();
-        
+
         // Use create_backtest which returns properly wrapped strategies
         let factory_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             analyzer.analyze_2d(&bars, &req.symbol, &range_x, &range_y, |v1, v2| {
                 let mut p = fixed_params.clone();
                 p.insert(req.param.name.clone(), v1);
                 p.insert(py.name.clone(), v2);
-                
+
                 // Use create_backtest for properly adapted strategies
                 // If invalid params, return strategy with default params but mark as invalid or let it fail?
                 // Better to return None and handle it in result processing
                 StrategyFactory::create_backtest(&s_name, &p, &sym, 100_000.0)
             })
         }));
-        
+
         match factory_result {
             Ok(res) => res,
-            Err(_) => return Json(SensitivityResponse {
-                success: false,
-                results: vec![],
-                best_params: None,
-                heatmap: None,
-                error: Some("Strategy creation failed - invalid parameter combination".to_string()),
-            }),
+            Err(_) => {
+                return Json(SensitivityResponse {
+                    success: false,
+                    results: vec![],
+                    best_params: None,
+                    heatmap: None,
+                    error: Some(
+                        "Strategy creation failed - invalid parameter combination".to_string(),
+                    ),
+                })
+            }
         }
     } else {
         let sym = req_symbol.clone();
         let s_name = strategy_name.clone();
-        
+
         let factory_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             analyzer.analyze_1d(&bars, &req.symbol, &range_x, |v1| {
                 let mut p = fixed_params.clone();
                 p.insert(req.param.name.clone(), v1);
-                
+
                 // Use create_backtest for properly adapted strategies
                 StrategyFactory::create_backtest(&s_name, &p, &sym, 100_000.0)
             })
         }));
-        
+
         match factory_result {
             Ok(res) => res,
-            Err(_) => return Json(SensitivityResponse {
-                success: false,
-                results: vec![],
-                best_params: None,
-                heatmap: None,
-                error: Some("Strategy creation failed - invalid parameter combination".to_string()),
-            }),
+            Err(_) => {
+                return Json(SensitivityResponse {
+                    success: false,
+                    results: vec![],
+                    best_params: None,
+                    heatmap: None,
+                    error: Some(
+                        "Strategy creation failed - invalid parameter combination".to_string(),
+                    ),
+                })
+            }
         }
     };
 
     match result_raw {
         Ok(res) => {
             // Convert to response format
-             let results: Vec<ParameterResultOutput> = res.results.iter().map(|r| {
-                ParameterResultOutput {
+            let results: Vec<ParameterResultOutput> = res
+                .results
+                .iter()
+                .map(|r| ParameterResultOutput {
                     params: r.params.clone(),
                     sharpe_ratio: r.metrics.sharpe_ratio,
                     total_return: r.metrics.total_return,
                     max_drawdown: r.metrics.max_drawdown,
-                }
-            }).collect();
-            
+                })
+                .collect();
+
             let best_params = res.best_sharpe.map(|r| r.params);
 
             Json(SensitivityResponse {
@@ -344,14 +369,14 @@ pub async fn run_sensitivity(
                 heatmap: res.heatmap,
                 error: None,
             })
-        },
+        }
         Err(e) => Json(SensitivityResponse {
             success: false,
             results: vec![],
             best_params: None,
             heatmap: None,
             error: Some(e),
-        })
+        }),
     }
 }
 // ============= Walk-Forward API =============
@@ -387,14 +412,18 @@ pub async fn run_walk_forward(
         req.symbol.clone(),
         req.interval.clone(),
         start_time,
-        end_time
-    ).await {
+        end_time,
+    )
+    .await
+    {
         Ok(res) => res,
-        Err(e) => return Json(WalkForwardResponse {
-            success: false,
-            result: None,
-            error: Some(format!("Failed to fetch data: {}", e)),
-        }),
+        Err(e) => {
+            return Json(WalkForwardResponse {
+                success: false,
+                result: None,
+                error: Some(format!("Failed to fetch data: {}", e)),
+            })
+        }
     };
 
     info!(bars_fetched = bars.len(), source = %data_status.source, "Data fetch complete");
@@ -408,9 +437,15 @@ pub async fn run_walk_forward(
         "1h" => 24,
         "4h" => 6,
         "1d" => 1,
-        _ => if req.interval.ends_with('h') { 24 } else { 1 }, // Fallback
+        _ => {
+            if req.interval.ends_with('h') {
+                24
+            } else {
+                1
+            }
+        } // Fallback
     };
-    
+
     let train_window_bars = req.train_window_days.unwrap_or(365) * bars_per_day;
     let test_window_bars = req.test_window_days.unwrap_or(90) * bars_per_day;
     let required_bars = train_window_bars + test_window_bars;
@@ -425,7 +460,7 @@ pub async fn run_walk_forward(
             )),
         });
     }
-    
+
     let config = WalkForwardConfig {
         train_window: train_window_bars,
         test_window: test_window_bars,
@@ -438,21 +473,21 @@ pub async fn run_walk_forward(
     let strategy_name = req.strategy.clone();
     let strategy_params = req.params.clone();
     let req_symbol = req.symbol.clone();
-    
+
     // Safely handle strategy creation
     if StrategyFactory::create(&strategy_name, &strategy_params).is_none() {
-         return Json(WalkForwardResponse {
+        return Json(WalkForwardResponse {
             success: false,
             result: None,
             error: Some(format!("Invalid strategy parameters for {}", strategy_name)),
         });
     }
-    
+
     let factory = move || -> Box<dyn BacktestStrategy> {
         // We verified it above, but factory runs in thread, so unwrap is "safer" but lets still be careful
         let core_strat = StrategyFactory::create(&strategy_name, &strategy_params)
             .expect("Strategy creation failed in factory execution");
-        
+
         let adapter = StrategyAdapter::new(core_strat, req_symbol.clone(), 100_000.0);
         Box::new(adapter)
     };

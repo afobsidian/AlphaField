@@ -37,7 +37,7 @@ pub enum SentimentClassification {
 
 impl SentimentClassification {
     /// Parse from API string
-    pub fn from_str(s: &str) -> Self {
+    pub fn parse(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "extreme fear" => Self::ExtremeFear,
             "fear" => Self::Fear,
@@ -143,9 +143,10 @@ impl SentimentClient {
     /// Fetch the current Fear & Greed Index value
     pub async fn get_current(&self) -> Result<FearGreedData> {
         let history = self.get_history(1).await?;
-        history.into_iter().next().ok_or_else(|| {
-            QuantError::Api("No sentiment data returned".to_string())
-        })
+        history
+            .into_iter()
+            .next()
+            .ok_or_else(|| QuantError::Api("No sentiment data returned".to_string()))
     }
 
     /// Fetch historical Fear & Greed Index data
@@ -154,7 +155,7 @@ impl SentimentClient {
     /// * `days` - Number of days of history to fetch (0 = all available)
     pub async fn get_history(&self, days: u32) -> Result<Vec<FearGreedData>> {
         let url = format!("{}/fng/", self.base_url);
-        
+
         debug!(days = days, "Fetching Fear & Greed history");
 
         let response = self
@@ -190,11 +191,11 @@ impl SentimentClient {
                 let timestamp_secs: i64 = d.timestamp.parse().ok()?;
                 let timestamp = Utc.timestamp_opt(timestamp_secs, 0).single()?;
                 let value: u8 = d.value.parse().ok()?;
-                
+
                 Some(FearGreedData {
                     timestamp,
                     value,
-                    classification: SentimentClassification::from_str(&d.value_classification),
+                    classification: SentimentClassification::parse(&d.value_classification),
                 })
             })
             .collect();
@@ -259,7 +260,8 @@ impl SentimentIndicator {
 
     /// Calculate simple moving average of sentiment values
     pub fn sma(&self, timestamp: DateTime<Utc>, period: usize) -> Option<f64> {
-        let relevant: Vec<_> = self.data
+        let relevant: Vec<_> = self
+            .data
             .iter()
             .filter(|d| d.timestamp <= timestamp)
             .collect();
@@ -305,15 +307,20 @@ impl SentimentIndicator {
     /// Detect sentiment divergence from price action
     /// Returns positive value if price up but sentiment down (bullish divergence)
     /// Returns negative value if price down but sentiment up (bearish divergence)
-    pub fn divergence(&self, timestamp: DateTime<Utc>, price_change_pct: f64, lookback_days: usize) -> Option<f64> {
+    pub fn divergence(
+        &self,
+        timestamp: DateTime<Utc>,
+        price_change_pct: f64,
+        lookback_days: usize,
+    ) -> Option<f64> {
         let current = self.value_at(timestamp)?;
-        
+
         // Get value from lookback_days ago
         let past_timestamp = timestamp - chrono::Duration::days(lookback_days as i64);
         let past = self.value_at(past_timestamp)?;
-        
+
         let sentiment_change = current as f64 - past as f64;
-        
+
         // Divergence: price and sentiment moving in opposite directions
         if price_change_pct > 0.0 && sentiment_change < 0.0 {
             // Price up, sentiment down = bullish divergence
@@ -331,7 +338,7 @@ impl SentimentIndicator {
         let current = self.value_at(timestamp)? as f64;
         let past_timestamp = timestamp - chrono::Duration::days(period as i64);
         let past = self.value_at(past_timestamp)? as f64;
-        
+
         Some(current - past)
     }
 }
@@ -342,11 +349,26 @@ mod tests {
 
     #[test]
     fn test_classification_from_value() {
-        assert_eq!(SentimentClassification::from_value(10), SentimentClassification::ExtremeFear);
-        assert_eq!(SentimentClassification::from_value(30), SentimentClassification::Fear);
-        assert_eq!(SentimentClassification::from_value(50), SentimentClassification::Neutral);
-        assert_eq!(SentimentClassification::from_value(65), SentimentClassification::Greed);
-        assert_eq!(SentimentClassification::from_value(85), SentimentClassification::ExtremeGreed);
+        assert_eq!(
+            SentimentClassification::from_value(10),
+            SentimentClassification::ExtremeFear
+        );
+        assert_eq!(
+            SentimentClassification::from_value(30),
+            SentimentClassification::Fear
+        );
+        assert_eq!(
+            SentimentClassification::from_value(50),
+            SentimentClassification::Neutral
+        );
+        assert_eq!(
+            SentimentClassification::from_value(65),
+            SentimentClassification::Greed
+        );
+        assert_eq!(
+            SentimentClassification::from_value(85),
+            SentimentClassification::ExtremeGreed
+        );
     }
 
     #[test]
@@ -379,7 +401,7 @@ mod tests {
 
         let indicator = SentimentIndicator::new(data);
         let ts = Utc.with_ymd_and_hms(2024, 1, 3, 12, 0, 0).unwrap();
-        
+
         let sma3 = indicator.sma(ts, 3).unwrap();
         assert!((sma3 - 33.33).abs() < 0.1);
     }
@@ -400,11 +422,11 @@ mod tests {
         ];
 
         let indicator = SentimentIndicator::new(data);
-        
+
         // Query between two data points should return earlier value
         let ts = Utc.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
         assert_eq!(indicator.value_at(ts), Some(25));
-        
+
         // Query after last data point should return last value
         let ts = Utc.with_ymd_and_hms(2024, 1, 3, 0, 0, 0).unwrap();
         assert_eq!(indicator.value_at(ts), Some(75));

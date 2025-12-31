@@ -19,7 +19,7 @@ use alphafield_core::{Bar, Signal, SignalType, Strategy};
 /// use alphafield_strategy::strategies::GoldenCrossStrategy;
 /// use alphafield_strategy::config::GoldenCrossConfig;
 ///
-/// let config = GoldenCrossConfig::new(10, 30);
+/// let config = GoldenCrossConfig::new(10, 30, 5.0, 5.0);
 /// let strategy = GoldenCrossStrategy::from_config(config);
 /// ```
 pub struct GoldenCrossStrategy {
@@ -93,12 +93,15 @@ impl Strategy for GoldenCrossStrategy {
                             symbol: "UNKNOWN".to_string(),
                             signal_type: SignalType::Sell,
                             strength: 1.0,
-                            metadata: Some(format!("Death Cross: Fast {:.2} < Slow {:.2}", fast, slow)),
+                            metadata: Some(format!(
+                                "Death Cross: Fast {:.2} < Slow {:.2}",
+                                fast, slow
+                            )),
                         }]);
                     }
                 }
             }
-            
+
             // Exit 2: Take profit
             let profit_pct = (price - entry) / entry * 100.0;
             if profit_pct >= self.config.take_profit {
@@ -113,7 +116,7 @@ impl Strategy for GoldenCrossStrategy {
                     metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
                 }]);
             }
-            
+
             // Exit 3: Stop loss
             if profit_pct <= -self.config.stop_loss {
                 self.entry_price = None;
@@ -158,7 +161,7 @@ mod tests {
 
     #[test]
     fn test_golden_cross_creation() {
-        let strategy = GoldenCrossStrategy::new(10, 30, 5.0, 5.0);
+        let strategy = GoldenCrossStrategy::new(10, 30);
         assert_eq!(strategy.name(), "Golden Cross");
     }
 

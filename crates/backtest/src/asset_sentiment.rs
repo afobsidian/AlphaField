@@ -28,10 +28,10 @@ pub struct AssetSentiment {
 /// RSI zone classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
 pub enum RsiZone {
-    Oversold,       // RSI < 30
+    Oversold, // RSI < 30
     #[default]
-    Neutral,        // 30 <= RSI <= 70
-    Overbought,     // RSI > 70
+    Neutral, // 30 <= RSI <= 70
+    Overbought, // RSI > 70
 }
 
 impl RsiZone {
@@ -57,12 +57,12 @@ impl RsiZone {
 /// Momentum zone classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
 pub enum MomentumZone {
-    StrongDown,     // < -5%
-    WeakDown,       // -5% to -1%
+    StrongDown, // < -5%
+    WeakDown,   // -5% to -1%
     #[default]
-    Flat,           // -1% to +1%
-    WeakUp,         // +1% to +5%
-    StrongUp,       // > +5%
+    Flat, // -1% to +1%
+    WeakUp,     // +1% to +5%
+    StrongUp,   // > +5%
 }
 
 impl MomentumZone {
@@ -94,12 +94,12 @@ impl MomentumZone {
 /// Overall asset sentiment classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
 pub enum AssetSentimentClassification {
-    VeryBearish,    // < -50
-    Bearish,        // -50 to -20
+    VeryBearish, // < -50
+    Bearish,     // -50 to -20
     #[default]
-    Neutral,        // -20 to +20
-    Bullish,        // +20 to +50
-    VeryBullish,    // > +50
+    Neutral, // -20 to +20
+    Bullish,     // +20 to +50
+    VeryBullish, // > +50
 }
 
 impl AssetSentimentClassification {
@@ -161,7 +161,12 @@ impl AssetSentimentCalculator {
 
     /// Calculate sentiment for the most recent bar given historical context
     pub fn calculate(&self, bars: &[Bar]) -> AssetSentiment {
-        if bars.len() < self.rsi_period.max(self.momentum_period).max(self.volume_period) {
+        if bars.len()
+            < self
+                .rsi_period
+                .max(self.momentum_period)
+                .max(self.volume_period)
+        {
             return AssetSentiment::default();
         }
 
@@ -171,11 +176,11 @@ impl AssetSentimentCalculator {
 
         // Composite score: weighted combination
         // RSI contribution: -50 to +50 based on deviation from 50
-        let rsi_score = (50.0 - rsi) * -1.0; // Oversold = bullish (+), Overbought = bearish (-)
-        
+        let rsi_score = -(50.0 - rsi); // Oversold = bullish (+), Overbought = bearish (-)
+
         // Momentum contribution: direct percentage scaled
         let momentum_score = momentum * 5.0; // Scale momentum to -50 to +50 range roughly
-        
+
         // Volume contribution: high volume confirms trend
         let volume_score = if momentum > 0.0 {
             (volume_ratio - 1.0) * 10.0 // High volume + positive momentum = bullish
@@ -183,8 +188,8 @@ impl AssetSentimentCalculator {
             (volume_ratio - 1.0) * -10.0 // High volume + negative momentum = bearish
         };
 
-        let composite_score = (rsi_score * 0.4 + momentum_score * 0.4 + volume_score * 0.2)
-            .clamp(-100.0, 100.0);
+        let composite_score =
+            (rsi_score * 0.4 + momentum_score * 0.4 + volume_score * 0.2).clamp(-100.0, 100.0);
 
         AssetSentiment {
             rsi,
@@ -199,8 +204,11 @@ impl AssetSentimentCalculator {
 
     /// Calculate sentiment for each bar in the series
     pub fn calculate_series(&self, bars: &[Bar]) -> Vec<(i64, AssetSentiment)> {
-        let min_period = self.rsi_period.max(self.momentum_period).max(self.volume_period);
-        
+        let min_period = self
+            .rsi_period
+            .max(self.momentum_period)
+            .max(self.volume_period);
+
         if bars.len() < min_period {
             return vec![];
         }
@@ -274,7 +282,8 @@ impl AssetSentimentCalculator {
         let avg_volume: f64 = bars[bars.len() - self.volume_period - 1..bars.len() - 1]
             .iter()
             .map(|b| b.volume)
-            .sum::<f64>() / self.volume_period as f64;
+            .sum::<f64>()
+            / self.volume_period as f64;
 
         if avg_volume == 0.0 {
             return 1.0;
@@ -303,20 +312,25 @@ impl AssetSentimentSummary {
             return Self::default();
         }
 
-        let current = sentiments.last().map(|(_, s)| s.clone()).unwrap_or_default();
-        
+        let current = sentiments
+            .last()
+            .map(|(_, s)| s.clone())
+            .unwrap_or_default();
+
         let rsi_values: Vec<f64> = sentiments.iter().map(|(_, s)| s.rsi).collect();
         let avg_rsi = rsi_values.iter().sum::<f64>() / rsi_values.len() as f64;
         let min_rsi = rsi_values.iter().cloned().fold(f64::INFINITY, f64::min);
         let max_rsi = rsi_values.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        
-        let avg_momentum = sentiments.iter().map(|(_, s)| s.momentum).sum::<f64>() 
-            / sentiments.len() as f64;
-        
-        let bullish_days = sentiments.iter()
+
+        let avg_momentum =
+            sentiments.iter().map(|(_, s)| s.momentum).sum::<f64>() / sentiments.len() as f64;
+
+        let bullish_days = sentiments
+            .iter()
             .filter(|(_, s)| s.classification.is_bullish())
             .count();
-        let bearish_days = sentiments.iter()
+        let bearish_days = sentiments
+            .iter()
             .filter(|(_, s)| s.classification.is_bearish())
             .count();
         let neutral_days = sentiments.len() - bullish_days - bearish_days;
@@ -340,14 +354,20 @@ mod tests {
     use chrono::{TimeZone, Utc};
 
     fn make_bars(closes: &[f64]) -> Vec<Bar> {
-        closes.iter().enumerate().map(|(i, &close)| Bar {
-            timestamp: Utc.with_ymd_and_hms(2024, 1, 1 + i as u32, 0, 0, 0).unwrap(),
-            open: close,
-            high: close * 1.01,
-            low: close * 0.99,
-            close,
-            volume: 1000.0,
-        }).collect()
+        closes
+            .iter()
+            .enumerate()
+            .map(|(i, &close)| Bar {
+                timestamp: Utc
+                    .with_ymd_and_hms(2024, 1, 1 + i as u32, 0, 0, 0)
+                    .unwrap(),
+                open: close,
+                high: close * 1.01,
+                low: close * 0.99,
+                close,
+                volume: 1000.0,
+            })
+            .collect()
     }
 
     #[test]
@@ -371,11 +391,14 @@ mod tests {
         // Create an uptrending price series
         let closes: Vec<f64> = (0..30).map(|i| 100.0 + i as f64 * 2.0).collect();
         let bars = make_bars(&closes);
-        
+
         let calculator = AssetSentimentCalculator::default();
         let sentiment = calculator.calculate(&bars);
-        
-        assert!(sentiment.momentum > 0.0, "Momentum should be positive in uptrend");
+
+        assert!(
+            sentiment.momentum > 0.0,
+            "Momentum should be positive in uptrend"
+        );
         assert!(sentiment.rsi > 50.0, "RSI should be above 50 in uptrend");
     }
 
@@ -384,11 +407,14 @@ mod tests {
         // Create a downtrending price series
         let closes: Vec<f64> = (0..30).map(|i| 200.0 - i as f64 * 2.0).collect();
         let bars = make_bars(&closes);
-        
+
         let calculator = AssetSentimentCalculator::default();
         let sentiment = calculator.calculate(&bars);
-        
-        assert!(sentiment.momentum < 0.0, "Momentum should be negative in downtrend");
+
+        assert!(
+            sentiment.momentum < 0.0,
+            "Momentum should be negative in downtrend"
+        );
         assert!(sentiment.rsi < 50.0, "RSI should be below 50 in downtrend");
     }
 }

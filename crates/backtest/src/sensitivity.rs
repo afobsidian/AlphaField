@@ -238,17 +238,32 @@ impl SensitivityAnalyzer {
     ) -> SensitivityResult {
         let best_sharpe = results
             .iter()
-            .max_by(|a, b| a.metrics.sharpe_ratio.partial_cmp(&b.metrics.sharpe_ratio).unwrap())
+            .max_by(|a, b| {
+                a.metrics
+                    .sharpe_ratio
+                    .partial_cmp(&b.metrics.sharpe_ratio)
+                    .unwrap()
+            })
             .cloned();
 
         let best_return = results
             .iter()
-            .max_by(|a, b| a.metrics.total_return.partial_cmp(&b.metrics.total_return).unwrap())
+            .max_by(|a, b| {
+                a.metrics
+                    .total_return
+                    .partial_cmp(&b.metrics.total_return)
+                    .unwrap()
+            })
             .cloned();
 
         let best_drawdown = results
             .iter()
-            .min_by(|a, b| a.metrics.max_drawdown.partial_cmp(&b.metrics.max_drawdown).unwrap())
+            .min_by(|a, b| {
+                a.metrics
+                    .max_drawdown
+                    .partial_cmp(&b.metrics.max_drawdown)
+                    .unwrap()
+            })
             .cloned();
 
         SensitivityResult {
@@ -261,7 +276,11 @@ impl SensitivityAnalyzer {
     }
 
     /// Identify robust parameter regions (where nearby parameters also perform well)
-    pub fn find_robust_regions(&self, result: &SensitivityResult, min_sharpe: f64) -> Vec<HashMap<String, f64>> {
+    pub fn find_robust_regions(
+        &self,
+        result: &SensitivityResult,
+        min_sharpe: f64,
+    ) -> Vec<HashMap<String, f64>> {
         result
             .results
             .iter()
@@ -279,7 +298,7 @@ mod tests {
     fn test_parameter_range() {
         let range = ParameterRange::new("sma_period", 10.0, 30.0, 5.0);
         let values = range.values();
-        
+
         assert_eq!(values, vec![10.0, 15.0, 20.0, 25.0, 30.0]);
     }
 
@@ -287,7 +306,7 @@ mod tests {
     fn test_parameter_range_fractional() {
         let range = ParameterRange::new("threshold", 0.0, 0.1, 0.02);
         let values = range.values();
-        
+
         assert_eq!(values.len(), 6);
         assert!((values[0] - 0.0).abs() < 0.001);
         assert!((values[5] - 0.1).abs() < 0.001);

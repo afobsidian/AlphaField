@@ -5,9 +5,9 @@ use std::sync::Arc;
 use tracing::{error, info, warn};
 
 use alphafield_backtest::{
-    AssetSentimentCalculator, AssetSentimentSummary,
-    BacktestEngine, BenchmarkComparison, DrawdownAnalysis, DrawdownPoint,
-    MonthlyReturn, PerformanceMetrics, RollingStats, SlippageModel, StrategyAdapter, Trade,
+    AssetSentimentCalculator, AssetSentimentSummary, BacktestEngine, BenchmarkComparison,
+    DrawdownAnalysis, DrawdownPoint, MonthlyReturn, PerformanceMetrics, RollingStats,
+    SlippageModel, StrategyAdapter, Trade,
 };
 use alphafield_data::SentimentClient;
 
@@ -35,33 +35,31 @@ pub struct BacktestResponse {
     pub metrics: PerformanceMetrics,
     pub equity_curve: Vec<EquityPoint>,
     pub trades: Vec<Trade>,
-    
+
     // Benchmark Comparison (BTC buy-and-hold)
     pub benchmark: Option<BenchmarkData>,
-    
+
     // Drawdown Analysis
     pub drawdown_curve: Vec<DrawdownPoint>,
     pub drawdown_analysis: DrawdownAnalysis,
-    
+
     // Time-Series Analytics
     pub rolling_stats: RollingStats,
     pub monthly_returns: Vec<MonthlyReturn>,
-    
+
     // Trade Analysis
     pub trade_summary: TradeSummary,
-    
+
     // Sentiment Analysis
     pub market_sentiment: Option<MarketSentimentData>,
     pub asset_sentiment: AssetSentimentSummary,
-    
+
     // Data Info
     pub data_status: DataStatus,
-    
+
     // Metadata
     pub execution_time_ms: u64,
 }
-
-
 
 /// Global market sentiment data
 #[derive(Serialize)]
@@ -78,8 +76,8 @@ pub struct MarketSentimentData {
 pub struct EquityPoint {
     pub timestamp: i64,
     pub equity: f64,
-    pub returns: f64,       // Period return
-    pub cumulative: f64,    // Cumulative return from start
+    pub returns: f64,    // Period return
+    pub cumulative: f64, // Cumulative return from start
 }
 
 /// Benchmark comparison data
@@ -112,15 +110,32 @@ impl TradeSummary {
         let winners: Vec<_> = trades.iter().filter(|t| t.pnl > 0.0).collect();
         let losers: Vec<_> = trades.iter().filter(|t| t.pnl <= 0.0).collect();
 
-        let avg_duration = trades.iter().map(|t| t.duration_secs).sum::<i64>() as f64 / total as f64 / 3600.0;
-        
-        let avg_mae = trades.iter().map(|t| {
-            if t.entry_price > 0.0 { t.mae / t.entry_price * 100.0 } else { 0.0 }
-        }).sum::<f64>() / total as f64;
-        
-        let avg_mfe = trades.iter().map(|t| {
-            if t.entry_price > 0.0 { t.mfe / t.entry_price * 100.0 } else { 0.0 }
-        }).sum::<f64>() / total as f64;
+        let avg_duration =
+            trades.iter().map(|t| t.duration_secs).sum::<i64>() as f64 / total as f64 / 3600.0;
+
+        let avg_mae = trades
+            .iter()
+            .map(|t| {
+                if t.entry_price > 0.0 {
+                    t.mae / t.entry_price * 100.0
+                } else {
+                    0.0
+                }
+            })
+            .sum::<f64>()
+            / total as f64;
+
+        let avg_mfe = trades
+            .iter()
+            .map(|t| {
+                if t.entry_price > 0.0 {
+                    t.mfe / t.entry_price * 100.0
+                } else {
+                    0.0
+                }
+            })
+            .sum::<f64>()
+            / total as f64;
 
         // Calculate streaks
         let mut current_winning = 0usize;
@@ -153,8 +168,6 @@ impl TradeSummary {
     }
 }
 
-
-
 fn build_equity_curve(history: &[(i64, f64)]) -> Vec<EquityPoint> {
     if history.is_empty() {
         return Vec::new();
@@ -163,17 +176,28 @@ fn build_equity_curve(history: &[(i64, f64)]) -> Vec<EquityPoint> {
     let initial = history[0].1;
     let mut prev = initial;
 
-    history.iter().map(|(ts, equity)| {
-        let returns = if prev > 0.0 { (*equity - prev) / prev } else { 0.0 };
-        let cumulative = if initial > 0.0 { (*equity - initial) / initial } else { 0.0 };
-        prev = *equity;
-        EquityPoint {
-            timestamp: *ts,
-            equity: *equity,
-            returns,
-            cumulative,
-        }
-    }).collect()
+    history
+        .iter()
+        .map(|(ts, equity)| {
+            let returns = if prev > 0.0 {
+                (*equity - prev) / prev
+            } else {
+                0.0
+            };
+            let cumulative = if initial > 0.0 {
+                (*equity - initial) / initial
+            } else {
+                0.0
+            };
+            prev = *equity;
+            EquityPoint {
+                timestamp: *ts,
+                equity: *equity,
+                returns,
+                cumulative,
+            }
+        })
+        .collect()
 }
 
 // Removed #[instrument] due to Handler trait issues with complex async futures
@@ -186,14 +210,14 @@ pub async fn run_backtest(
 
     // 1. Determine Date Range
     use chrono::{NaiveDate, TimeZone, Utc};
-    
+
     // Parse end_date or default to now
     let end_time = if let Some(d) = &req.end_date {
         NaiveDate::parse_from_str(d, "%Y-%m-%d")
             .ok()
             .and_then(|d| d.and_hms_opt(23, 59, 59))
             .map(|dt| Utc.from_utc_datetime(&dt))
-            .unwrap_or_else(|| Utc::now())
+            .unwrap_or_else(Utc::now)
     } else {
         Utc::now()
     };
@@ -214,11 +238,14 @@ pub async fn run_backtest(
     // 2. Fetch Data (Cache -> API) with strict range check
     let fetch_symbol = req.symbol.clone();
     let fetch_interval = req.interval.clone();
-    
+
     // Spawn to isolate async future and ensure Send safety
     let fetch_result = tokio::spawn(async move {
         fetch_data_with_cache(fetch_symbol, fetch_interval, start_time, end_time).await
-    }).await.map_err(|e| e.to_string()).and_then(|res| res);
+    })
+    .await
+    .map_err(|e| e.to_string())
+    .and_then(|res| res);
 
     let (bars, data_status) = match fetch_result {
         Ok((bars, status)) => (bars, status),
@@ -235,20 +262,12 @@ pub async fn run_backtest(
 
     // 3. Run Backtest & Extract Data
     let (metrics, trades, equity_history) = {
-        let mut engine = BacktestEngine::new(
-            100_000.0,
-            0.001,
-            SlippageModel::FixedPercent(0.0005),
-        );
+        let mut engine = BacktestEngine::new(100_000.0, 0.001, SlippageModel::FixedPercent(0.0005));
 
         engine.add_data(&req.symbol, bars.clone());
 
         if let Some(strategy) = StrategyFactory::create(&req.strategy, &req.params) {
-            let adapter = StrategyAdapter::new(
-                strategy,
-                &req.symbol,
-                100_000.0,
-            );
+            let adapter = StrategyAdapter::new(strategy, &req.symbol, 100_000.0);
             engine.set_strategy(Box::new(adapter));
         } else {
             warn!(strategy = req.strategy, "Unknown strategy requested");
@@ -269,7 +288,7 @@ pub async fn run_backtest(
             .iter()
             .map(|(ts, val)| (*ts, *val))
             .collect();
-            
+
         (metrics, engine.portfolio.trades.clone(), equity_history)
     };
 
@@ -281,11 +300,12 @@ pub async fn run_backtest(
     let monthly_returns = MonthlyReturn::calculate(&equity_history);
     let trade_summary = TradeSummary::from_trades(&trades);
 
-    // 6. Benchmark Comparison (BTC buy-and-hold)
-    let benchmark = if req.include_benchmark || true {
+    // 6. Benchmark Comparison (BTC buy-and-hold) - always included
+    let benchmark = {
         let benchmark_curve = BenchmarkComparison::calculate_buy_and_hold(&bars, 100_000.0);
         if !benchmark_curve.is_empty() {
-            let comparison = BenchmarkComparison::calculate(&equity_history, &benchmark_curve, 0.02);
+            let comparison =
+                BenchmarkComparison::calculate(&equity_history, &benchmark_curve, 0.02);
             Some(BenchmarkData {
                 curve: build_equity_curve(&benchmark_curve),
                 comparison,
@@ -293,19 +313,17 @@ pub async fn run_backtest(
         } else {
             None
         }
-    } else {
-        None
     };
-
 
     // 7. Market Sentiment
     // Concurrent fetch logic would be ideal, but for now we sequentialize it to ensure stability
     // The days count is calculated from the range
     let sentiment_days = (end_time - start_time).num_days() as u32;
     // Spawn to avoid Handler trait bounds issues with complex async futures
-    let market_sentiment = tokio::spawn(async move {
-        fetch_market_sentiment(sentiment_days).await
-    }).await.unwrap_or(None);
+    let market_sentiment =
+        tokio::spawn(async move { fetch_market_sentiment(sentiment_days).await })
+            .await
+            .unwrap_or(None);
 
     // 8. Asset Sentiment (Technical indicators)
     let asset_sentiment_calc = AssetSentimentCalculator::default();
@@ -345,7 +363,7 @@ async fn fetch_market_sentiment(days: u32) -> Option<MarketSentimentData> {
             let avg: f64 = data.iter().map(|d| d.value as f64).sum::<f64>() / data.len() as f64;
             let fear_days = data.iter().filter(|d| d.classification.is_fear()).count();
             let greed_days = data.iter().filter(|d| d.classification.is_greed()).count();
-            
+
             Some(MarketSentimentData {
                 current_value: current.value,
                 current_classification: current.classification.to_string(),
@@ -357,8 +375,6 @@ async fn fetch_market_sentiment(days: u32) -> Option<MarketSentimentData> {
         _ => None,
     }
 }
-
-
 
 fn empty_response(execution_time_ms: u64) -> BacktestResponse {
     BacktestResponse {
@@ -375,5 +391,197 @@ fn empty_response(execution_time_ms: u64) -> BacktestResponse {
         asset_sentiment: AssetSentimentSummary::default(),
         data_status: DataStatus::default(),
         execution_time_ms,
+    }
+}
+
+// ===========================
+// Parameter Optimization API
+// ===========================
+
+use alphafield_backtest::{get_strategy_bounds, ParamSweepResult, ParameterOptimizer};
+
+#[derive(Debug, Deserialize)]
+pub struct OptimizeRequest {
+    pub strategy: String,
+    pub symbol: String,
+    pub interval: String,
+    pub days: u32,
+}
+
+#[derive(Serialize)]
+pub struct OptimizeResponse {
+    pub success: bool,
+    pub optimized_params: HashMap<String, f64>,
+    pub best_score: f64,
+    pub best_sharpe: f64,
+    pub best_return: f64,
+    pub best_max_drawdown: f64,
+    pub best_win_rate: f64,
+    pub best_trades: usize,
+    pub iterations: usize,
+    pub elapsed_ms: u64,
+    /// All tested param combinations for visualization
+    pub sweep_results: Vec<ParamSweepResult>,
+    pub error: Option<String>,
+}
+
+pub async fn optimize_params(
+    State(_state): State<Arc<AppState>>,
+    Json(req): Json<OptimizeRequest>,
+) -> Json<OptimizeResponse> {
+    let start = std::time::Instant::now();
+    info!(strategy = %req.strategy, symbol = %req.symbol, "Starting parameter optimization");
+
+    // 1. Date Range (same as backtest)
+    use chrono::{Duration, Utc};
+    let end_time = Utc::now();
+    let start_time = end_time - Duration::days(req.days as i64);
+
+    // 2. Fetch Data
+    let fetch_symbol = req.symbol.clone();
+    let fetch_interval = req.interval.clone();
+
+    let fetch_result = tokio::spawn(async move {
+        fetch_data_with_cache(fetch_symbol, fetch_interval, start_time, end_time).await
+    })
+    .await
+    .map_err(|e| e.to_string())
+    .and_then(|res| res);
+
+    let bars = match fetch_result {
+        Ok((bars, _status)) => bars,
+        Err(e) => {
+            error!(error = %e, "Failed to fetch data for optimization");
+            return Json(OptimizeResponse {
+                success: false,
+                optimized_params: HashMap::new(),
+                best_score: 0.0,
+                best_sharpe: 0.0,
+                best_return: 0.0,
+                best_max_drawdown: 0.0,
+                best_win_rate: 0.0,
+                best_trades: 0,
+                iterations: 0,
+                elapsed_ms: start.elapsed().as_millis() as u64,
+                sweep_results: vec![],
+                error: Some(format!("Failed to fetch data: {}", e)),
+            });
+        }
+    };
+
+    if bars.is_empty() {
+        return Json(OptimizeResponse {
+            success: false,
+            optimized_params: HashMap::new(),
+            best_score: 0.0,
+            best_sharpe: 0.0,
+            best_return: 0.0,
+            best_max_drawdown: 0.0,
+            best_win_rate: 0.0,
+            best_trades: 0,
+            iterations: 0,
+            elapsed_ms: start.elapsed().as_millis() as u64,
+            sweep_results: vec![],
+            error: Some("No data available for optimization".to_string()),
+        });
+    }
+
+    // 3. Get parameter bounds and run optimizer
+    let bounds = get_strategy_bounds(&req.strategy);
+    if bounds.is_empty() {
+        return Json(OptimizeResponse {
+            success: false,
+            optimized_params: HashMap::new(),
+            best_score: 0.0,
+            best_sharpe: 0.0,
+            best_return: 0.0,
+            best_max_drawdown: 0.0,
+            best_win_rate: 0.0,
+            best_trades: 0,
+            iterations: 0,
+            elapsed_ms: start.elapsed().as_millis() as u64,
+            sweep_results: vec![],
+            error: Some(format!("Unknown strategy: {}", req.strategy)),
+        });
+    }
+
+    let optimizer = ParameterOptimizer::new(100_000.0, 0.001);
+    let strategy_name = req.strategy.clone();
+    let symbol = req.symbol.clone();
+
+    // Run optimizer in blocking task to avoid blocking async runtime
+    let optimization_result = tokio::task::spawn_blocking(move || {
+        optimizer.optimize(
+            &bars,
+            &symbol,
+            |params| {
+                // Create strategy adapter for backtest
+                StrategyFactory::create_backtest(&strategy_name, params, &symbol, 100_000.0)
+            },
+            &bounds,
+        )
+    })
+    .await;
+
+    match optimization_result {
+        Ok(Ok(result)) => {
+            info!(
+                score = result.best_score,
+                sharpe = result.best_sharpe,
+                return_pct = result.best_return * 100.0,
+                iterations = result.iterations_tested,
+                elapsed_ms = result.elapsed_ms,
+                "Optimization complete"
+            );
+
+            Json(OptimizeResponse {
+                success: true,
+                optimized_params: result.best_params,
+                best_score: result.best_score,
+                best_sharpe: result.best_sharpe,
+                best_return: result.best_return,
+                best_max_drawdown: result.best_max_drawdown,
+                best_win_rate: result.best_win_rate,
+                best_trades: result.best_trades,
+                iterations: result.iterations_tested,
+                elapsed_ms: start.elapsed().as_millis() as u64,
+                sweep_results: result.all_results,
+                error: None,
+            })
+        }
+        Ok(Err(e)) => {
+            error!(error = %e, "Optimization failed");
+            Json(OptimizeResponse {
+                success: false,
+                optimized_params: HashMap::new(),
+                best_score: 0.0,
+                best_sharpe: 0.0,
+                best_return: 0.0,
+                best_max_drawdown: 0.0,
+                best_win_rate: 0.0,
+                best_trades: 0,
+                iterations: 0,
+                elapsed_ms: start.elapsed().as_millis() as u64,
+                sweep_results: vec![],
+                error: Some(e),
+            })
+        }
+        Err(e) => {
+            error!(error = %e, "Optimization task panicked");
+            Json(OptimizeResponse {
+                success: false,
+                optimized_params: HashMap::new(),
+                best_score: 0.0,
+                best_sharpe: 0.0,
+                best_return: 0.0,
+                best_max_drawdown: 0.0,
+                best_win_rate: 0.0,
+                best_trades: 0,
+                iterations: 0,
+                elapsed_ms: start.elapsed().as_millis() as u64,
+                sweep_results: vec![],
+                error: Some(format!("Internal error: {}", e)),
+            })
+        }
     }
 }

@@ -66,7 +66,10 @@ impl DataPersister {
 
     /// Runs the persistence loop
     pub async fn run(mut self) {
-        info!("Starting DataPersister for {} {}", self.symbol, self.timeframe);
+        info!(
+            "Starting DataPersister for {} {}",
+            self.symbol, self.timeframe
+        );
 
         loop {
             match self.receiver.recv().await {

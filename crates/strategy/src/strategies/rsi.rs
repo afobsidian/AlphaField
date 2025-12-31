@@ -10,22 +10,23 @@ use alphafield_core::{Bar, Signal, SignalType, Strategy};
 /// RSI Mean Reversion Strategy
 ///
 /// # Strategy Logic
-/// - **Buy Signal**: RSI falls below lower bound (oversold)
-/// - **Sell Signal**: RSI rises above upper bound (overbought)
+/// - **Buy Signal**: RSI crosses below lower bound (oversold)
+/// - **Sell Signal**: RSI crosses above upper bound (overbought) or TP/SL
 ///
 /// # Example
 /// ```
 /// use alphafield_strategy::strategies::RsiStrategy;
 /// use alphafield_strategy::config::RsiConfig;
 ///
-/// let config = RsiConfig::new(14, 30.0, 70.0);
+/// let config = RsiConfig::new(14, 30.0, 70.0, 3.0, 5.0);
 /// let strategy = RsiStrategy::from_config(config);
 /// ```
 pub struct RsiStrategy {
     config: RsiConfig,
     rsi: Rsi,
-    position: SignalType, // Track current position to avoid spamming signals
-    entry_price: Option<f64>,  // Track entry price for exit logic
+    position: SignalType,     // Track current position to avoid spamming signals
+    entry_price: Option<f64>, // Track entry price for exit logic
+    last_rsi: Option<f64>,    // Track previous RSI for crossover detection
 }
 
 impl RsiStrategy {
@@ -53,6 +54,7 @@ impl RsiStrategy {
             config,
             position: SignalType::Hold,
             entry_price: None,
+            last_rsi: None,
         }
     }
 
@@ -70,38 +72,17 @@ impl Strategy for RsiStrategy {
     fn on_bar(&mut self, bar: &Bar) -> Option<Vec<Signal>> {
         let rsi_val = self.rsi.update(bar.close)?;
         let price = bar.close;
+        let prev_rsi = self.last_rsi;
 
-        // EXIT LOGIC FIRST
+        // Update state for next bar
+        self.last_rsi = Some(rsi_val);
+
+        // EXIT LOGIC FIRST (only when in position)
         if self.position == SignalType::Buy {
             if let Some(entry) = self.entry_price {
-                // Exit 1: RSI returns to neutral zone (40-60)
-                if rsi_val >= 40.0 && rsi_val <= 60.0 {
-                    self.position = SignalType::Hold;
-                    self.entry_price = None;
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!("RSI Neutral Exit: {:.2}", rsi_val)),
-                    }]);
-                }
-                
-                // Exit 2: RSI overbought (take profit)
-                if rsi_val > self.config.upper_bound {
-                    self.position = SignalType::Hold;
-                    self.entry_price = None;
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!("RSI Overbought Exit: {:.2}", rsi_val)),
-                    }]);
-                }
-                
-                // Exit 3: Take profit
                 let profit_pct = (price - entry) / entry * 100.0;
+
+                // Exit 1: Take profit (price-based)
                 if profit_pct >= self.config.take_profit {
                     self.position = SignalType::Hold;
                     self.entry_price = None;
@@ -113,8 +94,8 @@ impl Strategy for RsiStrategy {
                         metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
                     }]);
                 }
-                
-                // Exit 4: Stop loss
+
+                // Exit 2: Stop loss (price-based)
                 if profit_pct <= -self.config.stop_loss {
                     self.position = SignalType::Hold;
                     self.entry_price = None;
@@ -126,20 +107,42 @@ impl Strategy for RsiStrategy {
                         metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
                     }]);
                 }
+
+                // Exit 3: RSI crosses above upper bound (overbought crossover)
+                if let Some(prev) = prev_rsi {
+                    if prev <= self.config.upper_bound && rsi_val > self.config.upper_bound {
+                        self.position = SignalType::Hold;
+                        self.entry_price = None;
+                        return Some(vec![Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: 1.0,
+                            metadata: Some(format!(
+                                "RSI Overbought Crossover Exit: {:.2}",
+                                rsi_val
+                            )),
+                        }]);
+                    }
+                }
             }
         }
 
-        // ENTRY LOGIC - only when not in position
-        if rsi_val < self.config.lower_bound && self.position != SignalType::Buy {
-            self.position = SignalType::Buy;
-            self.entry_price = Some(price);
-            return Some(vec![Signal {
-                timestamp: bar.timestamp,
-                symbol: "UNKNOWN".to_string(),
-                signal_type: SignalType::Buy,
-                strength: (self.config.lower_bound - rsi_val) / self.config.lower_bound,
-                metadata: Some(format!("RSI Oversold Entry: {:.2}", rsi_val)),
-            }]);
+        // ENTRY LOGIC - RSI crosses below lower bound (oversold crossover)
+        if self.position != SignalType::Buy {
+            if let Some(prev) = prev_rsi {
+                if prev >= self.config.lower_bound && rsi_val < self.config.lower_bound {
+                    self.position = SignalType::Buy;
+                    self.entry_price = Some(price);
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: (self.config.lower_bound - rsi_val) / self.config.lower_bound,
+                        metadata: Some(format!("RSI Oversold Crossover Entry: {:.2}", rsi_val)),
+                    }]);
+                }
+            }
         }
 
         None

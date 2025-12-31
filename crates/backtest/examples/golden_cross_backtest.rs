@@ -16,7 +16,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
-    
+
     println!("=== Golden Cross Strategy Backtest ===\n");
 
     // 1. Setup Engine
@@ -29,7 +29,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // 2. Fetch/Load Historical Data
     let symbol = "BTC";
     let interval = "1h";
-    
+
     println!("Connecting to database...");
     let db = match alphafield_data::DatabaseClient::new_from_env().await {
         Ok(client) => client,
@@ -39,7 +39,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             return Ok(());
         }
     };
-    
+
     let bars = if db.exists(symbol, interval).await? {
         println!("Loading historical data from database...");
         db.load_bars(symbol, interval).await?
@@ -47,7 +47,9 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         println!("Fetching historical data from API...");
         let client = alphafield_data::UnifiedDataClient::new_from_env();
         // Fetch 1000 hours (~41 days)
-        let bars = client.get_bars(symbol, interval, None, None, Some(1000)).await?;
+        let bars = client
+            .get_bars(symbol, interval, None, None, Some(1000))
+            .await?;
         println!("Saving {} bars to database...", bars.len());
         db.save_bars(symbol, interval, &bars).await?;
         bars
@@ -75,11 +77,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let golden_cross = GoldenCrossStrategy::new(20, 50);
 
     // 4. Wrap with Adapter
-    let adapter = StrategyAdapter::new(
-        golden_cross,
-        symbol,
-        100_000.0,
-    );
+    let adapter = StrategyAdapter::new(golden_cross, symbol, 100_000.0);
 
     engine.set_strategy(Box::new(adapter));
 

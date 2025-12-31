@@ -2,7 +2,6 @@ use crate::database::DatabaseClient;
 use alphafield_core::{Bar, Result};
 use chrono::Duration;
 
-
 /// Simple gap-filler that forward-fills missing bars using previous close price.
 /// This is intentionally conservative: volumes are set to 0 and OHLC all equal to last close.
 pub struct GapFiller {
@@ -16,7 +15,12 @@ impl GapFiller {
 
     /// Finds gaps for `symbol`/`timeframe` assuming `interval_seconds` between bars.
     /// Fills gaps by creating synthetic bars where open/high/low/close == previous close.
-    pub async fn fill_gaps(&self, symbol: &str, timeframe: &str, interval_seconds: i64) -> Result<usize> {
+    pub async fn fill_gaps(
+        &self,
+        symbol: &str,
+        timeframe: &str,
+        interval_seconds: i64,
+    ) -> Result<usize> {
         let bars = self.client.load_bars(symbol, timeframe).await?;
 
         if bars.is_empty() {
@@ -43,7 +47,7 @@ impl GapFiller {
                 };
 
                 to_insert.push(synthetic);
-                cur = cur + Duration::seconds(interval_seconds);
+                cur += Duration::seconds(interval_seconds);
             }
         }
 

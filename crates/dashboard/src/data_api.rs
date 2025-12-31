@@ -39,16 +39,24 @@ pub async fn list_symbols(State(state): State<Arc<AppState>>) -> Json<Vec<Cached
 /// Get available trading pairs from Binance
 pub async fn get_trading_pairs() -> Json<Vec<String>> {
     let client = UnifiedDataClient::new_from_env();
-    
+
     match client.get_exchange_info().await {
         Ok(pairs) => Json(pairs),
         Err(_) => {
             // Return fallback popular pairs if API fails
             Json(vec![
-                "BTC".to_string(), "ETH".to_string(), "SOL".to_string(),
-                "XRP".to_string(), "ADA".to_string(), "DOGE".to_string(),
-                "AVAX".to_string(), "DOT".to_string(), "LINK".to_string(),
-                "MATIC".to_string(), "UNI".to_string(), "ATOM".to_string(),
+                "BTC".to_string(),
+                "ETH".to_string(),
+                "SOL".to_string(),
+                "XRP".to_string(),
+                "ADA".to_string(),
+                "DOGE".to_string(),
+                "AVAX".to_string(),
+                "DOT".to_string(),
+                "LINK".to_string(),
+                "MATIC".to_string(),
+                "UNI".to_string(),
+                "ATOM".to_string(),
             ])
         }
     }
@@ -74,7 +82,10 @@ pub async fn fetch_symbol(
     let client = UnifiedDataClient::new_from_env();
     let limit = req.limit.unwrap_or(1000);
 
-    match client.get_bars(&req.symbol, &req.interval, None, None, Some(limit)).await {
+    match client
+        .get_bars(&req.symbol, &req.interval, None, None, Some(limit))
+        .await
+    {
         Ok(bars) => {
             let count = bars.len();
             // Save to DB

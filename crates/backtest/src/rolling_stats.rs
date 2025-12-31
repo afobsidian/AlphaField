@@ -51,15 +51,18 @@ impl RollingStats {
         let mut rolling_returns = Vec::new();
 
         for i in window_size..returns.len() {
-            let window: Vec<f64> = returns[i - window_size..i].iter().map(|(_, r)| *r).collect();
+            let window: Vec<f64> = returns[i - window_size..i]
+                .iter()
+                .map(|(_, r)| *r)
+                .collect();
             let ts = returns[i].0;
 
             // Mean return
             let mean = window.iter().sum::<f64>() / window.len() as f64;
 
             // Volatility
-            let variance = window.iter().map(|r| (r - mean).powi(2)).sum::<f64>()
-                / window.len() as f64;
+            let variance =
+                window.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / window.len() as f64;
             let volatility = variance.sqrt() * (252.0f64).sqrt();
 
             // Sharpe
@@ -196,7 +199,10 @@ impl MonthlyReturn {
         let mut monthly: BTreeMap<(i32, u32), (f64, f64)> = BTreeMap::new();
 
         for &(ts, equity) in equity_history {
-            let dt = Utc.timestamp_millis_opt(ts).single().unwrap_or_else(|| Utc::now());
+            let dt = Utc
+                .timestamp_millis_opt(ts)
+                .single()
+                .unwrap_or_else(Utc::now);
             let key = (dt.year(), dt.month());
 
             monthly

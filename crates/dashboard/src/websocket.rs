@@ -165,7 +165,7 @@ pub async fn websocket_handler(
 /// Handle an individual WebSocket connection
 async fn handle_socket(socket: WebSocket, hub: Arc<DashboardHub>) {
     let (mut sender, mut receiver) = socket.split();
-    
+
     // Subscribe to broadcast updates
     let mut rx = hub.subscribe();
 
@@ -185,7 +185,7 @@ async fn handle_socket(socket: WebSocket, hub: Arc<DashboardHub>) {
                             continue;
                         }
                     };
-                    
+
                     if sender.send(Message::Text(json)).await.is_err() {
                         debug!("Client disconnected (send failed)");
                         break;
@@ -265,7 +265,10 @@ pub enum ClientCommand {
 async fn handle_client_command(cmd: ClientCommand, hub: &DashboardHub) {
     match cmd {
         ClientCommand::Start { strategy, mode } => {
-            info!("Client requested start: strategy={}, mode={}", strategy, mode);
+            info!(
+                "Client requested start: strategy={}, mode={}",
+                strategy, mode
+            );
             hub.log("info", &format!("Starting {} in {} mode", strategy, mode));
             // TODO: Actually start the trading engine
             hub.update_engine_status(EngineStatusUpdate {

@@ -5,7 +5,7 @@ use crate::portfolio::Portfolio;
 use crate::strategy::Strategy;
 use alphafield_core::Bar;
 use std::collections::HashMap;
-use tracing::{debug, info, trace, warn, instrument};
+use tracing::{debug, info, instrument, trace, warn};
 
 pub struct BacktestEngine {
     pub portfolio: Portfolio,
@@ -35,7 +35,11 @@ impl BacktestEngine {
     }
 
     pub fn add_data(&mut self, symbol: &str, bars: Vec<Bar>) {
-        info!(symbol = symbol, bar_count = bars.len(), "Data loaded for backtest");
+        info!(
+            symbol = symbol,
+            bar_count = bars.len(),
+            "Data loaded for backtest"
+        );
         self.data.insert(symbol.to_string(), bars);
     }
 
@@ -91,10 +95,13 @@ impl BacktestEngine {
                         order.quantity
                     };
 
-                    match self
-                        .portfolio
-                        .update_from_fill(&order.symbol, fill_quantity, price, fee, None)
-                    {
+                    match self.portfolio.update_from_fill(
+                        &order.symbol,
+                        fill_quantity,
+                        price,
+                        fee,
+                        None,
+                    ) {
                         Ok(_) => {
                             debug!(
                                 symbol = order.symbol,
@@ -105,7 +112,10 @@ impl BacktestEngine {
                             );
                             orders_filled += 1;
                         }
-                        Err(crate::error::BacktestError::InsufficientFunds { required, available }) => {
+                        Err(crate::error::BacktestError::InsufficientFunds {
+                            required,
+                            available,
+                        }) => {
                             warn!(
                                 required = required,
                                 available = available,
@@ -113,7 +123,11 @@ impl BacktestEngine {
                             );
                             orders_skipped += 1;
                         }
-                        Err(crate::error::BacktestError::InsufficientPosition { symbol, required, available }) => {
+                        Err(crate::error::BacktestError::InsufficientPosition {
+                            symbol,
+                            required,
+                            available,
+                        }) => {
                             warn!(
                                 symbol = symbol,
                                 required = required,
@@ -133,7 +147,7 @@ impl BacktestEngine {
         if let Some(last_bar) = bars.last() {
             let mut current_prices = HashMap::new();
             current_prices.insert(driver_symbol.clone(), last_bar.close);
-            
+
             let open_symbols: Vec<String> = self.portfolio.positions.keys().cloned().collect();
             for symbol in open_symbols {
                 if let Some(pos) = self.portfolio.positions.get(&symbol) {
@@ -141,10 +155,20 @@ impl BacktestEngine {
                         let close_quantity = -pos.quantity;
                         let price = last_bar.close;
                         let fee = self.exchange.calculate_fee(price, close_quantity.abs());
-                        
+
                         // Force close the position
-                        let _ = self.portfolio.update_from_fill(&symbol, close_quantity, price, fee, Some("Force-Close".to_string()));
-                        debug!(symbol = symbol, quantity = close_quantity, "Force-closed open position at backtest end");
+                        let _ = self.portfolio.update_from_fill(
+                            &symbol,
+                            close_quantity,
+                            price,
+                            fee,
+                            Some("Force-Close".to_string()),
+                        );
+                        debug!(
+                            symbol = symbol,
+                            quantity = close_quantity,
+                            "Force-closed open position at backtest end"
+                        );
                     }
                 }
             }

@@ -8,7 +8,6 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use serde::{Deserialize, Serialize};
 
-
 /// Configuration for Monte Carlo simulation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MonteCarloConfig {
@@ -63,25 +62,25 @@ pub struct MonteCarloResult {
     pub num_simulations: usize,
     /// Original (unshuffled) performance
     pub original_metrics: SimulationResult,
-    
+
     /// Confidence intervals for final equity
     pub equity_5th: f64,
     pub equity_50th: f64,
     pub equity_95th: f64,
-    
+
     /// Confidence intervals for returns
     pub return_5th: f64,
     pub return_50th: f64,
     pub return_95th: f64,
-    
+
     /// Confidence intervals for max drawdown
     pub drawdown_5th: f64,
     pub drawdown_50th: f64,
     pub drawdown_95th: f64,
-    
+
     /// Probability of profit (% of simulations with positive return)
     pub probability_of_profit: f64,
-    
+
     /// All simulation results (for visualization)
     pub simulations: Vec<SimulationResult>,
 }
@@ -208,9 +207,10 @@ impl MonteCarloSimulator {
                 .windows(2)
                 .map(|w| (w[1] - w[0]) / w[0])
                 .collect();
-            
+
             let mean = returns.iter().sum::<f64>() / returns.len() as f64;
-            let variance = returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / returns.len() as f64;
+            let variance =
+                returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / returns.len() as f64;
             let std_dev = variance.sqrt();
 
             if std_dev > 0.0 {
@@ -244,7 +244,11 @@ pub fn extract_trades_from_fills(
             Trade {
                 symbol: symbol.clone(),
                 pnl: *pnl,
-                return_pct: if entry_value > 0.0 { pnl / entry_value } else { 0.0 },
+                return_pct: if entry_value > 0.0 {
+                    pnl / entry_value
+                } else {
+                    0.0
+                },
                 duration: 1, // Simplified - would need trade timestamps for real duration
             }
         })
@@ -258,11 +262,36 @@ mod tests {
     #[test]
     fn test_monte_carlo_basic() {
         let trades = vec![
-            Trade { symbol: "BTC".to_string(), pnl: 100.0, return_pct: 0.01, duration: 5 },
-            Trade { symbol: "BTC".to_string(), pnl: -50.0, return_pct: -0.005, duration: 3 },
-            Trade { symbol: "BTC".to_string(), pnl: 75.0, return_pct: 0.0075, duration: 4 },
-            Trade { symbol: "BTC".to_string(), pnl: -25.0, return_pct: -0.0025, duration: 2 },
-            Trade { symbol: "BTC".to_string(), pnl: 150.0, return_pct: 0.015, duration: 6 },
+            Trade {
+                symbol: "BTC".to_string(),
+                pnl: 100.0,
+                return_pct: 0.01,
+                duration: 5,
+            },
+            Trade {
+                symbol: "BTC".to_string(),
+                pnl: -50.0,
+                return_pct: -0.005,
+                duration: 3,
+            },
+            Trade {
+                symbol: "BTC".to_string(),
+                pnl: 75.0,
+                return_pct: 0.0075,
+                duration: 4,
+            },
+            Trade {
+                symbol: "BTC".to_string(),
+                pnl: -25.0,
+                return_pct: -0.0025,
+                duration: 2,
+            },
+            Trade {
+                symbol: "BTC".to_string(),
+                pnl: 150.0,
+                return_pct: 0.015,
+                duration: 6,
+            },
         ];
 
         let config = MonteCarloConfig {
@@ -276,7 +305,7 @@ mod tests {
 
         assert_eq!(result.num_simulations, 100);
         assert!(result.probability_of_profit > 0.0);
-        
+
         // Original should have consistent result
         assert!((result.original_metrics.total_return - 0.025).abs() < 0.001);
     }

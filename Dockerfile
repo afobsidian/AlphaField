@@ -4,23 +4,11 @@
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Stage 1: Chef - Prepare recipe for dependency caching
+# Stage 1: Builder - Build the application
 # -----------------------------------------------------------------------------
-FROM rust:1.82-slim-bookworm AS chef
-RUN cargo install cargo-chef
+FROM rust:1.85-slim-bookworm AS builder
+
 WORKDIR /app
-
-# -----------------------------------------------------------------------------
-# Stage 2: Planner - Create dependency recipe
-# -----------------------------------------------------------------------------
-FROM chef AS planner
-COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
-
-# -----------------------------------------------------------------------------
-# Stage 3: Builder - Build dependencies then project
-# -----------------------------------------------------------------------------
-FROM chef AS builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -28,25 +16,27 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Build dependencies (cached layer)
-COPY --from=planner /app/recipe.json recipe.json
+# Copy source code
+COPY . .
+
 # Ensure sqlx doesn't try to connect to DB during compilation
 ENV SQLX_OFFLINE=true
-RUN cargo chef cook --release --recipe-path recipe.json
+
+# Pin home crate to version compatible with rustc 1.85 (home 0.5.12 requires rustc 1.88)
+RUN cargo update home@0.5.12 --precise 0.5.9 || true
 
 # Build application
-COPY . .
 RUN cargo build --release --bin dashboard_server
 
 # -----------------------------------------------------------------------------
-# Stage 4: Runtime - Minimal production image
+# Stage 2: Runtime - Minimal production image
 # -----------------------------------------------------------------------------
 FROM debian:bookworm-slim AS runtime
 
 # OCI Labels
 LABEL org.opencontainers.image.source="https://github.com/adamf123git/AlphaField" \
-      org.opencontainers.image.description="AlphaField Trading Dashboard" \
-      org.opencontainers.image.licenses="MIT"
+    org.opencontainers.image.description="AlphaField Trading Dashboard" \
+    org.opencontainers.image.licenses="MIT"
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \

@@ -18,7 +18,7 @@ pub async fn run_server(addr: &str) -> Result<()> {
             }
         }
     }
-    
+
     let state = Arc::new(AppState::with_database().await);
 
     // Start heartbeat background task
@@ -40,7 +40,7 @@ pub async fn run_server(addr: &str) -> Result<()> {
 
     let listener = tokio::net::TcpListener::bind(addr)
         .await
-        .map_err(|e| alphafield_core::QuantError::Io(e))?;
+        .map_err(alphafield_core::QuantError::Io)?;
 
     println!("🚀 Dashboard server running on http://{}", addr);
     println!("📊 Open your browser to view the dashboard");
@@ -48,8 +48,7 @@ pub async fn run_server(addr: &str) -> Result<()> {
 
     axum::serve(listener, app)
         .await
-        .map_err(|e| alphafield_core::QuantError::Io(e))?;
+        .map_err(alphafield_core::QuantError::Io)?;
 
     Ok(())
 }
-

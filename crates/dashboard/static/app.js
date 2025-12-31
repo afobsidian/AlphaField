@@ -522,6 +522,199 @@ async function runBacktest() {
     btn.disabled = false;
     btn.innerHTML = '▶️ Run Backtest';
 }
+// ===========================
+// Parameter Optimization
+// ===========================
+
+// Store optimization results for visualization
+let lastOptimizeResults = null;
+
+async function optimizeParams() {
+    const btn = document.getElementById('btn-auto-optimize');
+    const runBtn = document.getElementById('btn-run-backtest');
+    btn.disabled = true;
+    runBtn.disabled = true;
+    btn.innerHTML = '⏳ Optimizing...';
+
+    try {
+        const res = await fetch(`${API_BASE}/backtest/optimize`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                strategy: AppState.strategy,
+                symbol: AppState.symbol,
+                interval: AppState.backtestInterval,
+                days: AppState.backtestDays
+            })
+        });
+
+        const data = await res.json();
+
+        if (!data.success) {
+            throw new Error(data.error || 'Optimization failed');
+        }
+
+        // Store results for later reference
+        lastOptimizeResults = data;
+
+        // Apply optimized params to AppState
+        AppState.params = data.optimized_params;
+
+        // Update UI inputs with optimized values
+        const strategyParams = STRATEGY_PARAMS[AppState.strategy] || [];
+        strategyParams.forEach(param => {
+            const value = data.optimized_params[param.name];
+            if (value !== undefined) {
+                const input = document.getElementById(`param-${param.name}`);
+                if (input) {
+                    input.value = value;
+                }
+            }
+        });
+
+        // Update backtest summary
+        updateBacktestSummary();
+
+        // Show detailed results with visualization
+        const returnPct = (data.best_return * 100).toFixed(2);
+        const sharpe = data.best_sharpe.toFixed(2);
+        const winRate = (data.best_win_rate * 100).toFixed(0);
+        const drawdown = (data.best_max_drawdown * 100).toFixed(2);
+        const score = data.best_score.toFixed(3);
+
+        alert(`✨ Optimization Complete!
+
+📊 Best Composite Score: ${score}
+   - Sharpe Ratio: ${sharpe}
+   - Return: ${returnPct}%
+   - Win Rate: ${winRate}%
+   - Max Drawdown: ${drawdown}%
+
+🔢 Tested ${data.iterations} combinations in ${data.elapsed_ms}ms
+
+Parameters have been applied. 
+Click "Run Backtest" to see full results, or go to "Optimize" tab to view all sweep results.`);
+
+        // Navigate to Optimize tab and show results
+        switchTab('optimize');
+        renderOptimizationSweepChart(data);
+
+    } catch (e) {
+        alert('Optimization failed: ' + e.message);
+        console.error(e);
+    }
+
+    btn.disabled = false;
+    runBtn.disabled = false;
+    btn.innerHTML = '🎯 Auto-Optimize';
+}
+
+// Render optimization sweep results as a scatter chart
+function renderOptimizationSweepChart(data) {
+    if (!data.sweep_results || data.sweep_results.length === 0) {
+        console.warn('No sweep results to visualize');
+        return;
+    }
+
+    // Sort by score for color gradient
+    const results = [...data.sweep_results].sort((a, b) => a.score - b.score);
+
+    // Create scatter plot: Sharpe vs Return, colored by score
+    const trace = {
+        x: results.map(r => r.sharpe),
+        y: results.map(r => r.total_return * 100),
+        mode: 'markers',
+        type: 'scatter',
+        marker: {
+            size: 10,
+            color: results.map(r => r.score),
+            colorscale: 'Viridis',
+            colorbar: {
+                title: 'Score',
+                titleside: 'right'
+            },
+            line: { color: 'white', width: 1 }
+        },
+        text: results.map(r => {
+            const params = Object.entries(r.params).map(([k, v]) => `${k}: ${v}`).join('<br>');
+            return `Score: ${r.score.toFixed(3)}<br>Sharpe: ${r.sharpe.toFixed(2)}<br>Return: ${(r.total_return * 100).toFixed(2)}%<br>Win Rate: ${(r.win_rate * 100).toFixed(0)}%<br>Drawdown: ${(r.max_drawdown * 100).toFixed(2)}%<br>Trades: ${r.total_trades}<br><br>${params}`;
+        }),
+        hoverinfo: 'text'
+    };
+
+    // Mark best result
+    const best = results[results.length - 1]; // Highest score
+    const bestTrace = {
+        x: [best.sharpe],
+        y: [best.total_return * 100],
+        mode: 'markers',
+        type: 'scatter',
+        name: 'Best',
+        marker: {
+            size: 18,
+            color: '#10b981',
+            symbol: 'star',
+            line: { color: 'white', width: 2 }
+        },
+        hoverinfo: 'skip'
+    };
+
+    const layout = {
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { color: '#94a3b8' },
+        margin: { t: 40, r: 80, b: 50, l: 60 },
+        xaxis: {
+            title: 'Sharpe Ratio',
+            gridcolor: 'rgba(255, 255, 255, 0.05)',
+            zeroline: true,
+            zerolinecolor: 'rgba(255, 255, 255, 0.2)'
+        },
+        yaxis: {
+            title: 'Total Return (%)',
+            gridcolor: 'rgba(255, 255, 255, 0.05)',
+            zeroline: true,
+            zerolinecolor: 'rgba(255, 255, 255, 0.2)'
+        },
+        showlegend: false,
+        title: {
+            text: `Parameter Sweep Results (${data.iterations} combinations)`,
+            font: { color: '#e2e8f0', size: 14 }
+        }
+    };
+
+    Plotly.newPlot('optimize-chart', [trace, bestTrace], layout, { responsive: true });
+
+    // Update title
+    document.getElementById('optimize-chart-title').textContent = 'Parameter Sweep Analysis';
+
+    // Show sensitivity results block
+    document.getElementById('optimize-results-placeholder').classList.add('hidden');
+    document.getElementById('wfa-results').classList.add('hidden');
+    document.getElementById('sensitivity-results').classList.remove('hidden');
+
+    // Update metrics - format params nicely
+    const paramsText = Object.entries(data.optimized_params)
+        .map(([k, v]) => `${k}=${Number(v).toFixed(1)}`)
+        .join(', ');
+    document.getElementById('sens-best-param').textContent = paramsText;
+    document.getElementById('sens-max-sharpe').textContent = data.best_sharpe.toFixed(2);
+
+}
+
+// Store best params from last optimization
+function applyBestParams() {
+    if (lastOptimizeResults && lastOptimizeResults.optimized_params) {
+        AppState.params = lastOptimizeResults.optimized_params;
+        updateParamsUI();
+        updateBacktestSummary();
+        switchTab('backtest');
+    } else {
+        alert('No optimization results available. Run Auto-Optimize first.');
+    }
+}
+
+
 
 function updateMetric(id, value, suffix = '', invert = false) {
     const el = document.getElementById(id);
@@ -1001,21 +1194,8 @@ function renderHeatmap(heatmapData) {
     }, { responsive: true });
 }
 
-function applyBestParams() {
-    if (!AppState.bestSensitivityParams) {
-        alert('No sensitivity results available.');
-        return;
-    }
+// Old sensitivity applyBestParams removed - now using the one in Parameter Optimization section
 
-    // Update global state params
-    AppState.params = { ...AppState.params, ...AppState.bestSensitivityParams };
-
-    // Refresh the Build tab UI
-    updateParamsUI();
-
-    alert('Best parameters applied! Go to Build tab to see updated values.');
-    switchTab('build');
-}
 
 // ===========================
 // Deploy & Live Trading

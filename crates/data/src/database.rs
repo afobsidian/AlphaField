@@ -19,7 +19,7 @@ impl DatabaseClient {
             .max_connections(5)
             .connect(&database_url)
             .await
-            .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
         let client = Self { pool };
         client.initialize().await?;
@@ -32,8 +32,8 @@ impl DatabaseClient {
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS candles (
-                symbol VARCHAR(20) NOT NULL,
-                timeframe VARCHAR(10) NOT NULL,
+                symbol TEXT NOT NULL,
+                timeframe TEXT NOT NULL,
                 timestamp TIMESTAMPTZ NOT NULL,
                 open DOUBLE PRECISION NOT NULL,
                 high DOUBLE PRECISION NOT NULL,
@@ -42,19 +42,17 @@ impl DatabaseClient {
                 volume DOUBLE PRECISION NOT NULL,
                 PRIMARY KEY (symbol, timeframe, timestamp)
             )
-            "#
+            "#,
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
         // Create index separately
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_candles_timestamp ON candles(timestamp)"
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_candles_timestamp ON candles(timestamp)")
+            .execute(&self.pool)
+            .await
+            .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
         // If TimescaleDB is available, enable extension and convert to hypertable
         let _ = sqlx::query("CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;")
@@ -62,9 +60,10 @@ impl DatabaseClient {
             .await;
 
         // Create hypertable for candles if using TimescaleDB
-        let _ = sqlx::query("SELECT create_hypertable('candles', 'timestamp', if_not_exists => TRUE);")
-            .execute(&self.pool)
-            .await;
+        let _ =
+            sqlx::query("SELECT create_hypertable('candles', 'timestamp', if_not_exists => TRUE);")
+                .execute(&self.pool)
+                .await;
 
         // Enable compression on candles hypertable (compress data older than 7 days)
         let _ = sqlx::query(
@@ -73,45 +72,47 @@ impl DatabaseClient {
                 timescaledb.compress,
                 timescaledb.compress_segmentby = 'symbol, timeframe'
             );
-            "#
+            "#,
         )
         .execute(&self.pool)
         .await;
 
         // Add compression policy for candles (compress chunks older than 7 days)
         let _ = sqlx::query(
-            "SELECT add_compression_policy('candles', INTERVAL '7 days', if_not_exists => TRUE);"
+            "SELECT add_compression_policy('candles', INTERVAL '7 days', if_not_exists => TRUE);",
         )
         .execute(&self.pool)
         .await;
 
         // Create trades table for tick-level data
+        // Note: For TimescaleDB hypertables, timestamp must be part of unique constraint
         sqlx::query(
             r#"
             CREATE TABLE IF NOT EXISTS trades (
-                id BIGSERIAL PRIMARY KEY,
-                symbol VARCHAR(20) NOT NULL,
+                symbol TEXT NOT NULL,
                 timestamp TIMESTAMPTZ NOT NULL,
                 price DOUBLE PRECISION NOT NULL,
                 quantity DOUBLE PRECISION NOT NULL,
-                is_buyer_maker BOOLEAN NOT NULL
+                is_buyer_maker BOOLEAN NOT NULL,
+                PRIMARY KEY (symbol, timestamp)
             )
-            "#
+            "#,
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
         // Index for trades
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_trades_timestamp ON trades(timestamp)")
+        sqlx::query("CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol)")
             .execute(&self.pool)
             .await
-            .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
         // Convert trades to hypertable if possible
-        let _ = sqlx::query("SELECT create_hypertable('trades', 'timestamp', if_not_exists => TRUE);")
-            .execute(&self.pool)
-            .await;
+        let _ =
+            sqlx::query("SELECT create_hypertable('trades', 'timestamp', if_not_exists => TRUE);")
+                .execute(&self.pool)
+                .await;
 
         // Enable compression on trades hypertable
         let _ = sqlx::query(
@@ -120,14 +121,14 @@ impl DatabaseClient {
                 timescaledb.compress,
                 timescaledb.compress_segmentby = 'symbol'
             );
-            "#
+            "#,
         )
         .execute(&self.pool)
         .await;
 
         // Add compression policy for trades (compress chunks older than 1 day)
         let _ = sqlx::query(
-            "SELECT add_compression_policy('trades', INTERVAL '1 day', if_not_exists => TRUE);"
+            "SELECT add_compression_policy('trades', INTERVAL '1 day', if_not_exists => TRUE);",
         )
         .execute(&self.pool)
         .await;
@@ -142,7 +143,11 @@ impl DatabaseClient {
         }
 
         // Use a transaction for atomicity
-        let mut tx = self.pool.begin().await.map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
         for bar in bars {
             sqlx::query(
@@ -156,7 +161,7 @@ impl DatabaseClient {
                     low = EXCLUDED.low,
                     close = EXCLUDED.close,
                     volume = EXCLUDED.volume
-                "#
+                "#,
             )
             .bind(symbol)
             .bind(timeframe)
@@ -168,11 +173,13 @@ impl DatabaseClient {
             .bind(bar.volume)
             .execute(&mut *tx)
             .await
-            .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
         }
 
-        tx.commit().await.map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
-        
+        tx.commit()
+            .await
+            .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
+
         Ok(())
     }
 
@@ -194,7 +201,7 @@ impl DatabaseClient {
         .bind(tick.is_buyer_maker)
         .execute(&self.pool)
         .await
-        .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
         Ok(())
     }
@@ -207,24 +214,25 @@ impl DatabaseClient {
             FROM candles
             WHERE symbol = $1 AND timeframe = $2
             ORDER BY timestamp ASC
-            "#
+            "#,
         )
         .bind(symbol)
         .bind(timeframe)
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
-        let bars = rows.into_iter().map(|row| {
-            Bar {
+        let bars = rows
+            .into_iter()
+            .map(|row| Bar {
                 timestamp: row.get("timestamp"),
                 open: row.get("open"),
                 high: row.get("high"),
                 low: row.get("low"),
                 close: row.get("close"),
                 volume: row.get("volume"),
-            }
-        }).collect();
+            })
+            .collect();
 
         Ok(bars)
     }
@@ -243,7 +251,7 @@ impl DatabaseClient {
             FROM candles
             WHERE symbol = $1 AND timeframe = $2 AND timestamp >= $3 AND timestamp <= $4
             ORDER BY timestamp ASC
-            "#
+            "#,
         )
         .bind(symbol)
         .bind(timeframe)
@@ -251,32 +259,32 @@ impl DatabaseClient {
         .bind(end)
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
-        let bars = rows.into_iter().map(|row| {
-            Bar {
+        let bars = rows
+            .into_iter()
+            .map(|row| Bar {
                 timestamp: row.get("timestamp"),
                 open: row.get("open"),
                 high: row.get("high"),
                 low: row.get("low"),
                 close: row.get("close"),
                 volume: row.get("volume"),
-            }
-        }).collect();
+            })
+            .collect();
 
         Ok(bars)
     }
 
     /// Checks if data exists for the given symbol and timeframe
     pub async fn exists(&self, symbol: &str, timeframe: &str) -> Result<bool> {
-        let row: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM candles WHERE symbol = $1 AND timeframe = $2"
-        )
-        .bind(symbol)
-        .bind(timeframe)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        let row: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM candles WHERE symbol = $1 AND timeframe = $2")
+                .bind(symbol)
+                .bind(timeframe)
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
         Ok(row.0 > 0)
     }
@@ -294,23 +302,26 @@ impl DatabaseClient {
             FROM candles
             GROUP BY symbol, timeframe
             ORDER BY symbol, timeframe
-            "#
+            "#,
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
-        let symbols = rows.into_iter().map(|row| {
-            let first: Option<chrono::DateTime<chrono::Utc>> = row.get("first_bar");
-            let last: Option<chrono::DateTime<chrono::Utc>> = row.get("last_bar");
-            CachedSymbol {
-                symbol: row.get("symbol"),
-                timeframe: row.get("timeframe"),
-                bar_count: row.get("bar_count"),
-                first_bar: first.map(|d| d.format("%Y-%m-%d %H:%M").to_string()),
-                last_bar: last.map(|d| d.format("%Y-%m-%d %H:%M").to_string()),
-            }
-        }).collect();
+        let symbols = rows
+            .into_iter()
+            .map(|row| {
+                let first: Option<chrono::DateTime<chrono::Utc>> = row.get("first_bar");
+                let last: Option<chrono::DateTime<chrono::Utc>> = row.get("last_bar");
+                CachedSymbol {
+                    symbol: row.get("symbol"),
+                    timeframe: row.get("timeframe"),
+                    bar_count: row.get("bar_count"),
+                    first_bar: first.map(|d| d.format("%Y-%m-%d %H:%M").to_string()),
+                    last_bar: last.map(|d| d.format("%Y-%m-%d %H:%M").to_string()),
+                }
+            })
+            .collect();
 
         Ok(symbols)
     }
@@ -322,7 +333,7 @@ impl DatabaseClient {
             .bind(timeframe)
             .execute(&self.pool)
             .await
-            .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
         Ok(())
     }
 
@@ -343,27 +354,27 @@ impl DatabaseClient {
                 created_at TIMESTAMPTZ DEFAULT NOW(),
                 updated_at TIMESTAMPTZ DEFAULT NOW()
             )
-            "#
+            "#,
         )
         .execute(&self.pool)
         .await
-        .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
         // Create index on status for quick filtering
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_asset_status ON asset_status(status)")
             .execute(&self.pool)
             .await
-            .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+            .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
         Ok(())
     }
 
     /// Record an asset as delisted
     pub async fn mark_delisted(
-        &self, 
-        symbol: &str, 
+        &self,
+        symbol: &str,
         delist_date: chrono::DateTime<chrono::Utc>,
-        notes: Option<&str>
+        notes: Option<&str>,
     ) -> Result<()> {
         sqlx::query(
             r#"
@@ -374,14 +385,14 @@ impl DatabaseClient {
                 delist_date = EXCLUDED.delist_date,
                 notes = COALESCE(EXCLUDED.notes, asset_status.notes),
                 updated_at = NOW()
-            "#
+            "#,
         )
         .bind(symbol)
         .bind(delist_date)
         .bind(notes)
         .execute(&self.pool)
         .await
-        .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
         Ok(())
     }
@@ -402,14 +413,14 @@ impl DatabaseClient {
                 delist_date = EXCLUDED.delist_date,
                 migration_to = EXCLUDED.migration_to,
                 updated_at = NOW()
-            "#
+            "#,
         )
         .bind(old_symbol)
         .bind(migration_date)
         .bind(new_symbol)
         .execute(&self.pool)
         .await
-        .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
         Ok(())
     }
@@ -421,12 +432,12 @@ impl DatabaseClient {
             SELECT symbol, status, delist_date, migration_to, notes
             FROM asset_status
             WHERE symbol = $1
-            "#
+            "#,
         )
         .bind(symbol)
         .fetch_optional(&self.pool)
         .await
-        .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
         Ok(row.map(|r| AssetStatus {
             symbol: r.get("symbol"),
@@ -445,19 +456,22 @@ impl DatabaseClient {
             FROM asset_status
             WHERE status IN ('delisted', 'migrated')
             ORDER BY delist_date DESC
-            "#
+            "#,
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
-        Ok(rows.into_iter().map(|r| AssetStatus {
-            symbol: r.get("symbol"),
-            status: r.get("status"),
-            delist_date: r.get("delist_date"),
-            migration_to: r.get("migration_to"),
-            notes: r.get("notes"),
-        }).collect())
+        Ok(rows
+            .into_iter()
+            .map(|r| AssetStatus {
+                symbol: r.get("symbol"),
+                status: r.get("status"),
+                delist_date: r.get("delist_date"),
+                migration_to: r.get("migration_to"),
+                notes: r.get("notes"),
+            })
+            .collect())
     }
 
     /// Load bars including delisted assets (for survivorship-bias-free backtests)
@@ -488,11 +502,7 @@ impl DatabaseClient {
     // =========================================================================
 
     /// Check for missing bars (gaps) in the data
-    pub async fn check_data_gaps(
-        &self,
-        symbol: &str,
-        timeframe: &str,
-    ) -> Result<Vec<DataGap>> {
+    pub async fn check_data_gaps(&self, symbol: &str, timeframe: &str) -> Result<Vec<DataGap>> {
         // Get all timestamps
         let rows = sqlx::query(
             r#"
@@ -500,18 +510,16 @@ impl DatabaseClient {
             FROM candles
             WHERE symbol = $1 AND timeframe = $2
             ORDER BY timestamp ASC
-            "#
+            "#,
         )
         .bind(symbol)
         .bind(timeframe)
         .fetch_all(&self.pool)
         .await
-        .map_err(|e| QuantError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?;
+        .map_err(|e| QuantError::Io(std::io::Error::other(e)))?;
 
-        let timestamps: Vec<chrono::DateTime<chrono::Utc>> = rows
-            .iter()
-            .map(|r| r.get("timestamp"))
-            .collect();
+        let timestamps: Vec<chrono::DateTime<chrono::Utc>> =
+            rows.iter().map(|r| r.get("timestamp")).collect();
 
         // Determine expected interval based on timeframe
         let interval_minutes = match timeframe {
@@ -531,7 +539,9 @@ impl DatabaseClient {
                 gaps.push(DataGap {
                     start: window[0],
                     end: window[1],
-                    expected_bars: ((window[1] - window[0]).num_minutes() / interval_minutes) as usize - 1,
+                    expected_bars: ((window[1] - window[0]).num_minutes() / interval_minutes)
+                        as usize
+                        - 1,
                 });
             }
         }
@@ -604,4 +614,3 @@ pub struct PriceOutlier {
     pub current_open: f64,
     pub gap_percent: f64,
 }
-

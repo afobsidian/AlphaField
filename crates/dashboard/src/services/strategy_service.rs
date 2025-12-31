@@ -1,7 +1,9 @@
-use std::collections::HashMap;
+use alphafield_backtest::{strategy::Strategy as BacktestStrategy, StrategyAdapter};
 use alphafield_core::Strategy;
-use alphafield_strategy::{GoldenCrossStrategy, MeanReversionStrategy, MomentumStrategy, RsiStrategy};
-use alphafield_backtest::{StrategyAdapter, strategy::Strategy as BacktestStrategy};
+use alphafield_strategy::{
+    GoldenCrossStrategy, MeanReversionStrategy, MomentumStrategy, RsiStrategy,
+};
+use std::collections::HashMap;
 use tracing::debug;
 
 pub struct StrategyFactory;
@@ -15,13 +17,14 @@ impl StrategyFactory {
                 let slow = params.get("slow_period").copied().unwrap_or(30.0) as usize;
                 let tp = params.get("take_profit").copied().unwrap_or(5.0);
                 let sl = params.get("stop_loss").copied().unwrap_or(5.0);
-                
+
                 if fast >= slow || fast == 0 || slow == 0 {
                     debug!("Invalid GoldenCross params: fast={} slow={}", fast, slow);
                     return None;
                 }
                 // Use config to pass all params
-                let config = alphafield_strategy::config::GoldenCrossConfig::new(fast, slow, tp, sl);
+                let config =
+                    alphafield_strategy::config::GoldenCrossConfig::new(fast, slow, tp, sl);
                 Some(Box::new(GoldenCrossStrategy::from_config(config)))
             }
             "Rsi" => {
@@ -32,11 +35,15 @@ impl StrategyFactory {
                 let sl = params.get("stop_loss").copied().unwrap_or(5.0);
 
                 if period == 0 || lower >= upper {
-                    debug!("Invalid RSI params: period={} lower={} upper={}", period, lower, upper);
+                    debug!(
+                        "Invalid RSI params: period={} lower={} upper={}",
+                        period, lower, upper
+                    );
                     return None;
                 }
-                
-                let config = alphafield_strategy::config::RsiConfig::new(period, lower, upper, tp, sl);
+
+                let config =
+                    alphafield_strategy::config::RsiConfig::new(period, lower, upper, tp, sl);
                 Some(Box::new(RsiStrategy::from_config(config)))
             }
             "MeanReversion" => {
@@ -46,7 +53,10 @@ impl StrategyFactory {
                 let sl = params.get("stop_loss").copied().unwrap_or(5.0);
 
                 if period == 0 || std_dev <= 0.0 {
-                    debug!("Invalid MeanReversion params: period={} std_dev={}", period, std_dev);
+                    debug!(
+                        "Invalid MeanReversion params: period={} std_dev={}",
+                        period, std_dev
+                    );
                     return None;
                 }
                 // Config might be internal or external. Assuming exposed via `new_with_exits` created earlier BUT MeanReversionConfig isn't in config:: usually?
@@ -81,7 +91,7 @@ impl StrategyFactory {
                 // I'll check `c:\Users\adamf\Documents\Projects\AlphaField\crates\strategy\src\strategies\mean_reversion.rs` again.
                 // It is `pub struct MeanReversionConfig`.
                 // Strategy crate likely re-exports it.
-                
+
                 // Safe bet: Use `MeanReversionConfig::new_with_exits` assuming it's imported.
                 // If not, I'll fix it.
                 let config = alphafield_strategy::strategies::mean_reversion::MeanReversionConfig::new_with_exits(period, std_dev, tp, sl);
@@ -98,8 +108,16 @@ impl StrategyFactory {
                 if macd_fast >= macd_slow || ema_period == 0 || macd_signal == 0 {
                     return None;
                 }
-                
-                let config = alphafield_strategy::strategies::momentum::MomentumConfig::new_with_exits(ema_period, macd_fast, macd_slow, macd_signal, tp, sl);
+
+                let config =
+                    alphafield_strategy::strategies::momentum::MomentumConfig::new_with_exits(
+                        ema_period,
+                        macd_fast,
+                        macd_slow,
+                        macd_signal,
+                        tp,
+                        sl,
+                    );
                 Some(Box::new(MomentumStrategy::from_config(config)))
             }
             _ => None,
@@ -108,7 +126,12 @@ impl StrategyFactory {
 
     /// Create a backtest-ready strategy wrapped in StrategyAdapter
     /// This returns the backtest Strategy trait (produces OrderRequests from Signals)
-    pub fn create_backtest(name: &str, params: &HashMap<String, f64>, symbol: &str, capital: f64) -> Option<Box<dyn BacktestStrategy>> {
+    pub fn create_backtest(
+        name: &str,
+        params: &HashMap<String, f64>,
+        symbol: &str,
+        capital: f64,
+    ) -> Option<Box<dyn BacktestStrategy>> {
         debug!(strategy = name, ?params, "Creating backtest strategy");
         match name {
             "GoldenCross" => {
@@ -120,7 +143,8 @@ impl StrategyFactory {
                 if fast >= slow || fast == 0 || slow == 0 {
                     return None;
                 }
-                let config = alphafield_strategy::config::GoldenCrossConfig::new(fast, slow, tp, sl);
+                let config =
+                    alphafield_strategy::config::GoldenCrossConfig::new(fast, slow, tp, sl);
                 let strat = GoldenCrossStrategy::from_config(config);
                 Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
             }
@@ -134,7 +158,8 @@ impl StrategyFactory {
                 if period == 0 || lower >= upper {
                     return None;
                 }
-                let config = alphafield_strategy::config::RsiConfig::new(period, lower, upper, tp, sl);
+                let config =
+                    alphafield_strategy::config::RsiConfig::new(period, lower, upper, tp, sl);
                 let strat = RsiStrategy::from_config(config);
                 Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
             }
@@ -158,11 +183,19 @@ impl StrategyFactory {
                 let macd_signal = params.get("macd_signal").copied().unwrap_or(9.0) as usize;
                 let tp = params.get("take_profit").copied().unwrap_or(5.0);
                 let sl = params.get("stop_loss").copied().unwrap_or(5.0);
-                
+
                 if macd_fast >= macd_slow || ema_period == 0 || macd_signal == 0 {
                     return None;
                 }
-                let config = alphafield_strategy::strategies::momentum::MomentumConfig::new_with_exits(ema_period, macd_fast, macd_slow, macd_signal, tp, sl);
+                let config =
+                    alphafield_strategy::strategies::momentum::MomentumConfig::new_with_exits(
+                        ema_period,
+                        macd_fast,
+                        macd_slow,
+                        macd_signal,
+                        tp,
+                        sl,
+                    );
                 let strat = MomentumStrategy::from_config(config);
                 Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
             }

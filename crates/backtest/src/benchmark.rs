@@ -95,12 +95,11 @@ impl BenchmarkComparison {
         let benchmark_returns = Self::calculate_returns(benchmark_curve);
 
         // Total returns
-        let strategy_total =
-            (strategy_curve.last().unwrap().1 - strategy_curve.first().unwrap().1)
-                / strategy_curve.first().unwrap().1;
-        let benchmark_total =
-            (benchmark_curve.last().unwrap().1 - benchmark_curve.first().unwrap().1)
-                / benchmark_curve.first().unwrap().1;
+        let strategy_total = (strategy_curve.last().unwrap().1 - strategy_curve.first().unwrap().1)
+            / strategy_curve.first().unwrap().1;
+        let benchmark_total = (benchmark_curve.last().unwrap().1
+            - benchmark_curve.first().unwrap().1)
+            / benchmark_curve.first().unwrap().1;
 
         // CAGR for benchmark
         let start_time = benchmark_curve.first().unwrap().0;
@@ -131,9 +130,11 @@ impl BenchmarkComparison {
             0.0
         } else {
             let mean = excess_returns.iter().sum::<f64>() / excess_returns.len() as f64;
-            let variance =
-                excess_returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>()
-                    / excess_returns.len() as f64;
+            let variance = excess_returns
+                .iter()
+                .map(|r| (r - mean).powi(2))
+                .sum::<f64>()
+                / excess_returns.len() as f64;
             variance.sqrt() * (252.0f64).sqrt()
         };
 
@@ -150,8 +151,10 @@ impl BenchmarkComparison {
             Self::calculate_beta_correlation(&strategy_returns, &benchmark_returns);
 
         // Alpha (Jensen's Alpha)
-        let strategy_avg = strategy_returns.iter().sum::<f64>() / strategy_returns.len().max(1) as f64;
-        let benchmark_avg = benchmark_returns.iter().sum::<f64>() / benchmark_returns.len().max(1) as f64;
+        let strategy_avg =
+            strategy_returns.iter().sum::<f64>() / strategy_returns.len().max(1) as f64;
+        let benchmark_avg =
+            benchmark_returns.iter().sum::<f64>() / benchmark_returns.len().max(1) as f64;
         let alpha = (strategy_avg - risk_free_rate / 252.0)
             - beta * (benchmark_avg - risk_free_rate / 252.0);
         let annualized_alpha = alpha * 252.0;

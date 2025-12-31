@@ -216,10 +216,17 @@
                             </div>
                         </div>
 
-                        <button type="button" class="btn btn-primary btn-action" id="btn-run-backtest"
-                            onclick="runBacktest()">
-                            ▶️ Run Backtest
-                        </button>
+                        <div class="button-group">
+                            <button type="button" class="btn btn-primary btn-action" id="btn-run-backtest"
+                                onclick="runBacktest()">
+                                ▶️ Run Backtest
+                            </button>
+                            <button type="button" class="btn btn-secondary btn-action" id="btn-auto-optimize"
+                                onclick="optimizeParams()">
+                                🎯 Auto-Optimize
+                            </button>
+                        </div>
+
                     </div>
 
                     <!-- Results Panel -->

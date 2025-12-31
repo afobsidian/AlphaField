@@ -199,10 +199,10 @@ mod tests {
     #[test]
     fn test_trade_stats_calculation() {
         let trades = vec![
-            make_trade(100.0, 3600),   // Win
-            make_trade(50.0, 7200),    // Win
-            make_trade(-30.0, 1800),   // Loss
-            make_trade(-20.0, 900),    // Loss
+            make_trade(100.0, 3600), // Win
+            make_trade(50.0, 7200),  // Win
+            make_trade(-30.0, 1800), // Loss
+            make_trade(-20.0, 900),  // Loss
         ];
 
         let stats = TradeStats::calculate(&trades);

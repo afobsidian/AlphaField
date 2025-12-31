@@ -28,9 +28,9 @@ pub struct WalkForwardConfig {
 impl Default for WalkForwardConfig {
     fn default() -> Self {
         Self {
-            train_window: 252,  // ~1 year of daily bars
-            test_window: 63,    // ~3 months
-            step_size: 21,      // ~1 month advance
+            train_window: 252, // ~1 year of daily bars
+            test_window: 63,   // ~3 months
+            step_size: 21,     // ~1 month advance
             initial_capital: 10000.0,
             fee_rate: 0.001,
         }
@@ -74,7 +74,7 @@ pub struct AggregateMetrics {
     pub median_return: f64,
     pub mean_sharpe: f64,
     pub worst_drawdown: f64,
-    pub win_rate: f64,  // % of windows with positive return
+    pub win_rate: f64, // % of windows with positive return
 }
 
 /// Walk-forward analysis engine
@@ -190,15 +190,25 @@ impl WalkForwardAnalyzer {
             return AggregateMetrics::default();
         }
 
-        let returns: Vec<f64> = windows.iter().map(|w| w.test_metrics.total_return).collect();
-        let sharpes: Vec<f64> = windows.iter().map(|w| w.test_metrics.sharpe_ratio).collect();
-        let drawdowns: Vec<f64> = windows.iter().map(|w| w.test_metrics.max_drawdown).collect();
+        let returns: Vec<f64> = windows
+            .iter()
+            .map(|w| w.test_metrics.total_return)
+            .collect();
+        let sharpes: Vec<f64> = windows
+            .iter()
+            .map(|w| w.test_metrics.sharpe_ratio)
+            .collect();
+        let drawdowns: Vec<f64> = windows
+            .iter()
+            .map(|w| w.test_metrics.max_drawdown)
+            .collect();
 
         let mean_return = returns.iter().sum::<f64>() / returns.len() as f64;
-        
+
         // Median return
         let mut sorted_returns = returns.clone();
         sorted_returns.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        #[allow(clippy::manual_is_multiple_of)]
         let median_return = if sorted_returns.len() % 2 == 0 {
             let mid = sorted_returns.len() / 2;
             (sorted_returns[mid - 1] + sorted_returns[mid]) / 2.0
@@ -235,7 +245,7 @@ impl WalkForwardAnalyzer {
 
             // If both positive or both negative, more stable
             let same_direction = (train_return >= 0.0) == (test_return >= 0.0);
-            
+
             // Magnitude similarity (avoid division by zero)
             let magnitude_score = if train_return.abs() > 0.001 {
                 let ratio = test_return / train_return;
@@ -245,7 +255,11 @@ impl WalkForwardAnalyzer {
                 0.5 // Unknown if train return near zero
             };
 
-            let window_score = if same_direction { 0.5 + 0.5 * magnitude_score } else { 0.25 * magnitude_score };
+            let window_score = if same_direction {
+                0.5 + 0.5 * magnitude_score
+            } else {
+                0.25 * magnitude_score
+            };
             stability_scores.push(window_score);
         }
 
@@ -280,7 +294,7 @@ mod tests {
     //     let analyzer = WalkForwardAnalyzer::new(config);
 
     //     let data: Vec<Bar> = (0..100).map(|i| make_bar(100.0, i)).collect();
-        
+
     //     // Create a simple buy-and-hold strategy factory
     //     let factory = || -> Box<dyn Strategy> {
     //         Box::new(crate::strategy::BuyAndHold::new())
@@ -300,18 +314,19 @@ mod tests {
 
         // Only 100 bars but need 150 (100 train + 50 test)
         let data: Vec<Bar> = (0..100).map(|i| make_bar(100.0, i)).collect();
-        
+
         // Create a minimal strategy factory
         struct MinimalStrategy;
         impl crate::strategy::Strategy for MinimalStrategy {
-            fn on_bar(&mut self, _bar: &Bar) -> crate::error::Result<Vec<crate::strategy::OrderRequest>> {
+            fn on_bar(
+                &mut self,
+                _bar: &Bar,
+            ) -> crate::error::Result<Vec<crate::strategy::OrderRequest>> {
                 Ok(vec![])
             }
         }
-        
-        let factory = || -> Box<dyn Strategy> {
-            Box::new(MinimalStrategy)
-        };
+
+        let factory = || -> Box<dyn Strategy> { Box::new(MinimalStrategy) };
 
         let result = analyzer.analyze(&data, "TEST", factory);
         assert!(result.is_err());
@@ -335,4 +350,3 @@ mod tests {
         assert_eq!(aggregate.win_rate, 0.0);
     }
 }
-

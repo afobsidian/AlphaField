@@ -22,6 +22,12 @@ pub struct AppState {
     pub hub: Arc<DashboardHub>,
 }
 
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AppState {
     pub fn new() -> Self {
         Self {
@@ -54,7 +60,12 @@ pub async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> 
     Json(HealthResponse {
         status: "healthy".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
-        database: if state.db.is_some() { "connected" } else { "disconnected" }.to_string(),
+        database: if state.db.is_some() {
+            "connected"
+        } else {
+            "disconnected"
+        }
+        .to_string(),
     })
 }
 
@@ -78,23 +89,28 @@ pub async fn get_performance(State(_state): State<Arc<AppState>>) -> Json<Perfor
     Json(generate_mock_performance())
 }
 
-use crate::backtest_api::run_backtest;
+use crate::analysis_api::{
+    calculate_correlation, run_monte_carlo, run_sensitivity, run_walk_forward,
+};
+use crate::backtest_api::{optimize_params, run_backtest};
 use crate::data_api::{delete_symbol, fetch_symbol, get_trading_pairs, list_symbols};
-use crate::websocket::websocket_handler;
-use crate::analysis_api::{run_monte_carlo, calculate_correlation, run_sensitivity, run_walk_forward};
 use crate::quality_api::{check_freshness, check_gaps, check_outliers, get_quality_summary};
 use crate::sentiment_api::{get_current_sentiment, get_sentiment_history, sync_sentiment_data};
+use crate::websocket::websocket_handler;
 
 // Build the API router
 pub fn create_router(state: Arc<AppState>) -> Router {
     // Clone hub for WebSocket route
     let hub = state.hub.clone();
-    
+
     Router::new()
         // Health
         .route("/api/health", get(health))
         // WebSocket for real-time updates
-        .route("/api/ws", get(move |ws| websocket_handler(ws, axum::extract::State(hub.clone()))))
+        .route(
+            "/api/ws",
+            get(move |ws| websocket_handler(ws, axum::extract::State(hub.clone()))),
+        )
         // Live trading (mock for now)
         .route("/api/portfolio", get(get_portfolio))
         .route("/api/positions", get(get_positions))
@@ -102,6 +118,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/performance", get(get_performance))
         // Backtesting
         .route("/api/backtest/run", post(run_backtest))
+        .route("/api/backtest/optimize", post(optimize_params))
         // Analysis
         .route("/api/monte-carlo", post(run_monte_carlo))
         .route("/api/correlation", post(calculate_correlation))
@@ -114,7 +131,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/data/:symbol/:interval", delete(delete_symbol))
         // Data quality
         .route("/api/quality/gaps/:symbol/:interval", get(check_gaps))
-        .route("/api/quality/outliers/:symbol/:interval", get(check_outliers))
+        .route(
+            "/api/quality/outliers/:symbol/:interval",
+            get(check_outliers),
+        )
         .route("/api/quality/freshness", get(check_freshness))
         .route("/api/quality/summary", get(get_quality_summary))
         // Sentiment analysis

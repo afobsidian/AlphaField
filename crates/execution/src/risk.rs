@@ -1,4 +1,4 @@
-use alphafield_core::{ExecutionService, Order, QuantError, Result, OrderSide};
+use alphafield_core::{ExecutionService, Order, OrderSide, QuantError, Result};
 use async_trait::async_trait;
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -133,7 +133,7 @@ impl MaxDailyLoss {
             .unwrap()
             .as_secs()
             / 86400;
-        
+
         if state.current_day != today {
             state.current_day = today;
             state.realized_pnl = 0.0;
@@ -147,16 +147,16 @@ impl RiskCheck for MaxDailyLoss {
     fn check(&self, _order: &Order) -> Result<()> {
         let mut state = self.pnl_tracker.write().unwrap();
         self.maybe_reset_day(&mut state);
-        
+
         // Already triggered - reject all orders
         if state.breaker_triggered {
             return Err(QuantError::DataValidation(
-                "Circuit breaker active: max daily loss exceeded. Trading halted.".to_string()
+                "Circuit breaker active: max daily loss exceeded. Trading halted.".to_string(),
             ));
         }
 
         let total_pnl = state.realized_pnl + state.unrealized_pnl;
-        
+
         // Check if loss exceeds threshold (loss is negative PnL)
         if total_pnl < -self.max_loss {
             state.breaker_triggered = true;
@@ -205,17 +205,17 @@ impl PositionDrift {
 
         if let Some(expected_price) = expected {
             let drift = (fill_price - expected_price).abs() / expected_price;
-            
+
             // Clean up
             self.expected_prices.write().unwrap().remove(order_id);
-            
+
             if drift > self.max_drift_pct {
                 return Err(QuantError::DataValidation(format!(
                     "Position drift alert: fill at {:.6} vs expected {:.6} ({:.2}% drift, limit {:.2}%)",
                     fill_price, expected_price, drift * 100.0, self.max_drift_pct * 100.0
                 )));
             }
-            
+
             Ok(drift)
         } else {
             Ok(0.0) // No expected price recorded
@@ -281,7 +281,7 @@ impl VolatilityScaledSize {
                 // Higher ATR = smaller position
                 let volatility_ratio = base / current;
                 let scaled = self.base_size * volatility_ratio * self.atr_multiplier;
-                
+
                 // Cap at base size (don't increase beyond normal)
                 scaled.min(self.base_size)
             }
@@ -293,14 +293,14 @@ impl VolatilityScaledSize {
 impl RiskCheck for VolatilityScaledSize {
     fn check(&self, order: &Order) -> Result<()> {
         let max_size = self.adjusted_size(&order.symbol);
-        
+
         if order.quantity > max_size {
             return Err(QuantError::DataValidation(format!(
                 "Order size {:.6} exceeds volatility-adjusted limit {:.6} for {}",
                 order.quantity, max_size, order.symbol
             )));
         }
-        
+
         Ok(())
     }
 }
@@ -341,7 +341,7 @@ impl FatFingerProtection {
 impl RiskCheck for FatFingerProtection {
     fn check(&self, order: &Order) -> Result<()> {
         let account = self.account_value();
-        
+
         // Need a price to calculate order value
         let price = match order.price {
             Some(p) if p > 0.0 => p,
@@ -394,10 +394,10 @@ mod tests {
     #[test]
     fn test_max_daily_loss_rejects_when_breached() {
         let check = MaxDailyLoss::new(100.0);
-        
+
         // Simulate a -$150 loss
         check.record_realized_pnl(-150.0);
-        
+
         let order = Order {
             symbol: "BTCUSDT".to_string(),
             side: OrderSide::Buy,
@@ -408,7 +408,7 @@ mod tests {
             id: String::new(),
             status: alphafield_core::OrderStatus::New,
         };
-        
+
         let result = check.check(&order);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Max daily loss"));
@@ -418,7 +418,7 @@ mod tests {
     fn test_max_daily_loss_allows_within_limit() {
         let check = MaxDailyLoss::new(100.0);
         check.record_realized_pnl(-50.0);
-        
+
         let order = Order {
             symbol: "BTCUSDT".to_string(),
             side: OrderSide::Buy,
@@ -429,17 +429,17 @@ mod tests {
             id: String::new(),
             status: alphafield_core::OrderStatus::New,
         };
-        
+
         assert!(check.check(&order).is_ok());
     }
 
     #[test]
     fn test_volatility_scaled_size() {
         let check = VolatilityScaledSize::new(1.0, 1.0);
-        
+
         // When current ATR is 2x baseline, position should be halved
         check.update_atr("BTCUSDT", 2000.0, 1000.0);
-        
+
         let adjusted = check.adjusted_size("BTCUSDT");
         assert!((adjusted - 0.5).abs() < 0.01);
     }
@@ -448,7 +448,7 @@ mod tests {
     fn test_fat_finger_rejects_large_order() {
         // Account value $10,000, max 10% per order = $1,000 max
         let check = FatFingerProtection::new(0.10, 10000.0);
-        
+
         // Order worth $2,000 (0.04 BTC @ $50,000) should be rejected
         let order = Order {
             symbol: "BTCUSDT".to_string(),
@@ -460,7 +460,7 @@ mod tests {
             id: String::new(),
             status: alphafield_core::OrderStatus::New,
         };
-        
+
         let result = check.check(&order);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("Fat-finger"));
@@ -470,7 +470,7 @@ mod tests {
     fn test_fat_finger_allows_small_order() {
         // Account value $10,000, max 10% per order = $1,000 max
         let check = FatFingerProtection::new(0.10, 10000.0);
-        
+
         // Order worth $500 (0.01 BTC @ $50,000) should be allowed
         let order = Order {
             symbol: "BTCUSDT".to_string(),
@@ -482,8 +482,7 @@ mod tests {
             id: String::new(),
             status: alphafield_core::OrderStatus::New,
         };
-        
+
         assert!(check.check(&order).is_ok());
     }
 }
-

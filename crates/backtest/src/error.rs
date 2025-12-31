@@ -18,8 +18,14 @@ pub enum BacktestError {
     #[error("Insufficient funds: required {required}, available {available}")]
     InsufficientFunds { required: f64, available: f64 },
 
-    #[error("Insufficient position for symbol {symbol}: required {required}, available {available}")]
-    InsufficientPosition { symbol: String, required: f64, available: f64 },
+    #[error(
+        "Insufficient position for symbol {symbol}: required {required}, available {available}"
+    )]
+    InsufficientPosition {
+        symbol: String,
+        required: f64,
+        available: f64,
+    },
 
     #[error("Position not found: {0}")]
     PositionNotFound(String),

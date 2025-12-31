@@ -131,8 +131,7 @@ impl PerformanceMetrics {
         // SQN = (Expected Value of Trade Returns / StdDev of Trade Returns) * sqrt(n)
         let sqn = if trades.len() >= 30 {
             let trade_returns: Vec<f64> = trades.iter().map(|t| t.return_pct()).collect();
-            let avg_trade_return =
-                trade_returns.iter().sum::<f64>() / trade_returns.len() as f64;
+            let avg_trade_return = trade_returns.iter().sum::<f64>() / trade_returns.len() as f64;
             let trade_variance = trade_returns
                 .iter()
                 .map(|r| (r - avg_trade_return).powi(2))
@@ -186,8 +185,16 @@ impl PerformanceMetrics {
 
         // Omega Ratio (sum of returns above threshold / sum below)
         let threshold = risk_free_rate / 252.0; // Daily threshold
-        let gains: f64 = returns.iter().filter(|&&r| r > threshold).map(|r| r - threshold).sum();
-        let losses: f64 = returns.iter().filter(|&&r| r < threshold).map(|r| threshold - r).sum();
+        let gains: f64 = returns
+            .iter()
+            .filter(|&&r| r > threshold)
+            .map(|r| r - threshold)
+            .sum();
+        let losses: f64 = returns
+            .iter()
+            .filter(|&&r| r < threshold)
+            .map(|r| threshold - r)
+            .sum();
         let omega_ratio = if losses > 0.0 {
             gains / losses
         } else if gains > 0.0 {
@@ -204,9 +211,21 @@ impl PerformanceMetrics {
             volatility,
             sortino_ratio,
             sqn,
-            calmar_ratio: if calmar_ratio.is_finite() { calmar_ratio } else { 0.0 },
-            omega_ratio: if omega_ratio.is_finite() { omega_ratio } else { 0.0 },
-            recovery_factor: if recovery_factor.is_finite() { recovery_factor } else { 0.0 },
+            calmar_ratio: if calmar_ratio.is_finite() {
+                calmar_ratio
+            } else {
+                0.0
+            },
+            omega_ratio: if omega_ratio.is_finite() {
+                omega_ratio
+            } else {
+                0.0
+            },
+            recovery_factor: if recovery_factor.is_finite() {
+                recovery_factor
+            } else {
+                0.0
+            },
             ulcer_index,
             total_trades: trade_stats.total_trades,
             win_rate: trade_stats.win_rate,
@@ -252,9 +271,9 @@ mod tests {
         let equity = vec![
             (0, 100.0),
             (86400000, 105.0),
-            (172800000, 98.0),  // Drawdown
+            (172800000, 98.0), // Drawdown
             (259200000, 103.0),
-            (345600000, 95.0),  // Drawdown
+            (345600000, 95.0), // Drawdown
             (432000000, 110.0),
         ];
 

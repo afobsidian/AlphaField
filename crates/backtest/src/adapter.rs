@@ -12,7 +12,7 @@ enum PositionState {
 }
 
 /// Adapter to bridge alphafield_core::Strategy (Signal-based) to alphafield_backtest::Strategy (Order-based)
-/// 
+///
 /// This adapter tracks position state to ensure:
 /// - Buy signals only create orders when flat (not already long)
 /// - Sell signals close long positions or open short (depending on mode)
@@ -41,7 +41,7 @@ where
             inner: strategy,
             symbol: symbol.into(),
             capital,
-            trade_pct: 0.10,  // Default to 10% of capital per trade
+            trade_pct: 0.10, // Default to 10% of capital per trade
             position: PositionState::Flat,
             position_quantity: 0.0,
         }
@@ -88,7 +88,7 @@ where
                         // Only sell if we're long (to close position)
                         // Use the FULL position quantity, not a new calculated amount
                         if self.position == PositionState::Long && self.position_quantity > 0.0 {
-                            let quantity = Self::round_quantity(self.position_quantity);  // Sell entire position
+                            let quantity = Self::round_quantity(self.position_quantity); // Sell entire position
 
                             if quantity > 0.0 {
                                 orders.push(OrderRequest {
@@ -106,7 +106,7 @@ where
                 }
             }
         }
-        
+
         Ok(orders)
     }
 
@@ -136,7 +136,7 @@ where
                 }
                 alphafield_core::SignalType::Sell => {
                     if self.position == PositionState::Long && self.position_quantity > 0.0 {
-                        let quantity = Self::round_quantity(self.position_quantity);  // Sell entire position
+                        let quantity = Self::round_quantity(self.position_quantity); // Sell entire position
                         self.position = PositionState::Flat;
                         self.position_quantity = 0.0;
 

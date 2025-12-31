@@ -32,7 +32,12 @@ impl MeanReversionConfig {
         }
     }
 
-    pub fn new_with_exits(period: usize, num_std_dev: f64, take_profit: f64, stop_loss: f64) -> Self {
+    pub fn new_with_exits(
+        period: usize,
+        num_std_dev: f64,
+        take_profit: f64,
+        stop_loss: f64,
+    ) -> Self {
         Self {
             period,
             num_std_dev,
@@ -80,8 +85,8 @@ impl fmt::Display for MeanReversionConfig {
 /// Mean Reversion Strategy
 ///
 /// # Strategy Logic
-/// - **Buy Signal**: Price touches or crosses below lower Bollinger Band
-/// - **Sell Signal**: Price touches or crosses above upper Bollinger Band
+/// - **Buy Signal**: Price crosses below lower Bollinger Band
+/// - **Sell Signal**: Price crosses above middle band or TP/SL
 ///
 /// # Example
 /// ```
@@ -93,7 +98,11 @@ pub struct MeanReversionStrategy {
     config: MeanReversionConfig,
     bb: BollingerBands,
     last_position: SignalType,
-    entry_price: Option<f64>,  // Track entry price for exit logic
+    entry_price: Option<f64>, // Track entry price for exit logic
+    // State tracking for crossover detection
+    last_price: Option<f64>,
+    last_middle: Option<f64>,
+    last_lower: Option<f64>,
 }
 
 impl MeanReversionStrategy {
@@ -116,6 +125,9 @@ impl MeanReversionStrategy {
             config,
             last_position: SignalType::Hold,
             entry_price: None,
+            last_price: None,
+            last_middle: None,
+            last_lower: None,
         }
     }
 
@@ -134,31 +146,22 @@ impl Strategy for MeanReversionStrategy {
 
         let price = bar.close;
 
+        // Get previous state
+        let prev_price = self.last_price;
+        let prev_middle = self.last_middle;
+        let prev_lower = self.last_lower;
+
+        // Update state for next bar
+        self.last_price = Some(price);
+        self.last_middle = Some(middle);
+        self.last_lower = Some(lower);
+
         // EXIT LOGIC FIRST (before entry) - check if we should close position
         if self.last_position == SignalType::Buy {
             if let Some(entry) = self.entry_price {
-                // Exit condition 1: Price reached middle band (mean reversion complete)
-                let exit_diff = price - middle;
-                debug!(price = price, middle = middle, diff = exit_diff, "Checking Mean Reversion Exit");
-                
-                if price >= middle {
-                    debug!(price = price, middle = middle, "Mean Reversion Exit Triggered!");
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!(
-                            "BB Middle Band Exit: Price {:.2} >= Middle {:.2}",
-                            price, middle
-                        )),
-                    }]);
-                }
-                
-                // Exit condition 2: Take profit
                 let profit_pct = (price - entry) / entry * 100.0;
+
+                // Exit condition 1: Take profit (price-based)
                 if profit_pct >= self.config.take_profit {
                     self.last_position = SignalType::Hold;
                     self.entry_price = None;
@@ -167,14 +170,11 @@ impl Strategy for MeanReversionStrategy {
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
-                        metadata: Some(format!(
-                            "Take Profit Exit: {:.1}% gain",
-                            profit_pct
-                        )),
+                        metadata: Some(format!("Take Profit Exit: {:.1}% gain", profit_pct)),
                     }]);
                 }
-                
-                // Exit condition 3: Stop loss
+
+                // Exit condition 2: Stop loss (price-based)
                 if profit_pct <= -self.config.stop_loss {
                     self.last_position = SignalType::Hold;
                     self.entry_price = None;
@@ -183,30 +183,54 @@ impl Strategy for MeanReversionStrategy {
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
-                        metadata: Some(format!(
-                            "Stop Loss Exit: {:.1}% loss",
-                            profit_pct
-                        )),
+                        metadata: Some(format!("Stop Loss Exit: {:.1}% loss", profit_pct)),
                     }]);
+                }
+
+                // Exit condition 3: Price crosses above middle band (actual crossover)
+                if let (Some(prev_p), Some(prev_m)) = (prev_price, prev_middle) {
+                    if prev_p < prev_m && price >= middle {
+                        debug!(
+                            price = price,
+                            middle = middle,
+                            "Mean Reversion Crossover Exit Triggered!"
+                        );
+                        self.last_position = SignalType::Hold;
+                        self.entry_price = None;
+                        return Some(vec![Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: 1.0,
+                            metadata: Some(format!(
+                                "BB Middle Band Crossover Exit: Price crossed above {:.2}",
+                                middle
+                            )),
+                        }]);
+                    }
                 }
             }
         }
 
-        // ENTRY LOGIC - only if not already in position
-        if price <= lower && self.last_position != SignalType::Buy {
-            self.last_position = SignalType::Buy;
-            self.entry_price = Some(price);
-            let distance = (middle - price) / middle;
-            return Some(vec![Signal {
-                timestamp: bar.timestamp,
-                symbol: "UNKNOWN".to_string(),
-                signal_type: SignalType::Buy,
-                strength: distance.min(1.0),
-                metadata: Some(format!(
-                    "BB Lower Band Entry: Price {:.2} <= Lower {:.2}",
-                    price, lower
-                )),
-            }]);
+        // ENTRY LOGIC - Price crosses below lower band (actual crossover)
+        if self.last_position != SignalType::Buy {
+            if let (Some(prev_p), Some(prev_l)) = (prev_price, prev_lower) {
+                if prev_p >= prev_l && price < lower {
+                    self.last_position = SignalType::Buy;
+                    self.entry_price = Some(price);
+                    let distance = (middle - price) / middle;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: distance.min(1.0),
+                        metadata: Some(format!(
+                            "BB Lower Band Crossover Entry: Price crossed below {:.2}",
+                            lower
+                        )),
+                    }]);
+                }
+            }
         }
 
         None

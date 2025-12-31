@@ -208,10 +208,7 @@ impl CorrelationAnalyzer {
             correlations.iter().sum::<f64>() / correlations.len() as f64
         };
 
-        let max_correlation = correlations
-            .iter()
-            .copied()
-            .fold(0.0, f64::max);
+        let max_correlation = correlations.iter().copied().fold(0.0, f64::max);
 
         let diversification_score = 1.0 - average_correlation;
 
@@ -287,8 +284,14 @@ mod tests {
 
         // Two correlated equity curves
         let curves = vec![
-            ("Strategy A".to_string(), vec![100.0, 102.0, 105.0, 103.0, 108.0, 110.0]),
-            ("Strategy B".to_string(), vec![100.0, 101.0, 104.0, 102.0, 106.0, 109.0]),
+            (
+                "Strategy A".to_string(),
+                vec![100.0, 102.0, 105.0, 103.0, 108.0, 110.0],
+            ),
+            (
+                "Strategy B".to_string(),
+                vec![100.0, 101.0, 104.0, 102.0, 106.0, 109.0],
+            ),
         ];
 
         let result = analyzer.analyze_equity_curves(&curves).unwrap();
@@ -308,8 +311,14 @@ mod tests {
 
         // Highly correlated curves should trigger alert
         let curves = vec![
-            ("A".to_string(), vec![100.0, 110.0, 120.0, 130.0, 140.0, 150.0]),
-            ("B".to_string(), vec![100.0, 112.0, 124.0, 136.0, 148.0, 160.0]),
+            (
+                "A".to_string(),
+                vec![100.0, 110.0, 120.0, 130.0, 140.0, 150.0],
+            ),
+            (
+                "B".to_string(),
+                vec![100.0, 112.0, 124.0, 136.0, 148.0, 160.0],
+            ),
         ];
 
         let result = analyzer.analyze_equity_curves(&curves).unwrap();

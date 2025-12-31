@@ -93,7 +93,7 @@ impl DrawdownAnalysis {
         let mut all_drawdowns = Vec::new();
 
         for &(ts, equity) in equity_history {
-            let timestamp = DateTime::from_timestamp_millis(ts).unwrap_or_else(|| Utc::now());
+            let timestamp = DateTime::from_timestamp_millis(ts).unwrap_or_else(Utc::now);
 
             if equity > peak {
                 // New peak - close any open drawdown period
@@ -254,16 +254,12 @@ mod tests {
         let analysis = DrawdownAnalysis::calculate(&equity, 0.15);
 
         assert!((analysis.max_drawdown - 0.182).abs() < 0.01);
-        assert!(analysis.drawdown_periods.len() >= 1);
+        assert!(!analysis.drawdown_periods.is_empty());
     }
 
     #[test]
     fn test_drawdown_curve() {
-        let equity = vec![
-            (0i64, 100.0),
-            (86400000, 110.0),
-            (172800000, 95.0),
-        ];
+        let equity = vec![(0i64, 100.0), (86400000, 110.0), (172800000, 95.0)];
 
         let curve = DrawdownAnalysis::generate_curve(&equity);
         assert_eq!(curve.len(), 3);
