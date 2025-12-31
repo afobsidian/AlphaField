@@ -4,7 +4,7 @@ pub struct ExchangeSimulator {
     pub slippage_model: SlippageModel,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub enum SlippageModel {
     None,
     FixedPercent(f64),
