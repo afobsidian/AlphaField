@@ -871,13 +871,15 @@ function initAnalysisModeToggle() {
             e.target.closest('.mode-option').classList.add('active');
 
             // Show/hide config sections
+            document.getElementById('comprehensive-config').classList.toggle('hidden', mode !== 'comprehensive');
             document.getElementById('wfa-config').classList.toggle('hidden', mode !== 'walkforward');
             document.getElementById('sensitivity-config').classList.toggle('hidden', mode !== 'sensitivity');
 
             // Hide results and show placeholder
+            document.getElementById('comprehensive-results').classList.add('hidden');
             document.getElementById('wfa-results').classList.add('hidden');
             document.getElementById('sensitivity-results').classList.add('hidden');
-            document.getElementById('results-placeholder').classList.remove('hidden');
+            document.getElementById('optimize-results-placeholder').classList.remove('hidden');
         });
     });
 }
@@ -1520,3 +1522,210 @@ async function checkDbStatus() {
         document.getElementById('db-status').className = 'status-badge disconnected';
     }
 }
+
+
+// ===========================
+// Comprehensive Optimization Workflow
+// ===========================
+
+let comprehensiveWorkflowResults = null;
+
+async function runComprehensiveWorkflow() {
+    const chartContainer = document.getElementById("optimize-chart");
+    const resultsPlaceholder = document.getElementById("optimize-results-placeholder");
+
+    // Show loading state
+    chartContainer.innerHTML = `
+        <div class="placeholder-content">
+            <span class="placeholder-icon">⏳</span>
+            <span>Running Comprehensive Optimization Workflow...</span>
+            <span style="font-size: 12px; margin-top: 8px; opacity: 0.7;">
+                Grid search + parameter dispersion + walk-forward + sensitivity analysis.
+                This may take 30-60 seconds.
+            </span>
+        </div>`;
+
+    resultsPlaceholder.innerHTML = `
+        <span class="placeholder-icon">⏳</span>
+        <span>Analyzing...</span>
+    `;
+
+    // Disable button
+    const btn = document.querySelector("button[onclick=\"runComprehensiveWorkflow()\"]");
+    if (btn) btn.disabled = true;
+
+    try {
+        const include3D = document.getElementById("include-3d-sensitivity").checked;
+        
+        const res = await fetch(`${API_BASE}/backtest/workflow`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                strategy: AppState.strategy,
+                symbol: AppState.symbol,
+                interval: AppState.backtestInterval,
+                days: 730, // Use 2 years for comprehensive analysis
+                include_3d_sensitivity: include3D,
+                train_window_days: 252,
+                test_window_days: 63
+            })
+        });
+
+        const data = await res.json();
+
+        if (!data.success) {
+            throw new Error(data.error || "Workflow failed");
+        }
+
+        // Store results
+        comprehensiveWorkflowResults = data;
+
+        // Update metrics
+        const robustnessScore = data.robustness_score;
+        const robustnessEl = document.getElementById("comp-robustness");
+        robustnessEl.textContent = robustnessScore.toFixed(1);
+        
+        // Color code the robustness score
+        if (robustnessScore >= 70) {
+            robustnessEl.style.color = "#10b981"; // Green
+        } else if (robustnessScore >= 50) {
+            robustnessEl.style.color = "#f59e0b"; // Orange
+        } else {
+            robustnessEl.style.color = "#ef4444"; // Red
+        }
+
+        document.getElementById("comp-sharpe").textContent = data.best_sharpe.toFixed(2);
+        document.getElementById("comp-wf-stability").textContent = data.walk_forward_stability_score.toFixed(2);
+        document.getElementById("comp-param-cv").textContent = data.parameter_dispersion.sharpe_cv.toFixed(2);
+        document.getElementById("comp-positive-pct").textContent = data.parameter_dispersion.positive_sharpe_pct.toFixed(0) + "%";
+        document.getElementById("comp-iterations").textContent = data.sweep_results.length;
+
+        // Show optimized parameters
+        const paramSummary = document.getElementById("comp-param-summary");
+        let paramsHtml = "<div style=\"margin-top: 12px; padding: 12px; background: rgba(139, 92, 246, 0.1); border-radius: 8px;\">";
+        paramsHtml += "<strong>Optimized Parameters:</strong><br>";
+        for (const [key, value] of Object.entries(data.optimized_params)) {
+            paramsHtml += `<span style=\"display: inline-block; margin: 4px 8px 4px 0;\">${key}: <strong>${value.toFixed(2)}</strong></span>`;
+        }
+        paramsHtml += "</div>";
+        paramSummary.innerHTML = paramsHtml;
+
+        // Show results block
+        resultsPlaceholder.classList.add("hidden");
+        document.getElementById("comprehensive-results").classList.remove("hidden");
+        document.getElementById("wfa-results").classList.add("hidden");
+        document.getElementById("sensitivity-results").classList.add("hidden");
+
+        // Render visualization
+        if (data.sensitivity_heatmap && include3D) {
+            renderSensitivityHeatmap(data.sensitivity_heatmap);
+            document.getElementById("optimize-chart-title").textContent = "3D Parameter Sensitivity Heatmap";
+        } else {
+            renderParameterSweep(data.sweep_results);
+            document.getElementById("optimize-chart-title").textContent = "Parameter Sweep Results";
+        }
+
+    } catch (e) {
+        console.error("Comprehensive Workflow Error:", e);
+        chartContainer.innerHTML = `
+            <div class="placeholder-content" style="color: #ef4444;">
+                <span class="placeholder-icon">⚠️</span>
+                <span>Workflow Failed</span>
+                <span style="font-size: 14px; margin-top: 8px; max-width: 80%; text-align: center;">${e.message}</span>
+                <button class="btn-primary" style="margin-top: 16px;" onclick="runComprehensiveWorkflow()">Try Again</button>
+            </div>`;
+
+        resultsPlaceholder.innerHTML = `
+            <span class="placeholder-icon" style="color: #ef4444;">⚠️</span>
+            <span style="color: #ef4444;">Workflow Failed</span>
+        `;
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function renderSensitivityHeatmap(heatmap) {
+    const data = [{
+        z: heatmap.sharpe_matrix,
+        x: heatmap.x_values,
+        y: heatmap.y_values,
+        type: "heatmap",
+        colorscale: "RdYlGn",
+        colorbar: {
+            title: "Sharpe Ratio"
+        }
+    }];
+
+    const layout = {
+        title: `${heatmap.x_param} vs ${heatmap.y_param}`,
+        xaxis: { title: heatmap.x_param },
+        yaxis: { title: heatmap.y_param },
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        font: { color: "#e5e7eb" }
+    };
+
+    Plotly.newPlot("optimize-chart", data, layout, { responsive: true });
+}
+
+function renderParameterSweep(sweepResults) {
+    // Show parameter sweep as scatter plot
+    const data = [{
+        x: sweepResults.map(r => r.sharpe),
+        y: sweepResults.map(r => r.total_return * 100),
+        mode: "markers",
+        type: "scatter",
+        marker: {
+            size: 8,
+            color: sweepResults.map(r => r.score),
+            colorscale: "Viridis",
+            colorbar: {
+                title: "Composite Score"
+            }
+        },
+        text: sweepResults.map(r => `Score: ${r.score.toFixed(2)}<br>Trades: ${r.total_trades}`),
+        hovertemplate: "%{text}<extra></extra>"
+    }];
+
+    const layout = {
+        title: "Parameter Combinations (Sharpe vs Return)",
+        xaxis: { title: "Sharpe Ratio" },
+        yaxis: { title: "Total Return (%)" },
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        font: { color: "#e5e7eb" }
+    };
+
+    Plotly.newPlot("optimize-chart", data, layout, { responsive: true });
+}
+
+function applyOptimizedParams() {
+    if (!comprehensiveWorkflowResults) {
+        alert("No optimization results available");
+        return;
+    }
+
+    // Apply params to AppState
+    AppState.params = comprehensiveWorkflowResults.optimized_params;
+
+    // Update UI inputs
+    const strategyParams = STRATEGY_PARAMS[AppState.strategy] || [];
+    strategyParams.forEach(param => {
+        const value = comprehensiveWorkflowResults.optimized_params[param.name];
+        if (value !== undefined) {
+            const input = document.getElementById(`param-${param.name}`);
+            if (input) {
+                input.value = value;
+            }
+        }
+    });
+
+    // Update backtest summary
+    updateBacktestSummary();
+
+    // Navigate to backtest tab
+    switchTab("backtest");
+    
+    alert(`✓ Optimized parameters applied!\n\nRobustness Score: ${comprehensiveWorkflowResults.robustness_score.toFixed(1)}/100\n\nClick "Run Backtest" to see full results with these parameters.`);
+}
+

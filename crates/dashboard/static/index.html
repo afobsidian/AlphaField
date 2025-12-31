@@ -302,7 +302,14 @@
                             <div class="mode-options">
                                 <label class="mode-option active">
                                     <div class="mode-info">
-                                        <input type="radio" name="analysis-mode" value="walkforward" checked>
+                                        <input type="radio" name="analysis-mode" value="comprehensive" checked>
+                                        <span class="mode-icon">⚡</span>
+                                        <span class="mode-name">Comprehensive</span>
+                                    </div>
+                                </label>
+                                <label class="mode-option">
+                                    <div class="mode-info">
+                                        <input type="radio" name="analysis-mode" value="walkforward">
                                         <span class="mode-icon">🔄</span>
                                         <span class="mode-name">Walk-Forward</span>
                                     </div>
@@ -323,8 +330,26 @@
                         <div class="control-section">
                             <h4 class="section-title">Configuration</h4>
 
+                            <!-- Comprehensive Workflow Settings -->
+                            <div id="comprehensive-config" class="analysis-config">
+                                <p class="config-info">
+                                    <strong>Complete optimization pipeline:</strong> Grid search + parameter dispersion + 
+                                    walk-forward validation + 3D sensitivity + robustness scoring. 
+                                    Identifies robust parameters and detects overfitting.
+                                </p>
+                                <div class="form-group">
+                                    <label>
+                                        <input type="checkbox" id="include-3d-sensitivity" checked>
+                                        Include 3D Sensitivity Heatmap
+                                    </label>
+                                </div>
+                                <button type="button" class="btn btn-primary btn-action" onclick="runComprehensiveWorkflow()">
+                                    ⚡ Run Complete Workflow
+                                </button>
+                            </div>
+
                             <!-- Walk-Forward Settings -->
-                            <div id="wfa-config" class="analysis-config">
+                            <div id="wfa-config" class="analysis-config hidden">
                                 <p class="config-info">
                                     Tests strategy across 4 years of data using 6-month training windows
                                     and 2-month out-of-sample validation.
@@ -364,6 +389,47 @@
                         <div id="optimize-results-placeholder" class="placeholder-content">
                             <span class="placeholder-icon">ℹ️</span>
                             <span>Run analysis to see performance metrics</span>
+                        </div>
+
+                        <!-- Comprehensive Workflow Results -->
+                        <div id="comprehensive-results" class="results-block hidden">
+                            <div class="metrics-grid">
+                                <div class="metric">
+                                    <span class="metric-label">Robustness Score</span>
+                                    <span class="metric-value robustness-score" id="comp-robustness">—</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Best Sharpe</span>
+                                    <span class="metric-value" id="comp-sharpe">—</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">WF Stability</span>
+                                    <span class="metric-value" id="comp-wf-stability">—</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Param CV</span>
+                                    <span class="metric-value" id="comp-param-cv">—</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Positive %</span>
+                                    <span class="metric-value" id="comp-positive-pct">—</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Iterations</span>
+                                    <span class="metric-value" id="comp-iterations">—</span>
+                                </div>
+                            </div>
+                            <div class="param-summary" id="comp-param-summary">
+                                <!-- Populated dynamically -->
+                            </div>
+                            <div class="action-buttons">
+                                <button type="button" class="btn btn-secondary" onclick="applyOptimizedParams()">
+                                    ✓ Apply Optimized Parameters
+                                </button>
+                                <button type="button" class="btn btn-primary" onclick="goToDeploy()">
+                                    🚀 Deploy Strategy
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Walk-Forward Results (Inner Content) -->
