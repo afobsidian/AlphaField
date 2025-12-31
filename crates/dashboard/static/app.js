@@ -271,16 +271,22 @@ async function loadSymbols() {
         // Default popular symbols if we have data
         if (allSymbols.length > 0) {
             initCustomSelect();
+            initOptimizeSymbolSelect(); // Also initialize optimize tab selector
         } else {
             document.getElementById('selected-symbol-text').textContent = "No symbols found";
+            const optimizeSymbolText = document.getElementById('optimize-selected-symbol-text');
+            if (optimizeSymbolText) optimizeSymbolText.textContent = "No symbols found";
         }
 
     } catch (e) {
         console.error('Failed to load symbols:', e);
         document.getElementById('selected-symbol-text').textContent = "Error loading symbols";
+        const optimizeSymbolText = document.getElementById('optimize-selected-symbol-text');
+        if (optimizeSymbolText) optimizeSymbolText.textContent = "Error loading symbols";
         // Fallback
         allSymbols = ["BTC", "ETH"];
         initCustomSelect();
+        initOptimizeSymbolSelect();
     }
 }
 
@@ -929,12 +935,21 @@ async function runWalkForward() {
     if (btn) btn.disabled = true;
 
     try {
+        // Get symbol from optimize tab
+        const optimizeSymbol = document.getElementById("optimize-symbol").value;
+        if (!optimizeSymbol) {
+            throw new Error("Please select a trading symbol first");
+        }
+        
+        // Update AppState
+        AppState.symbol = optimizeSymbol;
+        
         const res = await fetch(`${API_BASE}/walk-forward`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 strategy: AppState.strategy,
-                symbol: AppState.symbol,
+                symbol: optimizeSymbol,
                 interval: '1h',
                 params: getParams()
             })
@@ -1061,12 +1076,21 @@ async function runSensitivity() {
     if (param_y) delete fixed_params[param_y.name];
 
     try {
+        // Get symbol from optimize tab
+        const optimizeSymbol = document.getElementById("optimize-symbol").value;
+        if (!optimizeSymbol) {
+            throw new Error("Please select a trading symbol first");
+        }
+        
+        // Update AppState
+        AppState.symbol = optimizeSymbol;
+        
         const res = await fetch(`${API_BASE}/sensitivity`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 strategy: AppState.strategy,
-                symbol: AppState.symbol,
+                symbol: optimizeSymbol,
                 interval: '1h',
                 days: 180,
                 param,
@@ -1557,12 +1581,21 @@ async function runComprehensiveWorkflow() {
     try {
         const include3D = document.getElementById("include-3d-sensitivity").checked;
         
+        // Get symbol from optimize tab
+        const optimizeSymbol = document.getElementById("optimize-symbol").value;
+        if (!optimizeSymbol) {
+            throw new Error("Please select a trading symbol first");
+        }
+        
+        // Update AppState with the selected symbol
+        AppState.symbol = optimizeSymbol;
+        
         const res = await fetch(`${API_BASE}/backtest/workflow`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 strategy: AppState.strategy,
-                symbol: AppState.symbol,
+                symbol: optimizeSymbol,
                 interval: AppState.backtestInterval,
                 days: 730, // Use 2 years for comprehensive analysis
                 include_3d_sensitivity: include3D,
@@ -1729,3 +1762,116 @@ function applyOptimizedParams() {
     alert(`✓ Optimized parameters applied!\n\nRobustness Score: ${comprehensiveWorkflowResults.robustness_score.toFixed(1)}/100\n\nClick "Run Backtest" to see full results with these parameters.`);
 }
 
+
+function goToBacktestWithOptimizedParams() {
+    if (!comprehensiveWorkflowResults) {
+        alert("No optimization results available");
+        return;
+    }
+
+    // Apply params to AppState
+    AppState.params = comprehensiveWorkflowResults.optimized_params;
+    
+    // Ensure symbol is set from optimize tab
+    const optimizeSymbol = document.getElementById("optimize-symbol").value;
+    if (optimizeSymbol) {
+        AppState.symbol = optimizeSymbol;
+    }
+
+    // Update context bar and backtest summary
+    updateContextBar();
+    updateBacktestSummary();
+
+    // Navigate to backtest tab
+    switchTab("backtest");
+}
+
+// Initialize symbol selector for optimize tab
+function initOptimizeSymbolSelect() {
+    const wrapper = document.getElementById('optimize-symbol-select-wrapper');
+    const trigger = document.getElementById('optimize-symbol-trigger');
+    const optionsList = document.getElementById('optimize-symbol-options-list');
+    const searchInput = document.getElementById('optimize-symbol-search-input');
+    const hiddenInput = document.getElementById('optimize-symbol');
+    const selectedText = document.getElementById('optimize-selected-symbol-text');
+
+    if (!wrapper || !trigger) return; // Exit if elements don't exist yet
+
+    // Toggle dropdown
+    trigger.addEventListener('click', () => {
+        wrapper.classList.toggle('open');
+        if (wrapper.classList.contains('open')) {
+            searchInput.focus();
+        }
+    });
+
+    // Close when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!wrapper.contains(e.target)) {
+            wrapper.classList.remove('open');
+        }
+    });
+
+    // Filter function
+    function filterSymbols(query) {
+        const q = query.toLowerCase();
+        const POPULAR = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'DOT', 'LINK', 'MATIC'];
+
+        let filtered = allSymbols.filter(s => s.toLowerCase().includes(q));
+
+        // Sort: Popular first, then alphabetical
+        filtered.sort((a, b) => {
+            const aPop = POPULAR.indexOf(a);
+            const bPop = POPULAR.indexOf(b);
+
+            if (aPop !== -1 && bPop !== -1) return aPop - bPop;
+            if (aPop !== -1) return -1;
+            if (bPop !== -1) return 1;
+            return a.localeCompare(b);
+        });
+
+        renderOptions(filtered);
+    }
+
+    // Render options to the list
+    function renderOptions(symbols) {
+        optionsList.innerHTML = '';
+
+        if (symbols.length === 0) {
+            optionsList.innerHTML = '<div class="option" style="cursor: default; opacity: 0.5;">No matches found</div>';
+            return;
+        }
+
+        // Limit rendering for performance if list is huge
+        const displaySymbols = symbols.slice(0, 100);
+
+        displaySymbols.forEach(symbol => {
+            const div = document.createElement('div');
+            div.className = 'option';
+            if (symbol === AppState.symbol) div.classList.add('selected');
+
+            div.innerHTML = `
+                <span class="option-ticker">${symbol}</span>
+                <span class="option-name">USDT</span>
+            `;
+
+            div.addEventListener('click', () => {
+                AppState.symbol = symbol;
+                hiddenInput.value = symbol;
+                selectedText.textContent = symbol;
+                wrapper.classList.remove('open');
+                updateContextBar();
+            });
+
+            optionsList.appendChild(div);
+        });
+    }
+
+    // Search as you type
+    searchInput.addEventListener('input', (e) => {
+        filterSymbols(e.target.value);
+    });
+
+    // Initial render
+    filterSymbols('');
+}

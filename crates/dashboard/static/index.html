@@ -40,14 +40,14 @@
                     <span class="tab-label">Build</span>
                 </button>
                 <span class="tab-arrow">→</span>
-                <button class="workflow-tab" data-tab="backtest" onclick="switchTab('backtest')">
+                <button class="workflow-tab" data-tab="optimize" onclick="switchTab('optimize')">
                     <span class="tab-number">2</span>
-                    <span class="tab-label">Backtest</span>
+                    <span class="tab-label">Optimize</span>
                 </button>
                 <span class="tab-arrow">→</span>
-                <button class="workflow-tab" data-tab="optimize" onclick="switchTab('optimize')">
+                <button class="workflow-tab" data-tab="backtest" onclick="switchTab('backtest')">
                     <span class="tab-number">3</span>
-                    <span class="tab-label">Optimize</span>
+                    <span class="tab-label">Backtest</span>
                 </button>
                 <span class="tab-arrow">→</span>
                 <button class="workflow-tab" data-tab="deploy" onclick="switchTab('deploy')">
@@ -91,14 +91,14 @@
             <!-- ==================== TAB 1: BUILD ==================== -->
             <section id="build-view" class="view-section active">
                 <div class="view-header">
-                    <h1>🔧 Strategy Builder</h1>
-                    <p>Configure your trading strategy and select the asset to trade</p>
+                    <h1>🔧 Strategy Selection</h1>
+                    <p>Choose the trading strategy you want to optimize and test</p>
                 </div>
 
                 <div class="build-grid">
                     <!-- Strategy Selection Card -->
-                    <div class="card strategy-card">
-                        <h3>Select Strategy</h3>
+                    <div class="card strategy-card" style="grid-column: 1 / -1;">
+                        <h3>Select Trading Strategy</h3>
                         <div class="strategy-options">
                             <label class="strategy-option">
                                 <input type="radio" name="strategy" value="GoldenCross" checked>
@@ -129,47 +129,18 @@
                                 </div>
                             </label>
                         </div>
-                    </div>
-
-                    <!-- Symbol & Parameters Card -->
-                    <div class="card params-card">
-                        <h3>Configuration</h3>
-
-                        <!-- Symbol Selection -->
-                        <label>Trading Symbol</label>
-                        <div class="custom-select-wrapper" id="symbol-select-wrapper">
-                            <div class="custom-select-trigger" id="symbol-trigger">
-                                <span id="selected-symbol-text">Select Symbol...</span>
-                            </div>
-                            <div class="custom-options">
-                                <div class="symbol-search-box">
-                                    <input type="text" class="symbol-search-input" id="symbol-search-input"
-                                        placeholder="Search symbol (e.g. BTC)..." autocomplete="off">
-                                </div>
-                                <div class="options-list" id="symbol-options-list">
-                                    <!-- Options injected by JS -->
-                                    <div class="placeholder-content" style="min-height: 100px;">
-                                        <span class="text-muted">Loading...</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Hidden input to store value -->
-                        <input type="hidden" id="build-symbol">
-                        <!-- Dynamic Strategy Parameters -->
-                        <div id="build-params" class="params-section">
-                            <!-- Populated dynamically based on strategy selection -->
-                        </div>
 
                         <!-- Action Button -->
-                        <button type="button" class="btn btn-primary btn-action" onclick="goToBacktest()">
-                            Test Strategy →
-                        </button>
+                        <div style="margin-top: 24px; text-align: center;">
+                            <button type="button" class="btn btn-primary btn-action" onclick="goToOptimize()" style="min-width: 200px;">
+                                Next: Optimize Parameters →
+                            </button>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <!-- ==================== TAB 2: BACKTEST ==================== -->
+            <!-- ==================== TAB 3: BACKTEST ==================== -->
             <section id="backtest-view" class="view-section">
                 <div class="view-header">
                     <h1>📊 Backtest</h1>
@@ -284,21 +255,47 @@
                 </div>
             </section>
 
-            <!-- ==================== TAB 3: OPTIMIZE ==================== -->
+            <!-- ==================== TAB 2: OPTIMIZE ==================== -->
             <section id="optimize-view" class="view-section">
                 <div class="view-header">
-                    <h1>⚡ Optimize & Tune</h1>
-                    <p>Find optimal parameters and test strategy robustness</p>
+                    <h1>⚡ Optimize & Configure</h1>
+                    <p>Select asset and find optimal parameters through comprehensive analysis</p>
                 </div>
 
                 <div class="optimize-grid">
-                    <!-- Combined Analysis & Config Control -->
+                    <!-- Symbol Selection & Analysis Config -->
                     <div class="card optimize-controls">
-                        <h3>Analysis Setup</h3>
+                        <h3>Configuration</h3>
+
+                        <!-- Symbol Selection -->
+                        <div class="control-section">
+                            <h4 class="section-title">Trading Symbol</h4>
+                            <div class="custom-select-wrapper" id="optimize-symbol-select-wrapper">
+                                <div class="custom-select-trigger" id="optimize-symbol-trigger">
+                                    <span id="optimize-selected-symbol-text">Select Symbol...</span>
+                                </div>
+                                <div class="custom-options">
+                                    <div class="symbol-search-box">
+                                        <input type="text" class="symbol-search-input" id="optimize-symbol-search-input"
+                                            placeholder="Search symbol (e.g. BTC)..." autocomplete="off">
+                                    </div>
+                                    <div class="options-list" id="optimize-symbol-options-list">
+                                        <!-- Options injected by JS -->
+                                        <div class="placeholder-content" style="min-height: 100px;">
+                                            <span class="text-muted">Loading...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Hidden input to store value -->
+                            <input type="hidden" id="optimize-symbol">
+                        </div>
+
+                        <div class="divider"></div>
 
                         <!-- Analysis Mode Selection -->
                         <div class="control-section">
-                            <h4 class="section-title">Mode</h4>
+                            <h4 class="section-title">Analysis Mode</h4>
                             <div class="mode-options">
                                 <label class="mode-option active">
                                     <div class="mode-info">
@@ -328,7 +325,7 @@
 
                         <!-- Analysis Configuration -->
                         <div class="control-section">
-                            <h4 class="section-title">Configuration</h4>
+                            <h4 class="section-title">Run Analysis</h4>
 
                             <!-- Comprehensive Workflow Settings -->
                             <div id="comprehensive-config" class="analysis-config">
@@ -423,11 +420,8 @@
                                 <!-- Populated dynamically -->
                             </div>
                             <div class="action-buttons">
-                                <button type="button" class="btn btn-secondary" onclick="applyOptimizedParams()">
-                                    ✓ Apply Optimized Parameters
-                                </button>
-                                <button type="button" class="btn btn-primary" onclick="goToDeploy()">
-                                    🚀 Deploy Strategy
+                                <button type="button" class="btn btn-primary" onclick="goToBacktestWithOptimizedParams()">
+                                    Next: Backtest with Optimized Parameters →
                                 </button>
                             </div>
                         </div>
@@ -453,8 +447,8 @@
                                 </div>
                             </div>
                             <div class="action-buttons">
-                                <button type="button" class="btn btn-primary" onclick="goToDeploy()">
-                                    🚀 Deploy Strategy
+                                <button type="button" class="btn btn-primary" onclick="goToBacktest()">
+                                    Next: Backtest →
                                 </button>
                             </div>
                         </div>
@@ -475,8 +469,8 @@
                                 <button type="button" class="btn btn-secondary" onclick="applyBestParams()">
                                     ✓ Apply Best Parameters
                                 </button>
-                                <button type="button" class="btn btn-primary" onclick="goToDeploy()">
-                                    🚀 Deploy Strategy
+                                <button type="button" class="btn btn-primary" onclick="goToBacktest()">
+                                    Next: Backtest →
                                 </button>
                             </div>
                         </div>
