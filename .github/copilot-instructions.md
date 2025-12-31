@@ -1,93 +1,76 @@
-# AlphaField - AI Coding Agent Instructions
 
-## Project Overview
+# AlphaField – AI Coding Agent Instructions
 
-AlphaField is a Rust-based algorithmic trading engine for crypto markets with an **event-driven backtesting philosophy** focused on avoiding overfitting ("Unbiased Trading"). The system is organized as a Cargo workspace with modular crates.
+## 🚦 Project Overview
 
-## Architecture & Crate Dependencies
+AlphaField is a modular, event-driven algorithmic trading engine for crypto markets, written in Rust. It emphasizes **unbiased backtesting** and robust risk management. The workspace is organized as a Cargo monorepo with six main crates:
 
-```
-core ← data, strategy, backtest, execution
-data ← backtest
-strategy ← backtest, execution
-```
+- **core**: Fundamental types/traits (`Bar`, `Trade`, `Order`, `Signal`, `Strategy`, `QuantError`)
+- **data**: Multi-source ingestion (Binance, CoinGecko, Coinlayer), TimescaleDB storage, data quality monitoring
+- **strategy**: Technical indicators (`SMA`, `EMA`, `RSI`, etc.) and strategies (`GoldenCross`, `MeanReversion`, etc.)
+- **backtest**: Event-driven simulation, walk-forward, Monte Carlo, sensitivity, correlation analysis
+- **execution**: Risk management (circuit breakers, position limits, drift, volatility scaling)
+- **dashboard**: Axum REST/WebSocket API, web UI (served at http://localhost:8080)
 
-- **core** ([crates/core/src/lib.rs](crates/core/src/lib.rs)): Foundation types (`Bar`, `Tick`, `Quote`, `Signal`, `Order`) and traits (`Strategy`, `ExecutionService`). All price data uses `f64`, timestamps use `chrono::DateTime<Utc>`. Core structs are `Copy` for zero-cost stack allocation.
-- **data** ([crates/data/src/lib.rs](crates/data/src/lib.rs)): API clients with **smart routing** and automatic fallbacks (Binance → CoinGecko → Coinlayer). Uses `UnifiedDataClient` as the main entry point with `ApiKeyPool` for key rotation.
-- **strategy** ([crates/strategy/src/lib.rs](crates/strategy/src/lib.rs)): Indicators (`Sma`, `Ema`, `Rsi`) and example strategies (`GoldenCrossStrategy`, `RsiStrategy`).
-- **backtest** ([crates/backtest/src/lib.rs](crates/backtest/src/lib.rs)): Event-driven simulator with latency injection, slippage modeling, and performance metrics (Sharpe, CAGR, Max Drawdown).
-- **execution** ([crates/execution/src/lib.rs](crates/execution/src/lib.rs)): Risk management wrapper pattern using `RiskManager<S: ExecutionService>` with composable `RiskCheck` traits.
+## 🏗️ Architecture & Data Flow
 
-## Key Patterns
+- **Data** flows: External APIs → `UnifiedDataClient` → TimescaleDB → Backtest/Strategy/Execution
+- **Backtest**: Loads bars → feeds to strategy → generates signals/orders → simulates fills (slippage, latency, fees)
+- **Execution**: All orders pass through `RiskManager` and composable `RiskCheck` traits before simulated or live execution
+- **Dashboard**: REST endpoints and `/api/ws` WebSocket for real-time monitoring, analysis, and control
 
-### Strategy Trait (Two Different Versions)
-- **Core's `Strategy`** ([crates/core/src/lib.rs](crates/core/src/lib.rs#L290-L310)): Returns `Option<Signal>` - for signal generation
-- **Backtest's `Strategy`** ([crates/backtest/src/strategy.rs](crates/backtest/src/strategy.rs)): Returns `Result<Vec<OrderRequest>>` - for order execution
+See [doc/architecture.md](../../doc/architecture.md) for diagrams and [doc/detailed_design.md](../../doc/detailed_design.md) for design rationale.
 
-When implementing strategies, choose the appropriate trait based on context.
+## 🧩 Key Patterns & Conventions
 
-### Indicator Pattern
-Indicators implement the `Indicator` trait with `update()`, `value()`, `reset()`. Use `VecDeque` for windowed calculations. See [crates/strategy/src/indicators.rs](crates/strategy/src/indicators.rs) for examples.
+- **Strategy Traits**: Two versions—core (`Option<Signal>`) and backtest (`Result<Vec<OrderRequest>>`). Choose based on context ([crates/core/src/lib.rs], [crates/backtest/src/strategy.rs]).
+- **Indicators**: Implement `Indicator` trait (`update`, `value`, `reset`). Use `VecDeque` for windowed calcs ([crates/strategy/src/indicators.rs]).
+- **Data Validation**: All core types have `validate()`. Always call after constructing from external data.
+- **Smart Routing**: `UnifiedDataClient` auto-routes OHLC/price requests and rotates API keys ([crates/data/src/lib.rs]).
+- **Risk Management**: All orders go through `RiskManager` and checks like `MaxOrderValue`, `NoShorts`, `MaxDailyLoss`, `PositionDrift`, `VolatilityScaledSize` ([crates/execution/src/lib.rs]).
+- **Testing**: Unit tests in `#[cfg(test)]` modules, focus on edge cases and known-value checks.
+- **Error Handling**: Use `QuantError` for all error types; backtest has `BacktestError` for simulation-specific errors.
+- **Types**: All monetary values are `f64`; timestamps use `chrono::DateTime<Utc>`.
+- **Async**: HTTP via `reqwest` (30s timeout, connection pooling); async traits via `#[async_trait::async_trait]`.
+- **Serialization**: Use `serde` with `#[derive(Serialize, Deserialize)]`; errors via `thiserror::Error`.
 
-### Data Validation
-All core types have a `validate()` method. Always call `bar.validate()?` after constructing `Bar` from external data. Validation rules are documented in doc comments.
+## 🛠️ Developer Workflow
 
-### Smart Routing
-`UnifiedDataClient` automatically routes requests based on data type:
-- **OHLC**: Binance (has volume) → CoinGecko (no volume) → Coinlayer (daily only)
-- **Prices**: CoinGecko → Binance
+- **Build**: `make build` or `cargo build`
+- **Test**: `make test` or `cargo test`
+- **Lint/Format**: `make lint` / `make fmt` (Clippy, rustfmt)
+- **Run Data Demo**: `make run-demo` or `cargo run --bin data-demo --release`
+- **Run Backtest Example**: `make run-backtest` or `cargo run --example golden_cross_backtest -p alphafield-backtest --release`
+- **Run Dashboard**: `make run-dashboard` or `cargo run --bin dashboard_server --release`
+- **Docker**: `make docker-up`/`docker-down`/`docker-build` for full stack
 
-Rate-limited keys are automatically rotated via `ApiKeyPool`.
+## ⚙️ Environment Setup
 
-## Development Workflow
+Create `.env` in project root (see `.env.example`):
 
-```bash
-# Build all crates
-cargo build
-
-# Run tests
-cargo test
-
-# Run the data demo (tests smart routing)
-cargo run --bin data-demo --release
-
-# Run backtest example
-cargo run --example buy_and_hold -p alphafield_backtest
-```
-
-## Environment Setup
-
-Create `.env` in project root with API keys (comma-separated for rotation):
 ```env
+DATABASE_URL=postgres://user:pass@localhost:5432/alphafield
 BINANCE_API_KEYS=key1,key2
 COINGECKO_API_KEYS=key1
 COINLAYER_API_KEYS=key1
+RUST_LOG=info
 ```
 
-Both singular (`BINANCE_API_KEY`) and plural forms are supported.
+## 📚 References
 
-## Error Handling
+- [README.md](../../README.md): Features, architecture, and quickstart
+- [doc/architecture.md](../../doc/architecture.md): System diagrams and flows
+- [doc/detailed_design.md](../../doc/detailed_design.md): Design rationale and patterns
+- [doc/api.md](../../doc/api.md): API endpoints and usage
+- [doc/roadmap.md](../../doc/roadmap.md): Feature roadmap
+- [Makefile](../../Makefile): All supported dev commands
 
-Use `QuantError` from core for all error types. Pattern:
-```rust
-use alphafield_core::{QuantError, Result};
-// QuantError variants: Io, Parse, DataValidation, NotFound, Api
-```
+## 🛑 Project-Specific Rules
 
-Backtest has its own `BacktestError` with `InsufficientFunds` variant.
+- **No shorting or leverage**: Spot-only, enforced at backtest and execution layers
+- **Survivorship bias prevention**: Database includes delisted assets
+- **Walk-forward and Monte Carlo**: Required for strategy validation
+- **All strategies must start with a written hypothesis** (see [doc/project_plan.md])
 
-## Code Conventions
-
-- All monetary values: `f64`
-- Timestamps: `chrono::DateTime<Utc>`
-- Async HTTP: `reqwest` with 30s timeout and connection pooling
-- Serialization: `serde` with `#[derive(Serialize, Deserialize)]`
-- Error derive: `thiserror::Error`
-- Async traits: `#[async_trait::async_trait]`
-
-## Testing Strategy
-
-Unit tests live alongside code in `#[cfg(test)]` modules. Focus on:
-- Data validation edge cases
-- Indicator calculations with known values
-- Portfolio position updates
+---
+For any unclear or missing conventions, consult the referenced docs or ask for clarification.
