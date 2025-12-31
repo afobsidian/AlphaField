@@ -34,6 +34,8 @@ pub struct WorkflowConfig {
     pub walk_forward_config: WalkForwardConfig,
     /// Whether to run 3D sensitivity analysis (can be expensive)
     pub include_3d_sensitivity: bool,
+    /// Data split ratio for in-sample/out-of-sample (default: 0.70)
+    pub train_test_split_ratio: f64,
 }
 
 impl Default for WorkflowConfig {
@@ -44,9 +46,13 @@ impl Default for WorkflowConfig {
             slippage: SlippageModel::FixedPercent(0.0005),
             walk_forward_config: WalkForwardConfig::default(),
             include_3d_sensitivity: true,
+            train_test_split_ratio: 0.70,
         }
     }
 }
+
+// Constants for parameter dispersion calculations
+const MIN_MEAN_THRESHOLD: f64 = 0.001;
 
 /// Parameter dispersion statistics
 ///
@@ -99,12 +105,12 @@ impl ParameterDispersion {
         let sharpe_std = sharpe_variance.sqrt();
         let return_std = return_variance.sqrt();
 
-        let sharpe_cv = if sharpe_mean.abs() > 0.001 {
+        let sharpe_cv = if sharpe_mean.abs() > MIN_MEAN_THRESHOLD {
             sharpe_std / sharpe_mean.abs()
         } else {
             f64::INFINITY
         };
-        let return_cv = if return_mean.abs() > 0.001 {
+        let return_cv = if return_mean.abs() > MIN_MEAN_THRESHOLD {
             return_std / return_mean.abs()
         } else {
             f64::INFINITY
@@ -221,8 +227,8 @@ impl OptimizationWorkflow {
             return Err("No parameter bounds provided".to_string());
         }
 
-        // Split data: 70% for optimization, 30% reserved for final validation
-        let split_idx = (data.len() as f64 * 0.70) as usize;
+        // Split data: configurable in-sample/out-of-sample ratio
+        let split_idx = (data.len() as f64 * self.config.train_test_split_ratio) as usize;
         let in_sample_data = &data[..split_idx];
         let out_of_sample_data = &data[split_idx..];
 
@@ -379,16 +385,23 @@ impl OptimizationWorkflow {
 
     /// Calculate overall robustness score (0-100)
     ///
-    /// Combines multiple factors:
-    /// - Walk-forward stability score
-    /// - Parameter dispersion (lower CV is better)
-    /// - Percentage of positive parameter combinations
+    /// Combines multiple factors with configurable weights:
+    /// - Walk-forward stability score (30%)
+    /// - Parameter dispersion score (30% - inverse of CV, lower CV is better)
+    /// - Percentage of positive parameter combinations (20%)
+    /// - Out-of-sample win rate from walk-forward (20%)
     fn calculate_robustness_score(
         &self,
         dispersion: &ParameterDispersion,
         walk_forward: &WalkForwardResult,
         _in_sample: &PerformanceMetrics,
     ) -> f64 {
+        // Robustness score component weights
+        const WEIGHT_WF_STABILITY: f64 = 0.30;
+        const WEIGHT_DISPERSION: f64 = 0.30;
+        const WEIGHT_POSITIVE_COMBOS: f64 = 0.20;
+        const WEIGHT_OOS_WIN_RATE: f64 = 0.20;
+
         // Component 1: Walk-forward stability (0-1 scale, higher is better)
         let wf_score = walk_forward.stability_score;
 
@@ -407,8 +420,11 @@ impl OptimizationWorkflow {
         // Component 4: Out-of-sample win rate from walk-forward
         let oos_win_rate = walk_forward.aggregate_oos.win_rate;
 
-        // Weighted combination (all equally important)
-        let combined_score = (wf_score * 0.30 + cv_score * 0.30 + positive_score * 0.20 + oos_win_rate * 0.20)
+        // Weighted combination (all weights sum to 1.0)
+        let combined_score = (wf_score * WEIGHT_WF_STABILITY
+            + cv_score * WEIGHT_DISPERSION
+            + positive_score * WEIGHT_POSITIVE_COMBOS
+            + oos_win_rate * WEIGHT_OOS_WIN_RATE)
             .clamp(0.0, 1.0);
 
         // Scale to 0-100

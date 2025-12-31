@@ -592,6 +592,18 @@ pub async fn optimize_params(
 
 use alphafield_backtest::{OptimizationWorkflow, ParameterDispersion, WorkflowConfig};
 
+// Time interval constants for bars per day calculation
+const BARS_PER_DAY_1M: usize = 1440;
+const BARS_PER_DAY_5M: usize = 288;
+const BARS_PER_DAY_15M: usize = 96;
+const BARS_PER_DAY_1H: usize = 24;
+const BARS_PER_DAY_4H: usize = 6;
+const BARS_PER_DAY_1D: usize = 1;
+const BARS_PER_DAY_DEFAULT: usize = 24; // Default to hourly
+
+// Walk-forward step size constant (approximate trading days per month)
+const TRADING_DAYS_PER_MONTH: usize = 21;
+
 #[derive(Debug, Deserialize)]
 pub struct WorkflowRequest {
     pub strategy: String,
@@ -747,13 +759,13 @@ pub async fn run_optimization_workflow(
 
     // 4. Configure workflow
     let bars_per_day = match req.interval.as_str() {
-        "1m" => 1440,
-        "5m" => 288,
-        "15m" => 96,
-        "1h" => 24,
-        "4h" => 6,
-        "1d" => 1,
-        _ => 24, // Default to hourly
+        "1m" => BARS_PER_DAY_1M,
+        "5m" => BARS_PER_DAY_5M,
+        "15m" => BARS_PER_DAY_15M,
+        "1h" => BARS_PER_DAY_1H,
+        "4h" => BARS_PER_DAY_4H,
+        "1d" => BARS_PER_DAY_1D,
+        _ => BARS_PER_DAY_DEFAULT,
     };
 
     let train_window_bars = req.train_window_days.unwrap_or(252) * bars_per_day;
@@ -766,11 +778,12 @@ pub async fn run_optimization_workflow(
         walk_forward_config: alphafield_backtest::WalkForwardConfig {
             train_window: train_window_bars,
             test_window: test_window_bars,
-            step_size: 21 * bars_per_day, // ~1 month step
+            step_size: TRADING_DAYS_PER_MONTH * bars_per_day,
             initial_capital: 100_000.0,
             fee_rate: 0.001,
         },
         include_3d_sensitivity: req.include_3d_sensitivity.unwrap_or(true),
+        train_test_split_ratio: 0.70, // Use default 70/30 split
     };
 
     // 5. Determine sensitivity parameters (first two from bounds for 3D visualization)

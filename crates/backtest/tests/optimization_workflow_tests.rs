@@ -53,6 +53,7 @@ fn test_optimization_workflow_basic() {
             fee_rate: 0.001,
         },
         include_3d_sensitivity: false, // Disable for faster testing
+        train_test_split_ratio: 0.70,
     };
 
     let workflow = OptimizationWorkflow::new(config);
@@ -151,6 +152,7 @@ fn test_optimization_workflow_with_sensitivity() {
             fee_rate: 0.001,
         },
         include_3d_sensitivity: true,
+        train_test_split_ratio: 0.70,
     };
 
     let workflow = OptimizationWorkflow::new(config);
