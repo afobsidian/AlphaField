@@ -633,12 +633,14 @@ pub struct WorkflowResponse {
     pub in_sample_sharpe: f64,
     pub in_sample_return: f64,
     pub in_sample_max_drawdown: f64,
-    /// Walk-forward validation results
+    /// Walk-forward validation results (aggregate metrics - kept for backward compatibility)
     pub walk_forward_mean_return: f64,
     pub walk_forward_median_return: f64,
     pub walk_forward_stability_score: f64,
     pub walk_forward_worst_drawdown: f64,
     pub walk_forward_windows: usize,
+    /// Full walk-forward validation results (includes windows data for visualization)
+    pub walk_forward_validation: Option<alphafield_backtest::WalkForwardResult>,
     /// Parameter dispersion statistics
     pub parameter_dispersion: ParameterDispersion,
     /// Overall robustness score (0-100)
@@ -697,6 +699,7 @@ pub async fn run_optimization_workflow(
                 walk_forward_stability_score: 0.0,
                 walk_forward_worst_drawdown: 0.0,
                 walk_forward_windows: 0,
+                walk_forward_validation: None,
                 parameter_dispersion: ParameterDispersion::default(),
                 robustness_score: 0.0,
                 sweep_results: vec![],
@@ -722,6 +725,7 @@ pub async fn run_optimization_workflow(
             walk_forward_stability_score: 0.0,
             walk_forward_worst_drawdown: 0.0,
             walk_forward_windows: 0,
+            walk_forward_validation: None,
             parameter_dispersion: ParameterDispersion::default(),
             robustness_score: 0.0,
             sweep_results: vec![],
@@ -748,6 +752,7 @@ pub async fn run_optimization_workflow(
             walk_forward_stability_score: 0.0,
             walk_forward_worst_drawdown: 0.0,
             walk_forward_windows: 0,
+            walk_forward_validation: None,
             parameter_dispersion: ParameterDispersion::default(),
             robustness_score: 0.0,
             sweep_results: vec![],
@@ -851,6 +856,7 @@ pub async fn run_optimization_workflow(
                 walk_forward_stability_score: result.walk_forward_validation.stability_score,
                 walk_forward_worst_drawdown: result.walk_forward_validation.aggregate_oos.worst_drawdown,
                 walk_forward_windows: result.walk_forward_validation.windows.len(),
+                walk_forward_validation: Some(result.walk_forward_validation),
                 parameter_dispersion: result.parameter_dispersion,
                 robustness_score: result.robustness_score,
                 sweep_results: result.optimization.all_results,
@@ -875,6 +881,7 @@ pub async fn run_optimization_workflow(
                 walk_forward_stability_score: 0.0,
                 walk_forward_worst_drawdown: 0.0,
                 walk_forward_windows: 0,
+                walk_forward_validation: None,
                 parameter_dispersion: ParameterDispersion::default(),
                 robustness_score: 0.0,
                 sweep_results: vec![],
@@ -899,6 +906,7 @@ pub async fn run_optimization_workflow(
                 walk_forward_stability_score: 0.0,
                 walk_forward_worst_drawdown: 0.0,
                 walk_forward_windows: 0,
+                walk_forward_validation: None,
                 parameter_dispersion: ParameterDispersion::default(),
                 robustness_score: 0.0,
                 sweep_results: vec![],

@@ -2108,14 +2108,14 @@ function renderWalkForwardChart(windows) {
         const data = [
             {
                 x: windows.map((w, i) => `Window ${i + 1}`),
-                y: windows.map(w => ((w.oos_metrics && w.oos_metrics.total_return) || 0) * 100),
+                y: windows.map(w => ((w.test_metrics && w.test_metrics.total_return) || 0) * 100),
                 name: "OOS Return",
                 type: "bar",
                 marker: { color: "#60a5fa" }
             },
             {
                 x: windows.map((w, i) => `Window ${i + 1}`),
-                y: windows.map(w => (w.oos_metrics && w.oos_metrics.sharpe_ratio) || 0),
+                y: windows.map(w => (w.test_metrics && w.test_metrics.sharpe_ratio) || 0),
                 name: "OOS Sharpe",
                 type: "bar",
                 marker: { color: "#34d399" },
