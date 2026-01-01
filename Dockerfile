@@ -6,7 +6,7 @@
 # -----------------------------------------------------------------------------
 # Stage 1: Builder - Build the application
 # -----------------------------------------------------------------------------
-FROM rust:1.85-slim-bookworm AS builder
+FROM rust:slim-bookworm AS builder
 
 WORKDIR /app
 
@@ -22,8 +22,8 @@ COPY . .
 # Ensure sqlx doesn't try to connect to DB during compilation
 ENV SQLX_OFFLINE=true
 
-# Pin home crate to version compatible with rustc 1.85 (home 0.5.12 requires rustc 1.88)
-RUN cargo update home@0.5.12 --precise 0.5.9 || true
+# Update cargo
+RUN cargo update
 
 # Build application
 RUN cargo build --release --bin dashboard_server
