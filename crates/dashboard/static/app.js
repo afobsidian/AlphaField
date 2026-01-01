@@ -2469,8 +2469,8 @@ function switchChartType(type) {
 
 async function updateChartIndicators() {
     // Check if we have a symbol and data
-    if (!AppState.symbol || !AppState.backtestInterval) {
-        console.log('No symbol or interval selected for chart');
+    if (!AppState.symbol || !AppState.backtestInterval || !AppState.backtestDays) {
+        console.log('No symbol, interval, or days selected for chart');
         return;
     }
 
