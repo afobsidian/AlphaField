@@ -1783,11 +1783,8 @@ function goToBacktestWithOptimizedParams() {
     // Apply params to AppState
     AppState.params = comprehensiveWorkflowResults.optimized_params;
     
-    // Ensure symbol is set from optimize tab
-    const optimizeSymbol = document.getElementById("optimize-symbol").value;
-    if (optimizeSymbol) {
-        AppState.symbol = optimizeSymbol;
-    }
+    // Symbol will be selected in the backtest tab from the asset category
+    // No need to set it here as user selects from backtest-symbol dropdown
 
     // Update context bar and backtest summary
     updateContextBar();
@@ -1795,6 +1792,9 @@ function goToBacktestWithOptimizedParams() {
 
     // Navigate to backtest tab
     switchTab("backtest");
+    
+    // Show helpful message
+    alert(`✓ Optimized parameters applied!\n\nRobustness Score: ${comprehensiveWorkflowResults.robustness_score.toFixed(1)}/100\n\nSelect a symbol from the "${AppState.assetCategory}" category and click "Run Backtest" to see results.`);
 }
 
 // Initialize symbol selector for optimize tab
