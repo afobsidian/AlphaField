@@ -15,6 +15,7 @@ AlphaField features a robust multi-source data layer, modular strategy system, e
 |---------|-------------|
 | **Unified Data Layer** | Multi-source integration (Binance, CoinGecko, Coinlayer) with smart routing |
 | **Interactive Dashboard** | Real-time data management, symbol search, and visual backtesting |
+| **Interactive Charting** | Candlestick/line/area charts with technical indicators (SMA, EMA, RSI, MACD, BB) |
 | **Optimization-First Workflow** | Automated parameter optimization before backtesting with multi-symbol validation |
 | **Asset Category Training** | Train strategies across predefined symbol baskets (Market, Large/Mid/Small Cap, DeFi) |
 | **TimescaleDB Storage** | Time-series optimized with hypertables and compression |
@@ -173,6 +174,7 @@ Axum web server with REST API and WebSocket streaming.
 | `/api/monte-carlo` | POST | Run Monte Carlo simulation |
 | `/api/correlation` | POST | Calculate strategy correlation |
 | `/api/sensitivity` | POST | Parameter sensitivity analysis |
+| `/api/chart/ohlcv` | POST | **NEW**: Get OHLCV data with technical indicators for charting |
 | `/api/data/symbols` | GET | List cached symbols |
 | `/api/data/pairs` | GET | Available trading pairs (Binance) |
 | `/api/data/fetch` | POST | Fetch new market data |
@@ -202,6 +204,10 @@ The `crates/dashboard` crate serves a Vanilla JS frontend at `http://localhost:8
    - Robustness score (0-100) with overfitting detection
    - Parameters automatically applied for backtesting
 3. **Backtest Tab**: Select specific symbol from category → Run backtest with optimized parameters
+   - Equity curve with trade markers
+   - **Interactive price chart** with candlestick/line/area display
+   - Technical indicators (SMA, EMA, RSI, MACD, Bollinger Bands)
+   - Trade entry/exit markers on price chart
 4. **Deploy Tab**: Deploy validated strategy
 
 **Additional Views:**

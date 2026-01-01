@@ -5,9 +5,7 @@ use std::sync::Arc;
 use tracing::{error, info};
 
 use alphafield_core::Bar;
-use alphafield_strategy::{
-    indicators::{Ema, Indicator, Macd, Rsi, Sma, BollingerBands},
-};
+use alphafield_strategy::indicators::{BollingerBands, Ema, Indicator, Macd, Rsi, Sma};
 
 use crate::api::AppState;
 use crate::services::data_service::fetch_data_with_cache;
@@ -146,7 +144,7 @@ pub async fn get_chart_data(
 
     for (idx, indicator_config) in req.indicators.iter().enumerate() {
         let indicator_name = format!("indicator_{}", idx);
-        
+
         match indicator_config {
             IndicatorConfig::Sma { period } => {
                 let data = calculate_sma(&bars, *period);
@@ -258,7 +256,7 @@ fn calculate_macd(bars: &[Bar], fast: usize, slow: usize, signal: usize) -> Indi
 
     for bar in bars {
         let timestamp = bar.timestamp.timestamp();
-        
+
         if let Some((macd_val, signal_val, histogram_val)) = macd_indicator.update(bar.close) {
             macd_values.push(IndicatorPoint {
                 timestamp,
@@ -303,15 +301,33 @@ fn calculate_bollinger_bands(bars: &[Bar], period: usize, std_dev: f64) -> Indic
 
     for bar in bars {
         let timestamp = bar.timestamp.timestamp();
-        
+
         if let Some((upper, middle, lower)) = bb.update(bar.close) {
-            upper_values.push(IndicatorPoint { timestamp, value: upper });
-            middle_values.push(IndicatorPoint { timestamp, value: middle });
-            lower_values.push(IndicatorPoint { timestamp, value: lower });
+            upper_values.push(IndicatorPoint {
+                timestamp,
+                value: upper,
+            });
+            middle_values.push(IndicatorPoint {
+                timestamp,
+                value: middle,
+            });
+            lower_values.push(IndicatorPoint {
+                timestamp,
+                value: lower,
+            });
         } else {
-            upper_values.push(IndicatorPoint { timestamp, value: f64::NAN });
-            middle_values.push(IndicatorPoint { timestamp, value: f64::NAN });
-            lower_values.push(IndicatorPoint { timestamp, value: f64::NAN });
+            upper_values.push(IndicatorPoint {
+                timestamp,
+                value: f64::NAN,
+            });
+            middle_values.push(IndicatorPoint {
+                timestamp,
+                value: f64::NAN,
+            });
+            lower_values.push(IndicatorPoint {
+                timestamp,
+                value: f64::NAN,
+            });
         }
     }
 
