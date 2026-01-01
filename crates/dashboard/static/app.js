@@ -164,6 +164,20 @@ function initStrategySelection() {
 
 function updateParamsUI() {
     const container = document.getElementById('build-params');
+    
+    // build-params element no longer exists since parameters are set through optimization
+    // This function is kept for backward compatibility but does nothing if element doesn't exist
+    if (!container) {
+        // Still initialize params with defaults even if UI doesn't exist
+        const strategyParams = STRATEGY_PARAMS[AppState.strategy] || [];
+        strategyParams.forEach(param => {
+            if (!AppState.params[param.name]) {
+                AppState.params[param.name] = param.default;
+            }
+        });
+        return;
+    }
+    
     const strategyParams = STRATEGY_PARAMS[AppState.strategy] || [];
 
     if (strategyParams.length === 0) {
