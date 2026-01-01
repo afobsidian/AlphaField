@@ -537,6 +537,12 @@ async function runBacktest() {
         // Render equity chart with trade markers
         renderEquityChart(data.equity_curve, data.benchmark?.curve, data.trades);
 
+        // Store backtest results for trade markers on price chart
+        AppState.backtestResults = data;
+
+        // Update interactive price chart
+        updateChartIndicators();
+
         // Show results
         placeholderEl.classList.add('hidden');
         contentEl.classList.remove('hidden');
@@ -2426,5 +2432,416 @@ function updateBacktestSummary() {
         }
         paramsEl.textContent = paramsText || "—";
     }
+}
+
+// ===========================
+// Interactive Chart Functions (Phase 12)
+// ===========================
+
+let chartData = null;
+let currentChartType = 'candlestick';
+
+function toggleIndicatorPanel() {
+    const panel = document.getElementById('indicator-panel');
+    if (panel.style.display === 'none') {
+        panel.style.display = 'block';
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+function switchChartType(type) {
+    currentChartType = type;
+    
+    // Update button states
+    document.querySelectorAll('.chart-type-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (btn.dataset.type === type) {
+            btn.classList.add('active');
+        }
+    });
+    
+    // Re-render chart with new type
+    if (chartData) {
+        renderPriceChart(chartData);
+    }
+}
+
+async function updateChartIndicators() {
+    // Check if we have a symbol and data
+    if (!AppState.symbol || !AppState.backtestInterval || !AppState.backtestDays) {
+        console.log('No symbol, interval, or days selected for chart');
+        return;
+    }
+
+    // Collect selected indicators
+    const indicators = [];
+    
+    if (document.getElementById('ind-sma-50')?.checked) {
+        indicators.push({ type: 'sma', period: 50 });
+    }
+    if (document.getElementById('ind-sma-200')?.checked) {
+        indicators.push({ type: 'sma', period: 200 });
+    }
+    if (document.getElementById('ind-ema-20')?.checked) {
+        indicators.push({ type: 'ema', period: 20 });
+    }
+    if (document.getElementById('ind-bb')?.checked) {
+        indicators.push({ type: 'bb', period: 20, std_dev: 2.0 });
+    }
+    if (document.getElementById('ind-rsi')?.checked) {
+        indicators.push({ type: 'rsi', period: 14 });
+    }
+    if (document.getElementById('ind-macd')?.checked) {
+        indicators.push({ type: 'macd', fast: 12, slow: 26, signal: 9 });
+    }
+
+    // Fetch chart data with indicators
+    try {
+        const response = await fetch(`${API_BASE}/chart/ohlcv`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                symbol: AppState.symbol,
+                interval: AppState.backtestInterval,
+                days: AppState.backtestDays,
+                indicators: indicators
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        chartData = await response.json();
+        console.log('Chart data received:', chartData);
+        
+        renderPriceChart(chartData);
+    } catch (error) {
+        console.error('Failed to fetch chart data:', error);
+    }
+}
+
+function renderPriceChart(data) {
+    if (!data || !data.bars || data.bars.length === 0) {
+        console.log('No chart data to render');
+        return;
+    }
+
+    const timestamps = data.bars.map(b => new Date(b.timestamp * 1000));
+    
+    const traces = [];
+    
+    // Main price trace
+    if (currentChartType === 'candlestick') {
+        traces.push({
+            type: 'candlestick',
+            x: timestamps,
+            open: data.bars.map(b => b.open),
+            high: data.bars.map(b => b.high),
+            low: data.bars.map(b => b.low),
+            close: data.bars.map(b => b.close),
+            name: data.symbol,
+            increasing: { line: { color: '#10b981' } },
+            decreasing: { line: { color: '#ef4444' } },
+            hoverlabel: { bgcolor: '#1e293b' }
+        });
+    } else if (currentChartType === 'line') {
+        traces.push({
+            type: 'scatter',
+            mode: 'lines',
+            x: timestamps,
+            y: data.bars.map(b => b.close),
+            name: 'Close',
+            line: { color: '#3b82f6', width: 2 },
+            hoverlabel: { bgcolor: '#1e293b' }
+        });
+    } else if (currentChartType === 'area') {
+        traces.push({
+            type: 'scatter',
+            mode: 'lines',
+            x: timestamps,
+            y: data.bars.map(b => b.close),
+            name: 'Close',
+            fill: 'tozeroy',
+            fillcolor: 'rgba(59, 130, 246, 0.2)',
+            line: { color: '#3b82f6', width: 2 },
+            hoverlabel: { bgcolor: '#1e293b' }
+        });
+    }
+
+    // Add indicators
+    if (data.indicators) {
+        Object.keys(data.indicators).forEach((key, idx) => {
+            const indicator = data.indicators[key];
+            
+            if (indicator.type === 'line') {
+                // SMA/EMA overlay
+                const values = indicator.values.map(v => v.value);
+                const ts = indicator.values.map(v => new Date(v.timestamp * 1000));
+                traces.push({
+                    type: 'scatter',
+                    mode: 'lines',
+                    x: ts,
+                    y: values,
+                    name: `Indicator ${idx}`,
+                    line: { width: 1.5 },
+                    hoverlabel: { bgcolor: '#1e293b' }
+                });
+            } else if (indicator.type === 'bands') {
+                // Bollinger Bands
+                const upperTs = indicator.upper.map(v => new Date(v.timestamp * 1000));
+                const middleTs = indicator.middle.map(v => new Date(v.timestamp * 1000));
+                const lowerTs = indicator.lower.map(v => new Date(v.timestamp * 1000));
+                
+                traces.push({
+                    type: 'scatter',
+                    mode: 'lines',
+                    x: upperTs,
+                    y: indicator.upper.map(v => v.value),
+                    name: 'BB Upper',
+                    line: { color: '#8b5cf6', width: 1, dash: 'dot' },
+                    hoverlabel: { bgcolor: '#1e293b' }
+                });
+                traces.push({
+                    type: 'scatter',
+                    mode: 'lines',
+                    x: middleTs,
+                    y: indicator.middle.map(v => v.value),
+                    name: 'BB Middle',
+                    line: { color: '#8b5cf6', width: 1 },
+                    hoverlabel: { bgcolor: '#1e293b' }
+                });
+                traces.push({
+                    type: 'scatter',
+                    mode: 'lines',
+                    x: lowerTs,
+                    y: indicator.lower.map(v => v.value),
+                    name: 'BB Lower',
+                    line: { color: '#8b5cf6', width: 1, dash: 'dot' },
+                    fill: 'tonexty',
+                    fillcolor: 'rgba(139, 92, 246, 0.1)',
+                    hoverlabel: { bgcolor: '#1e293b' }
+                });
+            }
+        });
+    }
+
+    // Add trade markers if available from backtest
+    if (AppState.backtestResults?.trades) {
+        const entryX = [];
+        const entryY = [];
+        const exitX = [];
+        const exitY = [];
+        
+        AppState.backtestResults.trades.forEach(trade => {
+            entryX.push(new Date(trade.entry_time));
+            entryY.push(trade.entry_price);
+            exitX.push(new Date(trade.exit_time));
+            exitY.push(trade.exit_price);
+        });
+        
+        traces.push({
+            type: 'scatter',
+            mode: 'markers',
+            x: entryX,
+            y: entryY,
+            name: 'Entry',
+            marker: {
+                color: '#10b981',
+                size: 10,
+                symbol: 'triangle-up',
+                line: { color: 'white', width: 1 }
+            },
+            hoverlabel: { bgcolor: '#1e293b' }
+        });
+        
+        traces.push({
+            type: 'scatter',
+            mode: 'markers',
+            x: exitX,
+            y: exitY,
+            name: 'Exit',
+            marker: {
+                color: '#ef4444',
+                size: 10,
+                symbol: 'triangle-down',
+                line: { color: 'white', width: 1 }
+            },
+            hoverlabel: { bgcolor: '#1e293b' }
+        });
+    }
+
+    const layout = {
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { color: '#94a3b8' },
+        margin: { t: 20, r: 20, b: 40, l: 60 },
+        xaxis: {
+            gridcolor: 'rgba(148, 163, 184, 0.1)',
+            showgrid: true,
+            type: 'date'
+        },
+        yaxis: {
+            gridcolor: 'rgba(148, 163, 184, 0.1)',
+            showgrid: true,
+            title: 'Price'
+        },
+        hovermode: 'x unified',
+        showlegend: true,
+        legend: {
+            x: 0,
+            y: 1,
+            bgcolor: 'rgba(30, 41, 59, 0.8)'
+        }
+    };
+
+    Plotly.newPlot('price-chart', traces, layout, { responsive: true });
+
+    // Render oscillators in separate panels
+    renderOscillators(data);
+}
+
+function renderOscillators(data) {
+    if (!data.indicators) return;
+
+    let hasRsi = false;
+    let hasMacd = false;
+
+    Object.keys(data.indicators).forEach(key => {
+        const indicator = data.indicators[key];
+        
+        if (indicator.type === 'oscillator') {
+            hasRsi = true;
+            renderRsiChart(indicator);
+        } else if (indicator.type === 'macd') {
+            hasMacd = true;
+            renderMacdChart(indicator);
+        }
+    });
+
+    // Show/hide panels
+    document.getElementById('rsi-panel').style.display = hasRsi ? 'block' : 'none';
+    document.getElementById('macd-panel').style.display = hasMacd ? 'block' : 'none';
+}
+
+function renderRsiChart(indicator) {
+    const timestamps = indicator.values.map(v => new Date(v.timestamp * 1000));
+    const values = indicator.values.map(v => v.value);
+
+    const traces = [{
+        type: 'scatter',
+        mode: 'lines',
+        x: timestamps,
+        y: values,
+        name: 'RSI',
+        line: { color: '#f59e0b', width: 2 },
+        hoverlabel: { bgcolor: '#1e293b' }
+    }];
+
+    // Add overbought/oversold lines
+    if (indicator.upper_bound) {
+        traces.push({
+            type: 'scatter',
+            mode: 'lines',
+            x: timestamps,
+            y: Array(timestamps.length).fill(indicator.upper_bound),
+            name: 'Overbought',
+            line: { color: '#ef4444', width: 1, dash: 'dash' },
+            hoverlabel: { bgcolor: '#1e293b' }
+        });
+    }
+    if (indicator.lower_bound) {
+        traces.push({
+            type: 'scatter',
+            mode: 'lines',
+            x: timestamps,
+            y: Array(timestamps.length).fill(indicator.lower_bound),
+            name: 'Oversold',
+            line: { color: '#10b981', width: 1, dash: 'dash' },
+            hoverlabel: { bgcolor: '#1e293b' }
+        });
+    }
+
+    const layout = {
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { color: '#94a3b8' },
+        margin: { t: 10, r: 20, b: 40, l: 60 },
+        xaxis: {
+            gridcolor: 'rgba(148, 163, 184, 0.1)',
+            showgrid: true,
+            type: 'date'
+        },
+        yaxis: {
+            gridcolor: 'rgba(148, 163, 184, 0.1)',
+            showgrid: true,
+            range: [0, 100]
+        },
+        hovermode: 'x unified',
+        showlegend: false
+    };
+
+    Plotly.newPlot('rsi-chart', traces, layout, { responsive: true });
+}
+
+function renderMacdChart(indicator) {
+    const timestamps = indicator.macd.map(v => new Date(v.timestamp * 1000));
+    
+    const traces = [
+        {
+            type: 'scatter',
+            mode: 'lines',
+            x: timestamps,
+            y: indicator.macd.map(v => v.value),
+            name: 'MACD',
+            line: { color: '#3b82f6', width: 2 },
+            hoverlabel: { bgcolor: '#1e293b' }
+        },
+        {
+            type: 'scatter',
+            mode: 'lines',
+            x: timestamps,
+            y: indicator.signal.map(v => v.value),
+            name: 'Signal',
+            line: { color: '#f59e0b', width: 2 },
+            hoverlabel: { bgcolor: '#1e293b' }
+        },
+        {
+            type: 'bar',
+            x: timestamps,
+            y: indicator.histogram.map(v => v.value),
+            name: 'Histogram',
+            marker: {
+                color: indicator.histogram.map(v => v.value >= 0 ? '#10b981' : '#ef4444')
+            },
+            hoverlabel: { bgcolor: '#1e293b' }
+        }
+    ];
+
+    const layout = {
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        font: { color: '#94a3b8' },
+        margin: { t: 10, r: 20, b: 40, l: 60 },
+        xaxis: {
+            gridcolor: 'rgba(148, 163, 184, 0.1)',
+            showgrid: true,
+            type: 'date'
+        },
+        yaxis: {
+            gridcolor: 'rgba(148, 163, 184, 0.1)',
+            showgrid: true
+        },
+        hovermode: 'x unified',
+        showlegend: true,
+        legend: {
+            x: 0,
+            y: 1,
+            bgcolor: 'rgba(30, 41, 59, 0.8)'
+        }
+    };
+
+    Plotly.newPlot('macd-chart', traces, layout, { responsive: true });
 }
 
