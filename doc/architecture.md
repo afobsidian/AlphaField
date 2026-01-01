@@ -230,6 +230,7 @@ graph TD
     
     subgraph "API Modules"
         BacktestAPI[Backtest API]
+        WorkflowAPI[Optimization Workflow API]
         DataAPI[Data API]
         QualityAPI[Quality API]
         AnalysisAPI[Analysis API]
@@ -237,7 +238,11 @@ graph TD
     
     subgraph "Frontend"
         UI[Web UI]
-        Charts[Charts]
+        BuildTab[Build Tab: Strategy + Category]
+        OptimizeTab[Optimize Tab: Auto-Optimize]
+        BacktestTab[Backtest Tab: Symbol Selection]
+        DeployTab[Deploy Tab]
+        Charts[Charts: Sweep/Sensitivity/Walk-Forward]
         DataManager[Data Manager]
         SentimentUI[Sentiment UI]
         Tables[Tables]
@@ -248,10 +253,15 @@ graph TD
     Axum --> WS
     Axum --> Static
     REST --> BacktestAPI
+    REST --> WorkflowAPI
     REST --> DataAPI
     REST --> QualityAPI
     REST --> AnalysisAPI
     Static --> UI
+    UI --> BuildTab
+    UI --> OptimizeTab
+    UI --> BacktestTab
+    UI --> DeployTab
     UI --> Charts
     UI --> DataManager
     UI --> SentimentUI
