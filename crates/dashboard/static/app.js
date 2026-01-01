@@ -467,6 +467,15 @@ async function runBacktest() {
     const contentEl = document.getElementById('backtest-results-content');
 
     try {
+        // Get symbol from backtest tab selector
+        const backtestSymbol = document.getElementById('backtest-symbol').value;
+        if (!backtestSymbol) {
+            throw new Error("Please select a symbol to backtest");
+        }
+        
+        // Update AppState with selected symbol
+        AppState.symbol = backtestSymbol;
+        
         const params = getParams();
 
         const res = await fetch(`${API_BASE}/backtest/run`, {
@@ -474,7 +483,7 @@ async function runBacktest() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 strategy: AppState.strategy,
-                symbol: AppState.symbol,
+                symbol: backtestSymbol,
                 interval: AppState.backtestInterval,
                 days: AppState.backtestDays,
                 params: params,
@@ -1899,21 +1908,35 @@ async function runAutoOptimize() {
     if (btn) btn.disabled = true;
 
     try {
-        // Get symbol from optimize tab
-        const optimizeSymbol = document.getElementById("optimize-symbol").value;
-        if (!optimizeSymbol) {
-            throw new Error("Please select a trading symbol first");
+        // Get symbols from selected asset category
+        const category = ASSET_CATEGORIES[AppState.assetCategory];
+        if (!category || !category.symbols || category.symbols.length === 0) {
+            throw new Error("Invalid asset category selected");
         }
         
-        // Update AppState with the selected symbol
-        AppState.symbol = optimizeSymbol;
+        const symbols = category.symbols;
+        
+        // For now, use the first symbol in the category as representative
+        // TODO: Backend should support multi-symbol optimization
+        const primarySymbol = symbols[0];
+        AppState.symbol = primarySymbol;
+        
+        resultsPlaceholder.innerHTML = `
+            <span class="placeholder-icon">⏳</span>
+            <span>Running multi-symbol optimization...</span>
+            <span style="font-size: 12px; margin-top: 8px; opacity: 0.7;">
+                Optimizing across ${category.name} (${symbols.length} symbols)<br>
+                Using randomized time periods for robust validation.<br>
+                This may take 30-60 seconds.
+            </span>
+        `;
         
         const res = await fetch(`${API_BASE}/backtest/workflow`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 strategy: AppState.strategy,
-                symbol: optimizeSymbol,
+                symbol: primarySymbol, // Use primary symbol for now
                 interval: AppState.backtestInterval,
                 days: 730, // Use 2 years for comprehensive analysis
                 include_3d_sensitivity: true, // Always include 3D sensitivity
@@ -2101,3 +2124,216 @@ function renderWalkForwardChart(windows) {
 
     Plotly.newPlot("walk-forward-chart", data, layout, { responsive: true });
 }
+
+// ===========================
+// Asset Category Definitions
+// ===========================
+
+const ASSET_CATEGORIES = {
+    "market": {
+        name: "Market (Top 10)",
+        symbols: ["BTC", "ETH", "BNB", "XRP", "ADA", "SOL", "DOT", "DOGE", "AVAX", "MATIC"]
+    },
+    "large-cap": {
+        name: "Large Cap (Rank 1-30)",
+        symbols: ["BTC", "ETH", "BNB", "XRP", "ADA", "SOL", "DOT", "DOGE", "AVAX", "MATIC", 
+                  "LINK", "UNI", "ATOM", "LTC", "ETC", "XLM", "ALGO", "VET", "ICP", "FIL"]
+    },
+    "mid-cap": {
+        name: "Mid Cap (Rank 31-100)",
+        symbols: ["AAVE", "GRT", "SAND", "MANA", "AXS", "ENJ", "CHZ", "THETA", "FTM", "ONE",
+                  "HBAR", "FLOW", "EGLD", "XTZ", "ZIL", "QTUM", "WAVES", "ICX", "OMG", "ZRX"]
+    },
+    "small-cap": {
+        name: "Small Cap (Rank 101-300)",
+        symbols: ["ANKR", "CRV", "BAL", "COMP", "YFI", "SNX", "SUSHI", "CAKE", "1INCH", "UMA",
+                  "REN", "KNC", "LRC", "BAND", "RSR", "NMR", "OCEAN", "CELR", "STORJ", "AUDIO"]
+    },
+    "defi": {
+        name: "DeFi Protocols",
+        symbols: ["AAVE", "UNI", "LINK", "COMP", "MKR", "SNX", "CRV", "SUSHI", "YFI", "BAL",
+                  "1INCH", "CAKE", "UMA", "BNT", "REN", "KNC", "LRC", "BAND", "RSR", "NMR"]
+    }
+};
+
+// ===========================
+// Update AppState for Asset Category
+// ===========================
+
+// Add asset category to AppState
+if (!AppState.assetCategory) {
+    AppState.assetCategory = "market";
+}
+
+// Update goToOptimize to capture asset category
+const originalGoToOptimize = goToOptimize;
+goToOptimize = function() {
+    // Get selected asset category
+    const categoryInput = document.querySelector('input[name="asset-category"]:checked');
+    if (categoryInput) {
+        AppState.assetCategory = categoryInput.value;
+    }
+    
+    // Update optimize tab display
+    updateOptimizeDisplay();
+    
+    // Call original function
+    originalGoToOptimize();
+};
+
+function updateOptimizeDisplay() {
+    const strategyEl = document.getElementById("opt-display-strategy");
+    const categoryEl = document.getElementById("opt-display-category");
+    
+    if (strategyEl) {
+        strategyEl.textContent = AppState.strategy || "—";
+    }
+    
+    if (categoryEl && AppState.assetCategory) {
+        const category = ASSET_CATEGORIES[AppState.assetCategory];
+        categoryEl.textContent = category ? category.name : AppState.assetCategory;
+    }
+}
+
+// Initialize display on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Listen for asset category changes
+    document.querySelectorAll('input[name="asset-category"]').forEach(input => {
+        input.addEventListener('change', function() {
+            AppState.assetCategory = this.value;
+        });
+    });
+});
+
+
+// ===========================
+// Backtest Symbol Selector
+// ===========================
+
+function initBacktestSymbolSelect() {
+    const wrapper = document.getElementById('backtest-symbol-select-wrapper');
+    const trigger = document.getElementById('backtest-symbol-trigger');
+    const optionsList = document.getElementById('backtest-symbol-options-list');
+    const searchInput = document.getElementById('backtest-symbol-search-input');
+    const hiddenInput = document.getElementById('backtest-symbol');
+    const selectedText = document.getElementById('backtest-selected-symbol-text');
+
+    if (!wrapper || !trigger) return;
+
+    // Toggle dropdown
+    trigger.addEventListener('click', () => {
+        wrapper.classList.toggle('open');
+        if (wrapper.classList.contains('open')) {
+            searchInput.focus();
+            renderBacktestSymbolOptions('');
+        }
+    });
+
+    // Close when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!wrapper.contains(e.target)) {
+            wrapper.classList.remove('open');
+        }
+    });
+
+    // Search as you type
+    searchInput.addEventListener('input', (e) => {
+        renderBacktestSymbolOptions(e.target.value);
+    });
+
+    // Render options from selected category
+    function renderBacktestSymbolOptions(query) {
+        optionsList.innerHTML = '';
+
+        // Get symbols from selected asset category
+        const category = ASSET_CATEGORIES[AppState.assetCategory];
+        if (!category || !category.symbols) {
+            optionsList.innerHTML = '<div class="option" style="cursor: default; opacity: 0.5;">No symbols available</div>';
+            return;
+        }
+
+        let symbols = category.symbols;
+        
+        // Filter by search query
+        if (query) {
+            const q = query.toLowerCase();
+            symbols = symbols.filter(s => s.toLowerCase().includes(q));
+        }
+
+        if (symbols.length === 0) {
+            optionsList.innerHTML = '<div class="option" style="cursor: default; opacity: 0.5;">No matches found</div>';
+            return;
+        }
+
+        symbols.forEach(symbol => {
+            const div = document.createElement('div');
+            div.className = 'option';
+            if (symbol === AppState.symbol) div.classList.add('selected');
+
+            div.innerHTML = `
+                <span class="option-ticker">${symbol}</span>
+                <span class="option-name">USDT</span>
+            `;
+
+            div.addEventListener('click', () => {
+                AppState.symbol = symbol;
+                hiddenInput.value = symbol;
+                selectedText.textContent = symbol;
+                wrapper.classList.remove('open');
+                updateBacktestSummary();
+            });
+
+            optionsList.appendChild(div);
+        });
+    }
+
+    // Initialize with primary symbol if available
+    if (AppState.symbol) {
+        selectedText.textContent = AppState.symbol;
+        hiddenInput.value = AppState.symbol;
+    }
+}
+
+// Update goToBacktestWithOptimizedParams to initialize symbol selector
+const originalGoToBacktestWithOptimizedParams = goToBacktestWithOptimizedParams;
+goToBacktestWithOptimizedParams = function() {
+    originalGoToBacktestWithOptimizedParams();
+    
+    // Initialize the backtest symbol selector with category symbols
+    setTimeout(() => {
+        initBacktestSymbolSelect();
+        
+        // Auto-select the primary symbol if not already selected
+        const backtestSymbol = document.getElementById('backtest-symbol');
+        const selectedText = document.getElementById('backtest-selected-symbol-text');
+        if (!backtestSymbol.value && AppState.symbol) {
+            backtestSymbol.value = AppState.symbol;
+            selectedText.textContent = AppState.symbol;
+        }
+    }, 100);
+};
+
+// Also update the backtest summary display
+function updateBacktestSummary() {
+    const strategyEl = document.getElementById("bt-summary-strategy");
+    const categoryEl = document.getElementById("bt-summary-category");
+    const paramsEl = document.getElementById("bt-summary-params");
+
+    if (strategyEl) {
+        strategyEl.textContent = AppState.strategy || "—";
+    }
+
+    if (categoryEl && AppState.assetCategory) {
+        const category = ASSET_CATEGORIES[AppState.assetCategory];
+        categoryEl.textContent = category ? category.name : AppState.assetCategory;
+    }
+
+    if (paramsEl && AppState.params) {
+        let paramsText = "";
+        for (const [key, value] of Object.entries(AppState.params)) {
+            paramsText += `${key}=${typeof value === 'number' ? value.toFixed(2) : value} `;
+        }
+        paramsEl.textContent = paramsText || "—";
+    }
+}
+

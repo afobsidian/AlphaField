@@ -91,13 +91,13 @@
             <!-- ==================== TAB 1: BUILD ==================== -->
             <section id="build-view" class="view-section active">
                 <div class="view-header">
-                    <h1>🔧 Strategy Selection</h1>
-                    <p>Choose the trading strategy you want to optimize and test</p>
+                    <h1>🔧 Strategy Configuration</h1>
+                    <p>Choose your trading strategy and asset category for optimization</p>
                 </div>
 
                 <div class="build-grid">
                     <!-- Strategy Selection Card -->
-                    <div class="card strategy-card" style="grid-column: 1 / -1;">
+                    <div class="card strategy-card">
                         <h3>Select Trading Strategy</h3>
                         <div class="strategy-options">
                             <label class="strategy-option">
@@ -126,6 +126,51 @@
                                 <div class="strategy-info">
                                     <span class="strategy-name">Momentum</span>
                                     <span class="strategy-desc">MACD + EMA trend strength</span>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Asset Category Selection Card -->
+                    <div class="card strategy-card">
+                        <h3>Select Asset Category</h3>
+                        <p style="font-size: 13px; opacity: 0.8; margin-bottom: 16px;">
+                            Optimization will train across multiple assets in this category using random time periods
+                        </p>
+                        <div class="strategy-options">
+                            <label class="strategy-option">
+                                <input type="radio" name="asset-category" value="market" checked>
+                                <div class="strategy-info">
+                                    <span class="strategy-name">📊 Market</span>
+                                    <span class="strategy-desc">Top 10 by market cap</span>
+                                </div>
+                            </label>
+                            <label class="strategy-option">
+                                <input type="radio" name="asset-category" value="large-cap">
+                                <div class="strategy-info">
+                                    <span class="strategy-name">🏢 Large Cap</span>
+                                    <span class="strategy-desc">Established coins (rank 1-30)</span>
+                                </div>
+                            </label>
+                            <label class="strategy-option">
+                                <input type="radio" name="asset-category" value="mid-cap">
+                                <div class="strategy-info">
+                                    <span class="strategy-name">🔷 Mid Cap</span>
+                                    <span class="strategy-desc">Growing projects (rank 31-100)</span>
+                                </div>
+                            </label>
+                            <label class="strategy-option">
+                                <input type="radio" name="asset-category" value="small-cap">
+                                <div class="strategy-info">
+                                    <span class="strategy-name">💎 Small Cap</span>
+                                    <span class="strategy-desc">Emerging tokens (rank 101-300)</span>
+                                </div>
+                            </label>
+                            <label class="strategy-option">
+                                <input type="radio" name="asset-category" value="defi">
+                                <div class="strategy-info">
+                                    <span class="strategy-name">🌐 DeFi</span>
+                                    <span class="strategy-desc">DeFi protocols</span>
                                 </div>
                             </label>
                         </div>
@@ -158,13 +203,40 @@
                                 <strong id="bt-summary-strategy">—</strong>
                             </div>
                             <div class="summary-row">
-                                <span>Symbol:</span>
-                                <strong id="bt-summary-symbol">—</strong>
+                                <span>Asset Category:</span>
+                                <strong id="bt-summary-category">—</strong>
                             </div>
                             <div class="summary-row">
                                 <span>Parameters:</span>
                                 <span id="bt-summary-params" class="params-inline">—</span>
                             </div>
+                        </div>
+
+                        <!-- Symbol Selection for Backtest -->
+                        <div class="form-group">
+                            <label>Test Symbol</label>
+                            <p style="font-size: 12px; opacity: 0.8; margin-bottom: 8px;">
+                                Select which symbol to backtest with optimized parameters
+                            </p>
+                            <div class="custom-select-wrapper" id="backtest-symbol-select-wrapper">
+                                <div class="custom-select-trigger" id="backtest-symbol-trigger">
+                                    <span id="backtest-selected-symbol-text">Select Symbol...</span>
+                                </div>
+                                <div class="custom-options">
+                                    <div class="symbol-search-box">
+                                        <input type="text" class="symbol-search-input" id="backtest-symbol-search-input"
+                                            placeholder="Search symbol..." autocomplete="off">
+                                    </div>
+                                    <div class="options-list" id="backtest-symbol-options-list">
+                                        <!-- Options injected by JS -->
+                                        <div class="placeholder-content" style="min-height: 100px;">
+                                            <span class="text-muted">Loading...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Hidden input to store value -->
+                            <input type="hidden" id="backtest-symbol">
                         </div>
 
                         <div class="form-group">
@@ -259,36 +331,30 @@
             <section id="optimize-view" class="view-section">
                 <div class="view-header">
                     <h1>⚡ Auto-Optimize Parameters</h1>
-                    <p>Comprehensive analysis to find optimal parameters and validate strategy robustness</p>
+                    <p>Multi-symbol optimization across random time periods to find robust parameters</p>
                 </div>
 
                 <div class="optimize-grid">
-                    <!-- Symbol Selection & Auto Optimize -->
+                    <!-- Auto Optimize Control -->
                     <div class="card optimize-controls">
                         <h3>Run Optimization</h3>
 
-                        <!-- Symbol Selection -->
+                        <!-- Selected Category Display -->
                         <div class="control-section">
-                            <h4 class="section-title">Trading Symbol</h4>
-                            <div class="custom-select-wrapper" id="optimize-symbol-select-wrapper">
-                                <div class="custom-select-trigger" id="optimize-symbol-trigger">
-                                    <span id="optimize-selected-symbol-text">Select Symbol...</span>
+                            <h4 class="section-title">Optimization Scope</h4>
+                            <div style="padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; margin-bottom: 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <span style="font-weight: 600;">Strategy:</span>
+                                    <span id="opt-display-strategy">—</span>
                                 </div>
-                                <div class="custom-options">
-                                    <div class="symbol-search-box">
-                                        <input type="text" class="symbol-search-input" id="optimize-symbol-search-input"
-                                            placeholder="Search symbol (e.g. BTC)..." autocomplete="off">
-                                    </div>
-                                    <div class="options-list" id="optimize-symbol-options-list">
-                                        <!-- Options injected by JS -->
-                                        <div class="placeholder-content" style="min-height: 100px;">
-                                            <span class="text-muted">Loading...</span>
-                                        </div>
-                                    </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-weight: 600;">Asset Category:</span>
+                                    <span id="opt-display-category">—</span>
                                 </div>
                             </div>
-                            <!-- Hidden input to store value -->
-                            <input type="hidden" id="optimize-symbol">
+                            <p style="font-size: 13px; opacity: 0.8;">
+                                Optimization will test parameters across multiple symbols in the selected category using randomized time periods for robust validation.
+                            </p>
                         </div>
 
                         <div class="divider"></div>
@@ -297,7 +363,7 @@
                         <div class="control-section">
                             <p class="config-info" style="margin-bottom: 16px;">
                                 Runs complete optimization pipeline including:
-                                <br>• Grid search parameter optimization
+                                <br>• Grid search across multiple assets
                                 <br>• Parameter dispersion analysis
                                 <br>• Walk-forward validation
                                 <br>• 3D sensitivity heatmap
