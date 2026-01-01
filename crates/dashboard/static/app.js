@@ -2257,7 +2257,6 @@ function initBacktestSymbolSelect() {
     const optionsList = document.getElementById('backtest-symbol-options-list');
     const searchInput = document.getElementById('backtest-symbol-search-input');
     const hiddenInput = document.getElementById('backtest-symbol');
-    const selectedText = document.getElementById('backtest-selected-symbol-text');
 
     if (!wrapper || !trigger) {
         console.warn("Backtest symbol selector elements not found");
@@ -2269,6 +2268,9 @@ function initBacktestSymbolSelect() {
     // Remove any existing listeners to avoid duplicates
     const newTrigger = trigger.cloneNode(true);
     trigger.parentNode.replaceChild(newTrigger, trigger);
+
+    // Get fresh reference to selectedText after trigger replacement
+    const selectedText = document.getElementById('backtest-selected-symbol-text');
 
     // Toggle dropdown
     newTrigger.addEventListener('click', () => {
@@ -2332,9 +2334,13 @@ function initBacktestSymbolSelect() {
             `;
 
             div.addEventListener('click', () => {
+                // Get fresh reference each time in case of re-initialization
+                const currentSelectedText = document.getElementById('backtest-selected-symbol-text');
                 AppState.symbol = symbol;
                 hiddenInput.value = symbol;
-                selectedText.textContent = symbol;
+                if (currentSelectedText) {
+                    currentSelectedText.textContent = symbol;
+                }
                 wrapper.classList.remove('open');
                 updateBacktestSummary();
             });
@@ -2344,7 +2350,7 @@ function initBacktestSymbolSelect() {
     }
 
     // Initialize with primary symbol if available
-    if (AppState.symbol) {
+    if (AppState.symbol && selectedText) {
         selectedText.textContent = AppState.symbol;
         hiddenInput.value = AppState.symbol;
     } else if (AppState.assetCategory) {
