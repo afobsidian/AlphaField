@@ -26,8 +26,8 @@ Primary: PostgreSQL with TimescaleDB extension.
 Why: Best-in-class handling of time-series data (OHLCV, ticks) and strictly typed schemas.
 ORM: sqlx (Rust) for compile-time checked SQL queries.
 3.3 Frontend (Dashboard)
-Framework: React (Vite) + TypeScript.
-Visualization: Recharts or Lightweight-charts (TradingView library) for candlestick and equity curve rendering.
+Framework: Vanilla JavaScript (served by Axum as static files).
+Visualization: Plotly.js for candlestick charts, equity curves, and heatmaps.
 4. System Architecture & Development Phases
 Phase 1: Data Infrastructure ("The Source of Truth")
 Goal: Build a robust data pipeline that guarantees data integrity.

@@ -917,3 +917,668 @@ pub async fn run_optimization_workflow(
         }
     }
 }
+
+// ===========================
+// Multi-Symbol Optimization Workflow API
+// ===========================
+
+/// Request for multi-symbol optimization workflow
+#[derive(Debug, Deserialize)]
+pub struct MultiSymbolWorkflowRequest {
+    pub strategy: String,
+    /// Multiple symbols to optimize across
+    pub symbols: Vec<String>,
+    pub interval: String,
+    pub days: u32,
+    /// Optional: Enable/disable 3D sensitivity analysis (default: false for multi-symbol)
+    pub include_3d_sensitivity: Option<bool>,
+    /// Optional: Training window for walk-forward (in days, default: 252)
+    pub train_window_days: Option<usize>,
+    /// Optional: Testing window for walk-forward (in days, default: 63)
+    pub test_window_days: Option<usize>,
+}
+
+/// Result for a single symbol in multi-symbol optimization
+#[derive(Serialize)]
+pub struct SymbolResult {
+    pub symbol: String,
+    pub sharpe_ratio: f64,
+    pub total_return: f64,
+    pub max_drawdown: f64,
+    pub total_trades: usize,
+}
+
+/// Response for multi-symbol optimization workflow
+#[derive(Serialize)]
+pub struct MultiSymbolWorkflowResponse {
+    pub success: bool,
+    /// Optimized parameters (aggregated across all symbols)
+    pub optimized_params: HashMap<String, f64>,
+    /// Average robustness score across symbols
+    pub robustness_score: f64,
+    /// Average Sharpe ratio across symbols
+    pub avg_sharpe: f64,
+    /// Average return across symbols
+    pub avg_return: f64,
+    /// Worst drawdown across symbols
+    pub worst_drawdown: f64,
+    /// Per-symbol results
+    pub symbol_results: Vec<SymbolResult>,
+    /// Number of symbols successfully processed
+    pub symbols_processed: usize,
+    /// Parameter dispersion (from primary symbol)
+    pub parameter_dispersion: ParameterDispersion,
+    /// Sweep results from primary symbol (for visualization)
+    pub sweep_results: Vec<ParamSweepResult>,
+    /// Walk-forward validation from primary symbol (for visualization)
+    pub walk_forward_validation: Option<alphafield_backtest::WalkForwardResult>,
+    /// Sensitivity heatmap from primary symbol (for visualization)
+    pub sensitivity_heatmap: Option<alphafield_backtest::sensitivity::HeatmapData>,
+    /// Execution time
+    pub elapsed_ms: u64,
+    pub error: Option<String>,
+}
+
+/// Run optimization workflow across multiple symbols
+///
+/// This performs combined optimization:
+/// - Parameter sweep tests each param combo across ALL symbols, averaging scores
+/// - Walk-forward randomly selects symbols for each window to validate generalization
+pub async fn run_multi_symbol_workflow(
+    State(_state): State<Arc<AppState>>,
+    Json(req): Json<MultiSymbolWorkflowRequest>,
+) -> Json<MultiSymbolWorkflowResponse> {
+    let start = std::time::Instant::now();
+    info!(
+        strategy = %req.strategy,
+        symbols = ?req.symbols,
+        "Starting combined multi-symbol optimization workflow"
+    );
+
+    if req.symbols.is_empty() {
+        return Json(MultiSymbolWorkflowResponse {
+            success: false,
+            optimized_params: HashMap::new(),
+            robustness_score: 0.0,
+            avg_sharpe: 0.0,
+            avg_return: 0.0,
+            worst_drawdown: 0.0,
+            symbol_results: vec![],
+            symbols_processed: 0,
+            parameter_dispersion: ParameterDispersion::default(),
+            sweep_results: vec![],
+            walk_forward_validation: None,
+            sensitivity_heatmap: None,
+            elapsed_ms: start.elapsed().as_millis() as u64,
+            error: Some("No symbols provided".to_string()),
+        });
+    }
+
+    // Get parameter bounds for the strategy
+    let bounds = get_strategy_bounds(&req.strategy);
+    if bounds.is_empty() {
+        return Json(MultiSymbolWorkflowResponse {
+            success: false,
+            optimized_params: HashMap::new(),
+            robustness_score: 0.0,
+            avg_sharpe: 0.0,
+            avg_return: 0.0,
+            worst_drawdown: 0.0,
+            symbol_results: vec![],
+            symbols_processed: 0,
+            parameter_dispersion: ParameterDispersion::default(),
+            sweep_results: vec![],
+            walk_forward_validation: None,
+            sensitivity_heatmap: None,
+            elapsed_ms: start.elapsed().as_millis() as u64,
+            error: Some(format!("Unknown strategy: {}", req.strategy)),
+        });
+    }
+
+    // Date range
+    use chrono::{Duration, Utc};
+    let end_time = Utc::now();
+    let start_time = end_time - Duration::days(req.days as i64);
+
+    // 1. Pre-fetch data for ALL symbols
+    info!("Fetching data for {} symbols...", req.symbols.len());
+    let mut symbol_data: Vec<(String, Vec<alphafield_core::Bar>)> = Vec::new();
+
+    for symbol in &req.symbols {
+        let fetch_symbol = symbol.clone();
+        let fetch_interval = req.interval.clone();
+
+        let fetch_result = tokio::spawn(async move {
+            fetch_data_with_cache(fetch_symbol, fetch_interval, start_time, end_time).await
+        })
+        .await
+        .map_err(|e| e.to_string())
+        .and_then(|res| res);
+
+        match fetch_result {
+            Ok((bars, _status)) if !bars.is_empty() => {
+                symbol_data.push((symbol.clone(), bars));
+            }
+            Ok(_) => {
+                warn!(symbol = %symbol, "No data available for symbol, skipping");
+            }
+            Err(e) => {
+                warn!(symbol = %symbol, error = %e, "Failed to fetch data for symbol, skipping");
+            }
+        }
+    }
+
+    if symbol_data.is_empty() {
+        return Json(MultiSymbolWorkflowResponse {
+            success: false,
+            optimized_params: HashMap::new(),
+            robustness_score: 0.0,
+            avg_sharpe: 0.0,
+            avg_return: 0.0,
+            worst_drawdown: 0.0,
+            symbol_results: vec![],
+            symbols_processed: 0,
+            parameter_dispersion: ParameterDispersion::default(),
+            sweep_results: vec![],
+            walk_forward_validation: None,
+            sensitivity_heatmap: None,
+            elapsed_ms: start.elapsed().as_millis() as u64,
+            error: Some("No symbols had valid data".to_string()),
+        });
+    }
+
+    info!(
+        "Fetched data for {} symbols successfully",
+        symbol_data.len()
+    );
+
+    // 2. Run combined parameter sweep across all symbols
+    let strategy_name = req.strategy.clone();
+    let bounds_clone = bounds.clone();
+    let symbol_data_clone = symbol_data.clone();
+
+    let sweep_result = tokio::task::spawn_blocking(move || {
+        run_combined_parameter_sweep(&symbol_data_clone, &strategy_name, &bounds_clone)
+    })
+    .await;
+
+    let (
+        sweep_results,
+        best_params,
+        _best_score,
+        best_sharpe,
+        best_return,
+        best_max_drawdown,
+        _best_trades,
+        symbol_results,
+    ) = match sweep_result {
+        Ok(Ok(result)) => result,
+        Ok(Err(e)) => {
+            error!(error = %e, "Combined parameter sweep failed");
+            return Json(MultiSymbolWorkflowResponse {
+                success: false,
+                optimized_params: HashMap::new(),
+                robustness_score: 0.0,
+                avg_sharpe: 0.0,
+                avg_return: 0.0,
+                worst_drawdown: 0.0,
+                symbol_results: vec![],
+                symbols_processed: 0,
+                parameter_dispersion: ParameterDispersion::default(),
+                sweep_results: vec![],
+                walk_forward_validation: None,
+                sensitivity_heatmap: None,
+                elapsed_ms: start.elapsed().as_millis() as u64,
+                error: Some(e),
+            });
+        }
+        Err(e) => {
+            error!(error = %e, "Combined parameter sweep task panicked");
+            return Json(MultiSymbolWorkflowResponse {
+                success: false,
+                optimized_params: HashMap::new(),
+                robustness_score: 0.0,
+                avg_sharpe: 0.0,
+                avg_return: 0.0,
+                worst_drawdown: 0.0,
+                symbol_results: vec![],
+                symbols_processed: 0,
+                parameter_dispersion: ParameterDispersion::default(),
+                sweep_results: vec![],
+                walk_forward_validation: None,
+                sensitivity_heatmap: None,
+                elapsed_ms: start.elapsed().as_millis() as u64,
+                error: Some(format!("Internal error: {}", e)),
+            });
+        }
+    };
+
+    // 3. Run multi-symbol walk-forward with random symbol selection
+    let bars_per_day = match req.interval.as_str() {
+        "1m" => BARS_PER_DAY_1M,
+        "5m" => BARS_PER_DAY_5M,
+        "15m" => BARS_PER_DAY_15M,
+        "1h" => BARS_PER_DAY_1H,
+        "4h" => BARS_PER_DAY_4H,
+        "1d" => BARS_PER_DAY_1D,
+        _ => BARS_PER_DAY_DEFAULT,
+    };
+
+    let train_window_bars = req.train_window_days.unwrap_or(252) * bars_per_day;
+    let test_window_bars = req.test_window_days.unwrap_or(63) * bars_per_day;
+
+    let strategy_name_wf = req.strategy.clone();
+    let best_params_wf = best_params.clone();
+    let symbol_data_wf = symbol_data.clone();
+
+    let walk_forward_result = tokio::task::spawn_blocking(move || {
+        run_multi_symbol_walk_forward(
+            &symbol_data_wf,
+            &strategy_name_wf,
+            &best_params_wf,
+            train_window_bars,
+            test_window_bars,
+            TRADING_DAYS_PER_MONTH * bars_per_day,
+        )
+    })
+    .await;
+
+    let walk_forward_validation = match walk_forward_result {
+        Ok(Ok(result)) => Some(result),
+        Ok(Err(e)) => {
+            warn!(error = %e, "Multi-symbol walk-forward failed, continuing without it");
+            None
+        }
+        Err(e) => {
+            warn!(error = %e, "Walk-forward task panicked, continuing without it");
+            None
+        }
+    };
+
+    // 4. Calculate parameter dispersion and robustness
+    let parameter_dispersion = ParameterDispersion::calculate(&sweep_results);
+
+    let robustness_score = if let Some(ref wf) = walk_forward_validation {
+        calculate_multi_symbol_robustness(&parameter_dispersion, wf)
+    } else {
+        // Without walk-forward, use dispersion only
+        let dispersion_score = 100.0 * (1.0 - parameter_dispersion.sharpe_cv.min(1.0));
+        dispersion_score.clamp(0.0, 100.0)
+    };
+
+    info!(
+        symbols_processed = symbol_data.len(),
+        best_sharpe = best_sharpe,
+        robustness_score = robustness_score,
+        elapsed_ms = start.elapsed().as_millis(),
+        "Combined multi-symbol optimization complete"
+    );
+
+    Json(MultiSymbolWorkflowResponse {
+        success: true,
+        optimized_params: best_params,
+        robustness_score,
+        avg_sharpe: best_sharpe,
+        avg_return: best_return,
+        worst_drawdown: best_max_drawdown,
+        symbol_results,
+        symbols_processed: symbol_data.len(),
+        parameter_dispersion,
+        sweep_results,
+        walk_forward_validation,
+        sensitivity_heatmap: None, // Removed from display as requested
+        elapsed_ms: start.elapsed().as_millis() as u64,
+        error: None,
+    })
+}
+
+/// Run combined parameter sweep across all symbols
+/// Each parameter combination is tested on ALL symbols and scores are averaged
+#[allow(clippy::type_complexity)]
+fn run_combined_parameter_sweep(
+    symbol_data: &[(String, Vec<alphafield_core::Bar>)],
+    strategy_name: &str,
+    bounds: &[alphafield_backtest::ParamBounds],
+) -> Result<
+    (
+        Vec<ParamSweepResult>,
+        HashMap<String, f64>,
+        f64,
+        f64,
+        f64,
+        f64,
+        usize,
+        Vec<SymbolResult>,
+    ),
+    String,
+> {
+    use alphafield_backtest::optimizer::{calculate_composite_score, ParameterOptimizer};
+    use alphafield_backtest::{BacktestEngine, SlippageModel};
+
+    let param_combinations = ParameterOptimizer::generate_param_combinations(bounds);
+
+    if param_combinations.is_empty() {
+        return Err("No parameter combinations generated".to_string());
+    }
+
+    info!(
+        "Testing {} parameter combinations across {} symbols",
+        param_combinations.len(),
+        symbol_data.len()
+    );
+
+    let mut sweep_results: Vec<ParamSweepResult> = Vec::new();
+    let mut best_params = HashMap::new();
+    let mut best_score = f64::NEG_INFINITY;
+    let mut best_sharpe = 0.0;
+    let mut best_return = 0.0;
+    let mut best_max_drawdown = 0.0;
+    let mut best_trades = 0;
+
+    // For each parameter combination
+    for params in &param_combinations {
+        let mut combo_sharpes: Vec<f64> = Vec::new();
+        let mut combo_returns: Vec<f64> = Vec::new();
+        let mut combo_drawdowns: Vec<f64> = Vec::new();
+        let mut combo_win_rates: Vec<f64> = Vec::new();
+        let mut combo_trades: Vec<usize> = Vec::new();
+
+        // Test on ALL symbols
+        for (symbol, bars) in symbol_data {
+            // Create strategy
+            let strategy =
+                match StrategyFactory::create_backtest(strategy_name, params, symbol, 100_000.0) {
+                    Some(s) => s,
+                    None => continue,
+                };
+
+            // Run backtest
+            let mut engine =
+                BacktestEngine::new(100_000.0, 0.001, SlippageModel::FixedPercent(0.0005));
+            engine.add_data(symbol, bars.clone());
+            engine.set_strategy(strategy);
+
+            if let Ok(metrics) = engine.run() {
+                combo_sharpes.push(metrics.sharpe_ratio);
+                combo_returns.push(metrics.total_return);
+                combo_drawdowns.push(metrics.max_drawdown);
+                combo_win_rates.push(metrics.win_rate);
+                combo_trades.push(engine.portfolio.trades.len());
+            }
+        }
+
+        if combo_sharpes.is_empty() {
+            continue;
+        }
+
+        // Calculate averages across all symbols
+        let avg_sharpe = combo_sharpes.iter().sum::<f64>() / combo_sharpes.len() as f64;
+        let avg_return = combo_returns.iter().sum::<f64>() / combo_returns.len() as f64;
+        let max_drawdown = combo_drawdowns.iter().cloned().fold(0.0, f64::max);
+        let avg_win_rate = combo_win_rates.iter().sum::<f64>() / combo_win_rates.len() as f64;
+        let total_trades: usize = combo_trades.iter().sum();
+
+        // Calculate combined score
+        let score = calculate_composite_score(
+            avg_sharpe,
+            avg_return,
+            max_drawdown,
+            avg_win_rate,
+            total_trades,
+        );
+
+        // Store sweep result
+        sweep_results.push(ParamSweepResult {
+            params: params.clone(),
+            sharpe: avg_sharpe,
+            total_return: avg_return,
+            max_drawdown,
+            win_rate: avg_win_rate,
+            total_trades,
+            score,
+        });
+
+        // Track best
+        if score > best_score {
+            best_score = score;
+            best_params = params.clone();
+            best_sharpe = avg_sharpe;
+            best_return = avg_return;
+            best_max_drawdown = max_drawdown;
+            best_trades = total_trades;
+        }
+    }
+
+    // Calculate per-symbol results with best params
+    let mut symbol_results: Vec<SymbolResult> = Vec::new();
+    for (symbol, bars) in symbol_data {
+        let strategy = match StrategyFactory::create_backtest(
+            strategy_name,
+            &best_params,
+            symbol,
+            100_000.0,
+        ) {
+            Some(s) => s,
+            None => continue,
+        };
+
+        let mut engine = BacktestEngine::new(100_000.0, 0.001, SlippageModel::FixedPercent(0.0005));
+        engine.add_data(symbol, bars.clone());
+        engine.set_strategy(strategy);
+
+        if let Ok(metrics) = engine.run() {
+            symbol_results.push(SymbolResult {
+                symbol: symbol.clone(),
+                sharpe_ratio: metrics.sharpe_ratio,
+                total_return: metrics.total_return,
+                max_drawdown: metrics.max_drawdown,
+                total_trades: engine.portfolio.trades.len(),
+            });
+        }
+    }
+
+    info!(
+        "Parameter sweep complete: best score = {:.3}, best sharpe = {:.3}",
+        best_score, best_sharpe
+    );
+
+    Ok((
+        sweep_results,
+        best_params,
+        best_score,
+        best_sharpe,
+        best_return,
+        best_max_drawdown,
+        best_trades,
+        symbol_results,
+    ))
+}
+
+/// Run walk-forward validation with random symbol selection per window
+fn run_multi_symbol_walk_forward(
+    symbol_data: &[(String, Vec<alphafield_core::Bar>)],
+    strategy_name: &str,
+    params: &HashMap<String, f64>,
+    train_window: usize,
+    test_window: usize,
+    step_size: usize,
+) -> Result<alphafield_backtest::WalkForwardResult, String> {
+    use alphafield_backtest::{BacktestEngine, SlippageModel};
+    use rand::seq::SliceRandom;
+
+    if symbol_data.is_empty() {
+        return Err("No symbol data available".to_string());
+    }
+
+    let min_required = train_window + test_window;
+
+    // Filter symbols with enough data
+    let valid_symbols: Vec<_> = symbol_data
+        .iter()
+        .filter(|(_, bars)| bars.len() >= min_required)
+        .collect();
+
+    if valid_symbols.is_empty() {
+        return Err(format!(
+            "No symbols have enough data (need {} bars)",
+            min_required
+        ));
+    }
+
+    let mut rng = rand::thread_rng();
+    let mut windows: Vec<alphafield_backtest::walk_forward::WindowResult> = Vec::new();
+    let mut window_idx = 0;
+
+    // Walk through time, randomly selecting symbols
+    while let Some((symbol, bars)) = valid_symbols.choose(&mut rng) {
+        let start_idx = window_idx * step_size;
+        let train_end = start_idx + train_window;
+        let test_end = train_end + test_window;
+
+        if test_end > bars.len() {
+            break;
+        }
+
+        // Split data
+        let train_data = &bars[start_idx..train_end];
+        let test_data = &bars[train_end..test_end];
+
+        // Run train backtest
+        let train_metrics = {
+            let strategy =
+                match StrategyFactory::create_backtest(strategy_name, params, symbol, 100_000.0) {
+                    Some(s) => s,
+                    None => {
+                        window_idx += 1;
+                        continue;
+                    }
+                };
+
+            let mut engine =
+                BacktestEngine::new(100_000.0, 0.001, SlippageModel::FixedPercent(0.0005));
+            engine.add_data(symbol, train_data.to_vec());
+            engine.set_strategy(strategy);
+
+            match engine.run() {
+                Ok(m) => m,
+                Err(_) => {
+                    window_idx += 1;
+                    continue;
+                }
+            }
+        };
+
+        // Run test backtest
+        let test_metrics = {
+            let strategy =
+                match StrategyFactory::create_backtest(strategy_name, params, symbol, 100_000.0) {
+                    Some(s) => s,
+                    None => {
+                        window_idx += 1;
+                        continue;
+                    }
+                };
+
+            let mut engine =
+                BacktestEngine::new(100_000.0, 0.001, SlippageModel::FixedPercent(0.0005));
+            engine.add_data(symbol, test_data.to_vec());
+            engine.set_strategy(strategy);
+
+            match engine.run() {
+                Ok(m) => m,
+                Err(_) => {
+                    window_idx += 1;
+                    continue;
+                }
+            }
+        };
+
+        windows.push(alphafield_backtest::walk_forward::WindowResult {
+            window_index: window_idx,
+            train_start: start_idx,
+            train_end,
+            test_start: train_end,
+            test_end,
+            train_metrics,
+            test_metrics,
+        });
+
+        window_idx += 1;
+
+        // Limit to reasonable number of windows
+        if windows.len() >= 20 {
+            break;
+        }
+    }
+
+    if windows.is_empty() {
+        return Err("Could not create any walk-forward windows".to_string());
+    }
+
+    // Calculate aggregate metrics
+    let test_returns: Vec<f64> = windows
+        .iter()
+        .map(|w| w.test_metrics.total_return)
+        .collect();
+    let test_sharpes: Vec<f64> = windows
+        .iter()
+        .map(|w| w.test_metrics.sharpe_ratio)
+        .collect();
+    let test_drawdowns: Vec<f64> = windows
+        .iter()
+        .map(|w| w.test_metrics.max_drawdown)
+        .collect();
+    let test_win_rates: Vec<f64> = windows.iter().map(|w| w.test_metrics.win_rate).collect();
+
+    let mean_return = test_returns.iter().sum::<f64>() / test_returns.len() as f64;
+    let mean_sharpe = test_sharpes.iter().sum::<f64>() / test_sharpes.len() as f64;
+    let worst_drawdown = test_drawdowns.iter().cloned().fold(0.0, f64::max);
+    let win_rate = test_win_rates.iter().sum::<f64>() / test_win_rates.len() as f64;
+
+    // Calculate median return
+    let mut sorted_returns = test_returns.clone();
+    sorted_returns.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let median_return = if sorted_returns.len().is_multiple_of(2) {
+        (sorted_returns[sorted_returns.len() / 2 - 1] + sorted_returns[sorted_returns.len() / 2])
+            / 2.0
+    } else {
+        sorted_returns[sorted_returns.len() / 2]
+    };
+
+    // Calculate stability score (percentage of profitable windows)
+    let profitable_windows = test_returns.iter().filter(|&&r| r > 0.0).count();
+    let stability_score = (profitable_windows as f64 / windows.len() as f64) * 100.0;
+
+    let aggregate_oos = alphafield_backtest::walk_forward::AggregateMetrics {
+        mean_return,
+        median_return,
+        mean_sharpe,
+        worst_drawdown,
+        win_rate,
+    };
+
+    Ok(alphafield_backtest::WalkForwardResult {
+        windows,
+        aggregate_oos,
+        stability_score,
+    })
+}
+
+/// Calculate robustness score for multi-symbol optimization
+fn calculate_multi_symbol_robustness(
+    dispersion: &ParameterDispersion,
+    walk_forward: &alphafield_backtest::WalkForwardResult,
+) -> f64 {
+    // Walk-forward stability (40%)
+    let wf_score = walk_forward.stability_score;
+
+    // Parameter dispersion (30%) - lower CV is better
+    let dispersion_score = 100.0 * (1.0 - dispersion.sharpe_cv.min(1.0));
+
+    // Out-of-sample performance (30%)
+    let oos_sharpe = walk_forward.aggregate_oos.mean_sharpe;
+    let oos_score = (oos_sharpe.clamp(-1.0, 3.0) + 1.0) * 25.0; // Maps [-1, 3] to [0, 100]
+
+    let robustness = 0.4 * wf_score + 0.3 * dispersion_score + 0.3 * oos_score;
+    robustness.clamp(0.0, 100.0)
+}

@@ -129,9 +129,6 @@ cargo run --bin data-demo
 
 # Golden Cross backtest
 cargo run --example golden_cross_backtest -p alphafield-backtest
-
-# RSI strategy backtest
-cargo run --example rsi_backtest -p alphafield-backtest
 ```
 
 ---

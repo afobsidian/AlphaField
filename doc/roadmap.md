@@ -1,6 +1,6 @@
 # 🗺️ AlphaField Roadmap v2.0
 
-> Updated: December 2025  
+> Updated: January 2026  
 > Status: V1 Complete, V2 Planning  
 > Purpose: **Personal Algorithmic Trading Platform**
 

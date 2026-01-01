@@ -92,7 +92,7 @@ impl Default for OptimizationResult {
 /// - Total Return (25%): Raw profitability
 /// - Win Rate (20%): Consistency
 /// - Drawdown penalty (15%): Risk control
-fn calculate_composite_score(
+pub fn calculate_composite_score(
     sharpe: f64,
     total_return: f64,
     max_drawdown: f64,
@@ -132,7 +132,7 @@ impl ParameterOptimizer {
     }
 
     /// Generate all parameter combinations from bounds
-    fn generate_param_combinations(bounds: &[ParamBounds]) -> Vec<HashMap<String, f64>> {
+    pub fn generate_param_combinations(bounds: &[ParamBounds]) -> Vec<HashMap<String, f64>> {
         if bounds.is_empty() {
             return vec![HashMap::new()];
         }

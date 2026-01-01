@@ -283,26 +283,27 @@ mod tests {
         }
     }
 
-    // TODO: Re-enable when BuyAndHold strategy is added to backtest module
-    // #[test]
-    // fn test_insufficient_data() {
-    //     let config = WalkForwardConfig {
-    //         train_window: 100,
-    //         test_window: 50,
-    //         ..Default::default()
-    //     };
-    //     let analyzer = WalkForwardAnalyzer::new(config);
+    #[test]
+    fn test_insufficient_data_with_buy_and_hold() {
+        let config = WalkForwardConfig {
+            train_window: 100,
+            test_window: 50,
+            ..Default::default()
+        };
+        let analyzer = WalkForwardAnalyzer::new(config);
 
-    //     let data: Vec<Bar> = (0..100).map(|i| make_bar(100.0, i)).collect();
+        // Only 100 bars but need 150 (100 train + 50 test)
+        let data: Vec<Bar> = (0..100).map(|i| make_bar(100.0, i)).collect();
 
-    //     // Create a simple buy-and-hold strategy factory
-    //     let factory = || -> Box<dyn Strategy> {
-    //         Box::new(crate::strategy::BuyAndHold::new())
-    //     };
+        // Use BuyAndHold strategy factory
+        let factory =
+            || -> Box<dyn Strategy> { Box::new(crate::strategy::BuyAndHold::new("TEST", 100.0)) };
 
-    //     let result = analyzer.analyze(&data, "TEST", factory);
-    //     assert!(result.is_err());
-    // }
+        let result = analyzer.analyze(&data, "TEST", factory);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Insufficient data"));
+    }
+
     #[test]
     fn test_insufficient_data() {
         let config = WalkForwardConfig {
@@ -315,7 +316,7 @@ mod tests {
         // Only 100 bars but need 150 (100 train + 50 test)
         let data: Vec<Bar> = (0..100).map(|i| make_bar(100.0, i)).collect();
 
-        // Create a minimal strategy factory
+        // Create a minimal strategy factory (kept for coverage)
         struct MinimalStrategy;
         impl crate::strategy::Strategy for MinimalStrategy {
             fn on_bar(

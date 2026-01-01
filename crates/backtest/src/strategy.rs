@@ -59,4 +59,46 @@ impl Strategy for StrategyCombiner {
     }
 }
 
+/// Simple buy-and-hold strategy that invests on the first bar and holds until the end.
+///
+/// This strategy is useful as:
+/// - A benchmark for comparing other strategies
+/// - A simple strategy for walk-forward analysis tests
+pub struct BuyAndHold {
+    symbol: String,
+    invested: bool,
+    quantity: f64,
+}
+
+impl BuyAndHold {
+    /// Create a new BuyAndHold strategy
+    ///
+    /// # Arguments
+    /// * `symbol` - The trading symbol
+    /// * `quantity` - The quantity to buy on the first bar
+    pub fn new(symbol: &str, quantity: f64) -> Self {
+        Self {
+            symbol: symbol.to_string(),
+            invested: false,
+            quantity,
+        }
+    }
+}
+
+impl Strategy for BuyAndHold {
+    fn on_bar(&mut self, _bar: &Bar) -> Result<Vec<OrderRequest>> {
+        if !self.invested {
+            self.invested = true;
+            Ok(vec![OrderRequest {
+                symbol: self.symbol.clone(),
+                side: OrderSide::Buy,
+                quantity: self.quantity,
+                order_type: OrderType::Market,
+            }])
+        } else {
+            Ok(Vec::new())
+        }
+    }
+}
+
 // Reverted SignalAdapter addition as StrategyAdapter exists

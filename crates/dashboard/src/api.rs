@@ -92,7 +92,9 @@ pub async fn get_performance(State(_state): State<Arc<AppState>>) -> Json<Perfor
 use crate::analysis_api::{
     calculate_correlation, run_monte_carlo, run_sensitivity, run_walk_forward,
 };
-use crate::backtest_api::{optimize_params, run_backtest, run_optimization_workflow};
+use crate::backtest_api::{
+    optimize_params, run_backtest, run_multi_symbol_workflow, run_optimization_workflow,
+};
 use crate::chart_api::get_chart_data;
 use crate::data_api::{delete_symbol, fetch_symbol, get_trading_pairs, list_symbols};
 use crate::quality_api::{check_freshness, check_gaps, check_outliers, get_quality_summary};
@@ -121,6 +123,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/backtest/run", post(run_backtest))
         .route("/api/backtest/optimize", post(optimize_params))
         .route("/api/backtest/workflow", post(run_optimization_workflow))
+        .route(
+            "/api/backtest/workflow/multi",
+            post(run_multi_symbol_workflow),
+        )
         // Analysis
         .route("/api/monte-carlo", post(run_monte_carlo))
         .route("/api/correlation", post(calculate_correlation))

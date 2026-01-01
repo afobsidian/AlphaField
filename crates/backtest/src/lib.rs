@@ -45,6 +45,6 @@ pub use optimizer::{
 pub use portfolio::Portfolio;
 pub use rolling_stats::{MonthlyReturn, RollingStats};
 pub use sensitivity::{ParameterRange, SensitivityAnalyzer, SensitivityConfig, SensitivityResult};
-pub use strategy::{OrderRequest, OrderSide, OrderType, Strategy, StrategyCombiner};
+pub use strategy::{BuyAndHold, OrderRequest, OrderSide, OrderType, Strategy, StrategyCombiner};
 pub use trade::{Trade, TradeSide, TradeStats};
 pub use walk_forward::{WalkForwardAnalyzer, WalkForwardConfig, WalkForwardResult};

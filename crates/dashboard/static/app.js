@@ -164,7 +164,7 @@ function initStrategySelection() {
 
 function updateParamsUI() {
     const container = document.getElementById('build-params');
-    
+
     // build-params element no longer exists since parameters are set through optimization
     // This function is kept for backward compatibility but does nothing if element doesn't exist
     if (!container) {
@@ -177,7 +177,7 @@ function updateParamsUI() {
         });
         return;
     }
-    
+
     const strategyParams = STRATEGY_PARAMS[AppState.strategy] || [];
 
     if (strategyParams.length === 0) {
@@ -486,10 +486,10 @@ async function runBacktest() {
         if (!backtestSymbol) {
             throw new Error("Please select a symbol to backtest");
         }
-        
+
         // Update AppState with selected symbol
         AppState.symbol = backtestSymbol;
-        
+
         const params = getParams();
 
         const res = await fetch(`${API_BASE}/backtest/run`, {
@@ -975,10 +975,10 @@ async function runWalkForward() {
         if (!optimizeSymbol) {
             throw new Error("Please select a trading symbol first");
         }
-        
+
         // Update AppState
         AppState.symbol = optimizeSymbol;
-        
+
         const res = await fetch(`${API_BASE}/walk-forward`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1116,10 +1116,10 @@ async function runSensitivity() {
         if (!optimizeSymbol) {
             throw new Error("Please select a trading symbol first");
         }
-        
+
         // Update AppState
         AppState.symbol = optimizeSymbol;
-        
+
         const res = await fetch(`${API_BASE}/sensitivity`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1615,16 +1615,16 @@ async function runComprehensiveWorkflow() {
 
     try {
         const include3D = document.getElementById("include-3d-sensitivity").checked;
-        
+
         // Get symbol from optimize tab
         const optimizeSymbol = document.getElementById("optimize-symbol").value;
         if (!optimizeSymbol) {
             throw new Error("Please select a trading symbol first");
         }
-        
+
         // Update AppState with the selected symbol
         AppState.symbol = optimizeSymbol;
-        
+
         const res = await fetch(`${API_BASE}/backtest/workflow`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -1652,7 +1652,7 @@ async function runComprehensiveWorkflow() {
         const robustnessScore = data.robustness_score;
         const robustnessEl = document.getElementById("comp-robustness");
         robustnessEl.textContent = robustnessScore.toFixed(1);
-        
+
         // Color code the robustness score
         if (robustnessScore >= 70) {
             robustnessEl.style.color = "#10b981"; // Green
@@ -1793,7 +1793,7 @@ function applyOptimizedParams() {
 
     // Navigate to backtest tab
     switchTab("backtest");
-    
+
     alert(`✓ Optimized parameters applied!\n\nRobustness Score: ${comprehensiveWorkflowResults.robustness_score.toFixed(1)}/100\n\nClick "Run Backtest" to see full results with these parameters.`);
 }
 
@@ -1806,7 +1806,7 @@ function goToBacktestWithOptimizedParams() {
 
     // Apply params to AppState
     AppState.params = comprehensiveWorkflowResults.optimized_params;
-    
+
     // Symbol will be selected in the backtest tab from the asset category
     // No need to set it here as user selects from backtest-symbol dropdown
 
@@ -1816,7 +1816,7 @@ function goToBacktestWithOptimizedParams() {
 
     // Navigate to backtest tab
     switchTab("backtest");
-    
+
     // Show helpful message
     alert(`✓ Optimized parameters applied!\n\nRobustness Score: ${comprehensiveWorkflowResults.robustness_score.toFixed(1)}/100\n\nSelect a symbol from the "${AppState.assetCategory}" category and click "Run Backtest" to see results.`);
 }
@@ -1945,33 +1945,29 @@ async function runAutoOptimize() {
         if (!category || !category.symbols || category.symbols.length === 0) {
             throw new Error("Invalid asset category selected");
         }
-        
+
         const symbols = category.symbols;
-        
-        // For now, use the first symbol in the category as representative
-        // TODO: Backend should support multi-symbol optimization
-        const primarySymbol = symbols[0];
-        AppState.symbol = primarySymbol;
-        
+
+        // Use multi-symbol optimization endpoint
         resultsPlaceholder.innerHTML = `
             <span class="placeholder-icon">⏳</span>
             <span>Running multi-symbol optimization...</span>
             <span style="font-size: 12px; margin-top: 8px; opacity: 0.7;">
                 Optimizing across ${category.name} (${symbols.length} symbols)<br>
-                Using randomized time periods for robust validation.<br>
-                This may take 30-60 seconds.
+                Aggregating results for robust parameter selection.<br>
+                This may take 1-2 minutes.
             </span>
         `;
-        
-        const res = await fetch(`${API_BASE}/backtest/workflow`, {
+
+        const res = await fetch(`${API_BASE}/backtest/workflow/multi`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 strategy: AppState.strategy,
-                symbol: primarySymbol, // Use primary symbol for now
+                symbols: symbols, // Send all symbols in category
                 interval: AppState.backtestInterval,
                 days: 730, // Use 2 years for comprehensive analysis
-                include_3d_sensitivity: true, // Always include 3D sensitivity
+                include_3d_sensitivity: false, // Disable for multi-symbol (too slow)
                 train_window_days: 252,
                 test_window_days: 63
             })
@@ -1994,11 +1990,11 @@ async function runAutoOptimize() {
         resultsPlaceholder.classList.add("hidden");
         allResults.classList.remove("hidden");
 
-        // Update summary metrics
-        const robustnessScore = data.robustness_score;
+        // Update summary metrics (handle both single and multi-symbol response formats)
+        const robustnessScore = data.robustness_score || 0;
         const robustnessEl = document.getElementById("comp-robustness");
         robustnessEl.textContent = robustnessScore.toFixed(1);
-        
+
         // Color code the robustness score
         if (robustnessScore >= 70) {
             robustnessEl.style.color = "#10b981"; // Green
@@ -2008,52 +2004,74 @@ async function runAutoOptimize() {
             robustnessEl.style.color = "#ef4444"; // Red
         }
 
-        document.getElementById("comp-sharpe").textContent = data.best_sharpe.toFixed(2);
-        document.getElementById("comp-wf-stability").textContent = data.walk_forward_stability_score.toFixed(2);
-        document.getElementById("comp-param-cv").textContent = data.parameter_dispersion.sharpe_cv.toFixed(2);
-        document.getElementById("comp-positive-pct").textContent = data.parameter_dispersion.positive_sharpe_pct.toFixed(0) + "%";
-        document.getElementById("comp-iterations").textContent = data.sweep_results.length;
+        // Handle multi-symbol format (avg_sharpe) vs single-symbol format (best_sharpe)
+        const sharpeValue = data.best_sharpe ?? data.avg_sharpe ?? 0;
+        document.getElementById("comp-sharpe").textContent = sharpeValue.toFixed(2);
+
+        // Walk-forward stability (may not be present in multi-symbol response)
+        const wfStability = data.walk_forward_stability_score ?? 0;
+        document.getElementById("comp-wf-stability").textContent = wfStability.toFixed(2);
+
+        // Parameter dispersion
+        const disp = data.parameter_dispersion || {};
+        document.getElementById("comp-param-cv").textContent = (disp.sharpe_cv ?? 0).toFixed(2);
+        document.getElementById("comp-positive-pct").textContent = (disp.positive_sharpe_pct ?? 0).toFixed(0) + "%";
+
+        // Iterations (sweep_results for single-symbol, symbols_processed for multi-symbol)
+        const iterations = data.sweep_results?.length ?? data.symbols_processed ?? 0;
+        document.getElementById("comp-iterations").textContent = iterations;
 
         // Show optimized parameters
         const paramSummary = document.getElementById("comp-param-summary");
         let paramsHtml = '<div style="margin-top: 12px; padding: 12px; background: rgba(16, 185, 129, 0.1); border-radius: 8px;">';
         paramsHtml += '<strong style="color: #10b981;">✓ Optimized Parameters (Auto-Applied):</strong><br>';
-        for (const [key, value] of Object.entries(data.optimized_params)) {
+        for (const [key, value] of Object.entries(data.optimized_params || {})) {
             paramsHtml += `<span style="display: inline-block; margin: 4px 8px 4px 0;">${key}: <strong>${value.toFixed(2)}</strong></span>`;
         }
         paramsHtml += "</div>";
+
+        // Show multi-symbol results if available
+        if (data.symbol_results && data.symbol_results.length > 0) {
+            paramsHtml += '<div style="margin-top: 12px; padding: 12px; background: rgba(96, 165, 250, 0.1); border-radius: 8px;">';
+            paramsHtml += `<strong style="color: #60a5fa;">📊 Multi-Symbol Results (${data.symbols_processed} symbols):</strong><br>`;
+            paramsHtml += `<span>Avg Sharpe: <strong>${(data.avg_sharpe || 0).toFixed(2)}</strong></span> | `;
+            paramsHtml += `<span>Avg Return: <strong>${((data.avg_return || 0) * 100).toFixed(2)}%</strong></span> | `;
+            paramsHtml += `<span>Worst DD: <strong>${((data.worst_drawdown || 0) * 100).toFixed(2)}%</strong></span>`;
+            paramsHtml += "</div>";
+        }
         paramSummary.innerHTML = paramsHtml;
 
-        // Walk-Forward inline metrics
+        // Walk-Forward inline metrics (may not be present in multi-symbol response)
         const wfResult = data.walk_forward_validation || {};
         const wfAgg = wfResult.aggregate_oos || {};
-        document.getElementById("wfa-stability-inline").textContent = (data.walk_forward_stability_score || 0).toFixed(2);
-        document.getElementById("wfa-avg-return-inline").textContent = ((wfAgg.mean_return || 0) * 100).toFixed(2) + "%";
+        document.getElementById("wfa-stability-inline").textContent = wfStability.toFixed(2);
+        document.getElementById("wfa-avg-return-inline").textContent = ((wfAgg.mean_return || data.avg_return || 0) * 100).toFixed(2) + "%";
         document.getElementById("wfa-win-rate-inline").textContent = ((wfAgg.win_rate || 0) * 100).toFixed(0) + "%";
-        document.getElementById("wfa-oos-sharpe-inline").textContent = (wfAgg.mean_sharpe || 0).toFixed(2);
+        document.getElementById("wfa-oos-sharpe-inline").textContent = (wfAgg.mean_sharpe || data.avg_sharpe || 0).toFixed(2);
 
         // Parameter dispersion details
-        const disp = data.parameter_dispersion || {};
-        document.getElementById("disp-sharpe-std").textContent = (disp.sharpe_std || 0).toFixed(3);
-        document.getElementById("disp-return-std").textContent = ((disp.return_std || 0) * 100).toFixed(2) + "%";
-        document.getElementById("disp-sharpe-range").textContent = (disp.sharpe_range || 0).toFixed(2);
-        document.getElementById("disp-return-range").textContent = ((disp.return_range || 0) * 100).toFixed(2) + "%";
+        document.getElementById("disp-sharpe-std").textContent = (disp.sharpe_std ?? 0).toFixed(3);
+        document.getElementById("disp-return-std").textContent = ((disp.return_std ?? 0) * 100).toFixed(2) + "%";
+        document.getElementById("disp-sharpe-range").textContent = (disp.sharpe_range ?? 0).toFixed(2);
+        document.getElementById("disp-return-range").textContent = ((disp.return_range ?? 0) * 100).toFixed(2) + "%";
 
-        // Render Parameter Sweep Chart
-        renderParameterSweepChart(data.sweep_results);
+        // Render Parameter Sweep Chart (only if sweep_results available)
+        if (data.sweep_results && data.sweep_results.length > 0) {
+            renderParameterSweepChart(data.sweep_results);
+        }
 
         // Render 3D Sensitivity Heatmap
         if (data.sensitivity_heatmap) {
             renderSensitivityHeatmapChart(data.sensitivity_heatmap);
         }
 
-        // Render Walk-Forward Chart
+        // Render Walk-Forward Chart (only if windows available)
         console.log("Walk-forward validation data:", wfResult);
         if (wfResult && wfResult.windows && wfResult.windows.length > 0) {
             console.log("Rendering walk-forward chart with", wfResult.windows.length, "windows");
             renderWalkForwardChart(wfResult.windows);
         } else {
-            console.warn("No walk-forward windows data available");
+            console.log("Multi-symbol mode: walk-forward chart not available");
         }
 
     } catch (e) {
@@ -2109,14 +2127,14 @@ function renderParameterSweepChart(sweepResults) {
 
 function renderSensitivityHeatmapChart(heatmap) {
     if (!heatmap) return;
-    
+
     // Hide placeholder content
     const chartDiv = document.getElementById("sensitivity-chart");
     const placeholder = chartDiv.querySelector(".placeholder-content");
     if (placeholder) {
         placeholder.style.display = "none";
     }
-    
+
     const data = [{
         z: heatmap.sharpe_matrix,
         x: heatmap.x_values,
@@ -2142,7 +2160,7 @@ function renderSensitivityHeatmapChart(heatmap) {
 
 function renderWalkForwardChart(windows) {
     console.log("renderWalkForwardChart called with:", windows);
-    
+
     if (!windows || windows.length === 0) {
         console.warn("No windows data to render");
         return;
@@ -2204,23 +2222,23 @@ const ASSET_CATEGORIES = {
     },
     "large-cap": {
         name: "Large Cap (Rank 1-30)",
-        symbols: ["BTC", "ETH", "BNB", "XRP", "ADA", "SOL", "DOT", "DOGE", "AVAX", "MATIC", 
-                  "LINK", "UNI", "ATOM", "LTC", "ETC", "XLM", "ALGO", "VET", "ICP", "FIL"]
+        symbols: ["BTC", "ETH", "BNB", "XRP", "ADA", "SOL", "DOT", "DOGE", "AVAX", "MATIC",
+            "LINK", "UNI", "ATOM", "LTC", "ETC", "XLM", "ALGO", "VET", "ICP", "FIL"]
     },
     "mid-cap": {
         name: "Mid Cap (Rank 31-100)",
         symbols: ["AAVE", "GRT", "SAND", "MANA", "AXS", "ENJ", "CHZ", "THETA", "FTM", "ONE",
-                  "HBAR", "FLOW", "EGLD", "XTZ", "ZIL", "QTUM", "WAVES", "ICX", "OMG", "ZRX"]
+            "HBAR", "FLOW", "EGLD", "XTZ", "ZIL", "QTUM", "WAVES", "ICX", "OMG", "ZRX"]
     },
     "small-cap": {
         name: "Small Cap (Rank 101-300)",
         symbols: ["ANKR", "CRV", "BAL", "COMP", "YFI", "SNX", "SUSHI", "CAKE", "1INCH", "UMA",
-                  "REN", "KNC", "LRC", "BAND", "RSR", "NMR", "OCEAN", "CELR", "STORJ", "AUDIO"]
+            "REN", "KNC", "LRC", "BAND", "RSR", "NMR", "OCEAN", "CELR", "STORJ", "AUDIO"]
     },
     "defi": {
         name: "DeFi Protocols",
         symbols: ["AAVE", "UNI", "LINK", "COMP", "MKR", "SNX", "CRV", "SUSHI", "YFI", "BAL",
-                  "1INCH", "CAKE", "UMA", "BNT", "REN", "KNC", "LRC", "BAND", "RSR", "NMR"]
+            "1INCH", "CAKE", "UMA", "BNT", "REN", "KNC", "LRC", "BAND", "RSR", "NMR"]
     }
 };
 
@@ -2235,16 +2253,16 @@ if (!AppState.assetCategory) {
 
 // Update goToOptimize to capture asset category
 const originalGoToOptimize = goToOptimize;
-goToOptimize = function() {
+goToOptimize = function () {
     // Get selected asset category
     const categoryInput = document.querySelector('input[name="asset-category"]:checked');
     if (categoryInput) {
         AppState.assetCategory = categoryInput.value;
     }
-    
+
     // Update optimize tab display
     updateOptimizeDisplay();
-    
+
     // Call original function
     originalGoToOptimize();
 };
@@ -2252,11 +2270,11 @@ goToOptimize = function() {
 function updateOptimizeDisplay() {
     const strategyEl = document.getElementById("opt-display-strategy");
     const categoryEl = document.getElementById("opt-display-category");
-    
+
     if (strategyEl) {
         strategyEl.textContent = AppState.strategy || "—";
     }
-    
+
     if (categoryEl && AppState.assetCategory) {
         const category = ASSET_CATEGORIES[AppState.assetCategory];
         categoryEl.textContent = category ? category.name : AppState.assetCategory;
@@ -2264,10 +2282,10 @@ function updateOptimizeDisplay() {
 }
 
 // Initialize display on page load
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     // Listen for asset category changes
     document.querySelectorAll('input[name="asset-category"]').forEach(input => {
-        input.addEventListener('change', function() {
+        input.addEventListener('change', function () {
             AppState.assetCategory = this.value;
         });
     });
@@ -2338,7 +2356,7 @@ function initBacktestSymbolSelect() {
         }
 
         let symbols = category.symbols;
-        
+
         // Filter by search query
         if (query) {
             const q = query.toLowerCase();
@@ -2393,13 +2411,13 @@ function initBacktestSymbolSelect() {
 
 // Update goToBacktestWithOptimizedParams to initialize symbol selector
 const originalGoToBacktestWithOptimizedParams = goToBacktestWithOptimizedParams;
-goToBacktestWithOptimizedParams = function() {
+goToBacktestWithOptimizedParams = function () {
     originalGoToBacktestWithOptimizedParams();
-    
+
     // Initialize the backtest symbol selector with category symbols
     setTimeout(() => {
         initBacktestSymbolSelect();
-        
+
         // Auto-select the primary symbol if not already selected
         const backtestSymbol = document.getElementById('backtest-symbol');
         const selectedText = document.getElementById('backtest-selected-symbol-text');
@@ -2452,7 +2470,7 @@ function toggleIndicatorPanel() {
 
 function switchChartType(type) {
     currentChartType = type;
-    
+
     // Update button states
     document.querySelectorAll('.chart-type-btn').forEach(btn => {
         btn.classList.remove('active');
@@ -2460,7 +2478,7 @@ function switchChartType(type) {
             btn.classList.add('active');
         }
     });
-    
+
     // Re-render chart with new type
     if (chartData) {
         renderPriceChart(chartData);
@@ -2476,7 +2494,7 @@ async function updateChartIndicators() {
 
     // Collect selected indicators
     const indicators = [];
-    
+
     if (document.getElementById('ind-sma-50')?.checked) {
         indicators.push({ type: 'sma', period: 50 });
     }
@@ -2515,7 +2533,7 @@ async function updateChartIndicators() {
 
         chartData = await response.json();
         console.log('Chart data received:', chartData);
-        
+
         renderPriceChart(chartData);
     } catch (error) {
         console.error('Failed to fetch chart data:', error);
@@ -2529,9 +2547,9 @@ function renderPriceChart(data) {
     }
 
     const timestamps = data.bars.map(b => new Date(b.timestamp * 1000));
-    
+
     const traces = [];
-    
+
     // Main price trace
     if (currentChartType === 'candlestick') {
         traces.push({
@@ -2574,7 +2592,7 @@ function renderPriceChart(data) {
     if (data.indicators) {
         Object.keys(data.indicators).forEach((key, idx) => {
             const indicator = data.indicators[key];
-            
+
             if (indicator.type === 'line') {
                 // SMA/EMA overlay
                 const values = indicator.values.map(v => v.value);
@@ -2593,7 +2611,7 @@ function renderPriceChart(data) {
                 const upperTs = indicator.upper.map(v => new Date(v.timestamp * 1000));
                 const middleTs = indicator.middle.map(v => new Date(v.timestamp * 1000));
                 const lowerTs = indicator.lower.map(v => new Date(v.timestamp * 1000));
-                
+
                 traces.push({
                     type: 'scatter',
                     mode: 'lines',
@@ -2633,14 +2651,14 @@ function renderPriceChart(data) {
         const entryY = [];
         const exitX = [];
         const exitY = [];
-        
+
         AppState.backtestResults.trades.forEach(trade => {
             entryX.push(new Date(trade.entry_time));
             entryY.push(trade.entry_price);
             exitX.push(new Date(trade.exit_time));
             exitY.push(trade.exit_price);
         });
-        
+
         traces.push({
             type: 'scatter',
             mode: 'markers',
@@ -2655,7 +2673,7 @@ function renderPriceChart(data) {
             },
             hoverlabel: { bgcolor: '#1e293b' }
         });
-        
+
         traces.push({
             type: 'scatter',
             mode: 'markers',
@@ -2710,7 +2728,7 @@ function renderOscillators(data) {
 
     Object.keys(data.indicators).forEach(key => {
         const indicator = data.indicators[key];
-        
+
         if (indicator.type === 'oscillator') {
             hasRsi = true;
             renderRsiChart(indicator);
@@ -2787,7 +2805,7 @@ function renderRsiChart(indicator) {
 
 function renderMacdChart(indicator) {
     const timestamps = indicator.macd.map(v => new Date(v.timestamp * 1000));
-    
+
     const traces = [
         {
             type: 'scatter',
