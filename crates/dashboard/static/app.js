@@ -2065,6 +2065,13 @@ async function runAutoOptimize() {
 }
 
 function renderParameterSweepChart(sweepResults) {
+    // Hide placeholder content
+    const chartDiv = document.getElementById("param-sweep-chart");
+    const placeholder = chartDiv.querySelector(".placeholder-content");
+    if (placeholder) {
+        placeholder.style.display = "none";
+    }
+
     const data = [{
         x: sweepResults.map(r => r.sharpe),
         y: sweepResults.map(r => r.total_return * 100),
@@ -2096,6 +2103,13 @@ function renderParameterSweepChart(sweepResults) {
 
 function renderSensitivityHeatmapChart(heatmap) {
     if (!heatmap) return;
+    
+    // Hide placeholder content
+    const chartDiv = document.getElementById("sensitivity-chart");
+    const placeholder = chartDiv.querySelector(".placeholder-content");
+    if (placeholder) {
+        placeholder.style.display = "none";
+    }
     
     const data = [{
         z: heatmap.sharpe_matrix,
@@ -2129,6 +2143,13 @@ function renderWalkForwardChart(windows) {
     }
 
     try {
+        // Hide placeholder content
+        const chartDiv = document.getElementById("walk-forward-chart");
+        const placeholder = chartDiv.querySelector(".placeholder-content");
+        if (placeholder) {
+            placeholder.style.display = "none";
+        }
+
         const data = [
             {
                 x: windows.map((w, i) => `Window ${i + 1}`),
