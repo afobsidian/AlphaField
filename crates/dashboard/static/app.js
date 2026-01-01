@@ -132,6 +132,8 @@ function onTabEnter(tabName) {
             break;
         case 'backtest':
             updateBacktestSummary();
+            // Initialize backtest symbol selector when entering backtest tab
+            setTimeout(() => initBacktestSymbolSelect(), 100);
             break;
         case 'optimize':
             updateSensitivityParams();
@@ -2016,8 +2018,12 @@ async function runAutoOptimize() {
         }
 
         // Render Walk-Forward Chart
-        if (wfResult.windows) {
+        console.log("Walk-forward validation data:", wfResult);
+        if (wfResult && wfResult.windows && wfResult.windows.length > 0) {
+            console.log("Rendering walk-forward chart with", wfResult.windows.length, "windows");
             renderWalkForwardChart(wfResult.windows);
+        } else {
+            console.warn("No walk-forward windows data available");
         }
 
     } catch (e) {
@@ -2091,38 +2097,49 @@ function renderSensitivityHeatmapChart(heatmap) {
 }
 
 function renderWalkForwardChart(windows) {
-    if (!windows || windows.length === 0) return;
+    console.log("renderWalkForwardChart called with:", windows);
+    
+    if (!windows || windows.length === 0) {
+        console.warn("No windows data to render");
+        return;
+    }
 
-    const data = [
-        {
-            x: windows.map((w, i) => `Window ${i + 1}`),
-            y: windows.map(w => (w.oos_metrics.total_return || 0) * 100),
-            name: "OOS Return",
-            type: "bar",
-            marker: { color: "#60a5fa" }
-        },
-        {
-            x: windows.map((w, i) => `Window ${i + 1}`),
-            y: windows.map(w => w.oos_metrics.sharpe_ratio || 0),
-            name: "OOS Sharpe",
-            type: "bar",
-            marker: { color: "#34d399" },
-            yaxis: "y2"
-        }
-    ];
+    try {
+        const data = [
+            {
+                x: windows.map((w, i) => `Window ${i + 1}`),
+                y: windows.map(w => ((w.oos_metrics && w.oos_metrics.total_return) || 0) * 100),
+                name: "OOS Return",
+                type: "bar",
+                marker: { color: "#60a5fa" }
+            },
+            {
+                x: windows.map((w, i) => `Window ${i + 1}`),
+                y: windows.map(w => (w.oos_metrics && w.oos_metrics.sharpe_ratio) || 0),
+                name: "OOS Sharpe",
+                type: "bar",
+                marker: { color: "#34d399" },
+                yaxis: "y2"
+            }
+        ];
 
-    const layout = {
-        title: "",
-        xaxis: { title: "Walk-Forward Window" },
-        yaxis: { title: "Return (%)", side: "left" },
-        yaxis2: { title: "Sharpe Ratio", overlaying: "y", side: "right" },
-        paper_bgcolor: "rgba(0,0,0,0)",
-        plot_bgcolor: "rgba(0,0,0,0)",
-        font: { color: "#e5e7eb" },
-        barmode: "group"
-    };
+        const layout = {
+            title: "",
+            xaxis: { title: "Walk-Forward Window" },
+            yaxis: { title: "Return (%)", side: "left" },
+            yaxis2: { title: "Sharpe Ratio", overlaying: "y", side: "right" },
+            paper_bgcolor: "rgba(0,0,0,0)",
+            plot_bgcolor: "rgba(0,0,0,0)",
+            font: { color: "#e5e7eb" },
+            barmode: "group"
+        };
 
-    Plotly.newPlot("walk-forward-chart", data, layout, { responsive: true });
+        console.log("Creating Plotly chart with data:", data);
+        Plotly.newPlot("walk-forward-chart", data, layout, { responsive: true });
+        console.log("Walk-forward chart rendered successfully");
+    } catch (error) {
+        console.error("Error rendering walk-forward chart:", error);
+    }
 }
 
 // ===========================
@@ -2218,10 +2235,19 @@ function initBacktestSymbolSelect() {
     const hiddenInput = document.getElementById('backtest-symbol');
     const selectedText = document.getElementById('backtest-selected-symbol-text');
 
-    if (!wrapper || !trigger) return;
+    if (!wrapper || !trigger) {
+        console.warn("Backtest symbol selector elements not found");
+        return;
+    }
+
+    console.log("Initializing backtest symbol selector with asset category:", AppState.assetCategory);
+
+    // Remove any existing listeners to avoid duplicates
+    const newTrigger = trigger.cloneNode(true);
+    trigger.parentNode.replaceChild(newTrigger, trigger);
 
     // Toggle dropdown
-    trigger.addEventListener('click', () => {
+    newTrigger.addEventListener('click', () => {
         wrapper.classList.toggle('open');
         if (wrapper.classList.contains('open')) {
             searchInput.focus();
@@ -2245,10 +2271,16 @@ function initBacktestSymbolSelect() {
     function renderBacktestSymbolOptions(query) {
         optionsList.innerHTML = '';
 
+        // Ensure asset category is set
+        if (!AppState.assetCategory) {
+            optionsList.innerHTML = '<div class="option" style="cursor: default; opacity: 0.5;">Please select an asset category in Build tab</div>';
+            return;
+        }
+
         // Get symbols from selected asset category
         const category = ASSET_CATEGORIES[AppState.assetCategory];
         if (!category || !category.symbols) {
-            optionsList.innerHTML = '<div class="option" style="cursor: default; opacity: 0.5;">No symbols available</div>';
+            optionsList.innerHTML = '<div class="option" style="cursor: default; opacity: 0.5;">No symbols available for this category</div>';
             return;
         }
 
@@ -2291,6 +2323,14 @@ function initBacktestSymbolSelect() {
     if (AppState.symbol) {
         selectedText.textContent = AppState.symbol;
         hiddenInput.value = AppState.symbol;
+    } else if (AppState.assetCategory) {
+        // Auto-select first symbol from category
+        const category = ASSET_CATEGORIES[AppState.assetCategory];
+        if (category && category.symbols && category.symbols.length > 0) {
+            AppState.symbol = category.symbols[0];
+            selectedText.textContent = AppState.symbol;
+            hiddenInput.value = AppState.symbol;
+        }
     }
 }
 
