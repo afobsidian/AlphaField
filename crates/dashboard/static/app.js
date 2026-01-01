@@ -918,6 +918,12 @@ function updateSensitivityParams() {
     const select1 = document.getElementById('sens-param-1');
     const select2 = document.getElementById('sens-param-2');
 
+    // Return early if elements don't exist (removed in new workflow)
+    if (!select1 || !select2) {
+        console.log('Sensitivity parameter selectors not found (expected in new workflow)');
+        return;
+    }
+
     select1.innerHTML = '';
     select2.innerHTML = '<option value="">None (1D Sweep)</option>';
 
