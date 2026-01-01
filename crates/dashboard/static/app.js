@@ -284,35 +284,33 @@ async function loadSymbols() {
             console.warn('Unexpected symbol data structure:', data);
         }
 
-        // Default popular symbols if we have data
-        if (allSymbols.length > 0) {
-            initCustomSelect();
-            initOptimizeSymbolSelect(); // Also initialize optimize tab selector
-        } else {
-            document.getElementById('selected-symbol-text').textContent = "No symbols found";
-            const optimizeSymbolText = document.getElementById('optimize-selected-symbol-text');
-            if (optimizeSymbolText) optimizeSymbolText.textContent = "No symbols found";
-        }
+        // Note: Symbol selection is now done through asset categories in Build tab
+        // The old Build tab and Optimize tab symbol selectors have been removed
+        // Symbol selection for backtest is initialized when entering the Backtest tab
+        console.log('Loaded symbols:', allSymbols.length);
 
     } catch (e) {
         console.error('Failed to load symbols:', e);
-        document.getElementById('selected-symbol-text').textContent = "Error loading symbols";
-        const optimizeSymbolText = document.getElementById('optimize-selected-symbol-text');
-        if (optimizeSymbolText) optimizeSymbolText.textContent = "Error loading symbols";
-        // Fallback
-        allSymbols = ["BTC", "ETH"];
-        initCustomSelect();
-        initOptimizeSymbolSelect();
+        // Fallback symbols
+        allSymbols = ["BTCUSDT", "ETHUSDT"];
     }
 }
 
 function initCustomSelect() {
+    // This function is deprecated - Build tab no longer has individual symbol selection
+    // Symbol selection is now done through asset categories
     const wrapper = document.getElementById('symbol-select-wrapper');
     const trigger = document.getElementById('symbol-trigger');
     const optionsList = document.getElementById('symbol-options-list');
     const searchInput = document.getElementById('symbol-search-input');
     const hiddenInput = document.getElementById('build-symbol');
     const selectedText = document.getElementById('selected-symbol-text');
+
+    // Early return if elements don't exist (they were removed in workflow restructuring)
+    if (!wrapper || !trigger || !optionsList || !searchInput || !hiddenInput || !selectedText) {
+        console.log('Build tab symbol selector elements not found (expected - using asset categories now)');
+        return;
+    }
 
     // Toggle dropdown
     trigger.addEventListener('click', () => {
@@ -1813,6 +1811,8 @@ function goToBacktestWithOptimizedParams() {
 
 // Initialize symbol selector for optimize tab
 function initOptimizeSymbolSelect() {
+    // This function is deprecated - Optimize tab no longer has individual symbol selection
+    // Optimization now trains across all symbols in the selected asset category
     const wrapper = document.getElementById('optimize-symbol-select-wrapper');
     const trigger = document.getElementById('optimize-symbol-trigger');
     const optionsList = document.getElementById('optimize-symbol-options-list');
@@ -1820,7 +1820,11 @@ function initOptimizeSymbolSelect() {
     const hiddenInput = document.getElementById('optimize-symbol');
     const selectedText = document.getElementById('optimize-selected-symbol-text');
 
-    if (!wrapper || !trigger) return; // Exit if elements don't exist yet
+    // Exit if elements don't exist (they were removed in workflow restructuring)
+    if (!wrapper || !trigger || !optionsList || !searchInput || !hiddenInput || !selectedText) {
+        console.log('Optimize tab symbol selector elements not found (expected - using asset category optimization now)');
+        return;
+    }
 
     // Toggle dropdown
     trigger.addEventListener('click', () => {
