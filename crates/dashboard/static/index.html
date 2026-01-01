@@ -40,14 +40,14 @@
                     <span class="tab-label">Build</span>
                 </button>
                 <span class="tab-arrow">→</span>
-                <button class="workflow-tab" data-tab="backtest" onclick="switchTab('backtest')">
+                <button class="workflow-tab" data-tab="optimize" onclick="switchTab('optimize')">
                     <span class="tab-number">2</span>
-                    <span class="tab-label">Backtest</span>
+                    <span class="tab-label">Optimize</span>
                 </button>
                 <span class="tab-arrow">→</span>
-                <button class="workflow-tab" data-tab="optimize" onclick="switchTab('optimize')">
+                <button class="workflow-tab" data-tab="backtest" onclick="switchTab('backtest')">
                     <span class="tab-number">3</span>
-                    <span class="tab-label">Optimize</span>
+                    <span class="tab-label">Backtest</span>
                 </button>
                 <span class="tab-arrow">→</span>
                 <button class="workflow-tab" data-tab="deploy" onclick="switchTab('deploy')">
@@ -91,14 +91,14 @@
             <!-- ==================== TAB 1: BUILD ==================== -->
             <section id="build-view" class="view-section active">
                 <div class="view-header">
-                    <h1>🔧 Strategy Builder</h1>
-                    <p>Configure your trading strategy and select the asset to trade</p>
+                    <h1>🔧 Strategy Configuration</h1>
+                    <p>Choose your trading strategy and asset category for optimization</p>
                 </div>
 
                 <div class="build-grid">
                     <!-- Strategy Selection Card -->
                     <div class="card strategy-card">
-                        <h3>Select Strategy</h3>
+                        <h3>Select Trading Strategy</h3>
                         <div class="strategy-options">
                             <label class="strategy-option">
                                 <input type="radio" name="strategy" value="GoldenCross" checked>
@@ -131,45 +131,61 @@
                         </div>
                     </div>
 
-                    <!-- Symbol & Parameters Card -->
-                    <div class="card params-card">
-                        <h3>Configuration</h3>
-
-                        <!-- Symbol Selection -->
-                        <label>Trading Symbol</label>
-                        <div class="custom-select-wrapper" id="symbol-select-wrapper">
-                            <div class="custom-select-trigger" id="symbol-trigger">
-                                <span id="selected-symbol-text">Select Symbol...</span>
-                            </div>
-                            <div class="custom-options">
-                                <div class="symbol-search-box">
-                                    <input type="text" class="symbol-search-input" id="symbol-search-input"
-                                        placeholder="Search symbol (e.g. BTC)..." autocomplete="off">
+                    <!-- Asset Category Selection Card -->
+                    <div class="card strategy-card">
+                        <h3>Select Asset Category</h3>
+                        <p style="font-size: 13px; opacity: 0.8; margin-bottom: 16px;">
+                            Optimization will train across multiple assets in this category using random time periods
+                        </p>
+                        <div class="strategy-options">
+                            <label class="strategy-option">
+                                <input type="radio" name="asset-category" value="market" checked>
+                                <div class="strategy-info">
+                                    <span class="strategy-name">📊 Market</span>
+                                    <span class="strategy-desc">Top 10 by market cap</span>
                                 </div>
-                                <div class="options-list" id="symbol-options-list">
-                                    <!-- Options injected by JS -->
-                                    <div class="placeholder-content" style="min-height: 100px;">
-                                        <span class="text-muted">Loading...</span>
-                                    </div>
+                            </label>
+                            <label class="strategy-option">
+                                <input type="radio" name="asset-category" value="large-cap">
+                                <div class="strategy-info">
+                                    <span class="strategy-name">🏢 Large Cap</span>
+                                    <span class="strategy-desc">Established coins (rank 1-30)</span>
                                 </div>
-                            </div>
-                        </div>
-                        <!-- Hidden input to store value -->
-                        <input type="hidden" id="build-symbol">
-                        <!-- Dynamic Strategy Parameters -->
-                        <div id="build-params" class="params-section">
-                            <!-- Populated dynamically based on strategy selection -->
+                            </label>
+                            <label class="strategy-option">
+                                <input type="radio" name="asset-category" value="mid-cap">
+                                <div class="strategy-info">
+                                    <span class="strategy-name">🔷 Mid Cap</span>
+                                    <span class="strategy-desc">Growing projects (rank 31-100)</span>
+                                </div>
+                            </label>
+                            <label class="strategy-option">
+                                <input type="radio" name="asset-category" value="small-cap">
+                                <div class="strategy-info">
+                                    <span class="strategy-name">💎 Small Cap</span>
+                                    <span class="strategy-desc">Emerging tokens (rank 101-300)</span>
+                                </div>
+                            </label>
+                            <label class="strategy-option">
+                                <input type="radio" name="asset-category" value="defi">
+                                <div class="strategy-info">
+                                    <span class="strategy-name">🌐 DeFi</span>
+                                    <span class="strategy-desc">DeFi protocols</span>
+                                </div>
+                            </label>
                         </div>
 
                         <!-- Action Button -->
-                        <button type="button" class="btn btn-primary btn-action" onclick="goToBacktest()">
-                            Test Strategy →
-                        </button>
+                        <div style="margin-top: 24px; text-align: center;">
+                            <button type="button" class="btn btn-primary btn-action" onclick="goToOptimize()" style="min-width: 200px;">
+                                Next: Optimize Parameters →
+                            </button>
+                        </div>
                     </div>
                 </div>
             </section>
 
-            <!-- ==================== TAB 2: BACKTEST ==================== -->
+            <!-- ==================== TAB 3: BACKTEST ==================== -->
             <section id="backtest-view" class="view-section">
                 <div class="view-header">
                     <h1>📊 Backtest</h1>
@@ -187,13 +203,40 @@
                                 <strong id="bt-summary-strategy">—</strong>
                             </div>
                             <div class="summary-row">
-                                <span>Symbol:</span>
-                                <strong id="bt-summary-symbol">—</strong>
+                                <span>Asset Category:</span>
+                                <strong id="bt-summary-category">—</strong>
                             </div>
                             <div class="summary-row">
                                 <span>Parameters:</span>
                                 <span id="bt-summary-params" class="params-inline">—</span>
                             </div>
+                        </div>
+
+                        <!-- Symbol Selection for Backtest -->
+                        <div class="form-group">
+                            <label>Test Symbol</label>
+                            <p style="font-size: 12px; opacity: 0.8; margin-bottom: 8px;">
+                                Select which symbol to backtest with optimized parameters
+                            </p>
+                            <div class="custom-select-wrapper" id="backtest-symbol-select-wrapper">
+                                <div class="custom-select-trigger" id="backtest-symbol-trigger">
+                                    <span id="backtest-selected-symbol-text">Select Symbol...</span>
+                                </div>
+                                <div class="custom-options">
+                                    <div class="symbol-search-box">
+                                        <input type="text" class="symbol-search-input" id="backtest-symbol-search-input"
+                                            placeholder="Search symbol..." autocomplete="off">
+                                    </div>
+                                    <div class="options-list" id="backtest-symbol-options-list">
+                                        <!-- Options injected by JS -->
+                                        <div class="placeholder-content" style="min-height: 100px;">
+                                            <span class="text-muted">Loading...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Hidden input to store value -->
+                            <input type="hidden" id="backtest-symbol">
                         </div>
 
                         <div class="form-group">
@@ -220,10 +263,6 @@
                             <button type="button" class="btn btn-primary btn-action" id="btn-run-backtest"
                                 onclick="runBacktest()">
                                 ▶️ Run Backtest
-                            </button>
-                            <button type="button" class="btn btn-secondary btn-action" id="btn-auto-optimize"
-                                onclick="optimizeParams()">
-                                🎯 Auto-Optimize
                             </button>
                         </div>
 
@@ -284,145 +323,182 @@
                 </div>
             </section>
 
-            <!-- ==================== TAB 3: OPTIMIZE ==================== -->
+            <!-- ==================== TAB 2: OPTIMIZE ==================== -->
             <section id="optimize-view" class="view-section">
                 <div class="view-header">
-                    <h1>⚡ Optimize & Tune</h1>
-                    <p>Find optimal parameters and test strategy robustness</p>
+                    <h1>⚡ Auto-Optimize Parameters</h1>
+                    <p>Multi-symbol optimization across random time periods to find robust parameters</p>
                 </div>
 
                 <div class="optimize-grid">
-                    <!-- Combined Analysis & Config Control -->
+                    <!-- Auto Optimize Control -->
                     <div class="card optimize-controls">
-                        <h3>Analysis Setup</h3>
+                        <h3>Run Optimization</h3>
 
-                        <!-- Analysis Mode Selection -->
+                        <!-- Selected Category Display -->
                         <div class="control-section">
-                            <h4 class="section-title">Mode</h4>
-                            <div class="mode-options">
-                                <label class="mode-option active">
-                                    <div class="mode-info">
-                                        <input type="radio" name="analysis-mode" value="walkforward" checked>
-                                        <span class="mode-icon">🔄</span>
-                                        <span class="mode-name">Walk-Forward</span>
-                                    </div>
-                                </label>
-                                <label class="mode-option">
-                                    <div class="mode-info">
-                                        <input type="radio" name="analysis-mode" value="sensitivity">
-                                        <span class="mode-icon">📊</span>
-                                        <span class="mode-name">Sensitivity</span>
-                                    </div>
-                                </label>
+                            <h4 class="section-title">Optimization Scope</h4>
+                            <div style="padding: 12px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; margin-bottom: 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                    <span style="font-weight: 600;">Strategy:</span>
+                                    <span id="opt-display-strategy">—</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-weight: 600;">Asset Category:</span>
+                                    <span id="opt-display-category">—</span>
+                                </div>
                             </div>
+                            <p style="font-size: 13px; opacity: 0.8;">
+                                Optimization will test parameters across multiple symbols in the selected category using randomized time periods for robust validation.
+                            </p>
                         </div>
 
                         <div class="divider"></div>
 
-                        <!-- Analysis Configuration -->
+                        <!-- Auto Optimize Button -->
                         <div class="control-section">
-                            <h4 class="section-title">Configuration</h4>
-
-                            <!-- Walk-Forward Settings -->
-                            <div id="wfa-config" class="analysis-config">
-                                <p class="config-info">
-                                    Tests strategy across 4 years of data using 6-month training windows
-                                    and 2-month out-of-sample validation.
-                                </p>
-                                <button type="button" class="btn btn-primary btn-action" onclick="runWalkForward()">
-                                    ▶️ Run Analysis
-                                </button>
-                            </div>
-
-                            <!-- Sensitivity Settings -->
-                            <div id="sensitivity-config" class="analysis-config hidden">
-                                <div class="form-group">
-                                    <label>Primary Parameter</label>
-                                    <select id="sens-param-1" class="form-select">
-                                        <!-- Populated dynamically -->
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label>Secondary Parameter</label>
-                                    <select id="sens-param-2" class="form-select">
-                                        <option value="">None (1D Sweep)</option>
-                                        <!-- Populated dynamically -->
-                                    </select>
-                                </div>
-                                <button type="button" class="btn btn-primary btn-action" onclick="runSensitivity()">
-                                    ▶️ Run Analysis
-                                </button>
-                            </div>
+                            <p class="config-info" style="margin-bottom: 16px;">
+                                Runs complete optimization pipeline including:
+                                <br>• Grid search across multiple assets
+                                <br>• Parameter dispersion analysis
+                                <br>• Walk-forward validation
+                                <br>• 3D sensitivity heatmap
+                                <br>• Robustness scoring
+                            </p>
+                            <button type="button" class="btn btn-primary btn-action" onclick="runAutoOptimize()" style="width: 100%; padding: 16px; font-size: 16px;">
+                                🚀 Auto-Optimize
+                            </button>
                         </div>
                     </div>
 
-                    <!-- Persistent Analysis Results Output -->
+                    <!-- Comprehensive Results Display -->
                     <div class="card results-card" id="optimize-results-container">
-                        <h3>Analysis Results</h3>
+                        <h3>Optimization Results</h3>
 
                         <!-- Placeholder -->
                         <div id="optimize-results-placeholder" class="placeholder-content">
                             <span class="placeholder-icon">ℹ️</span>
-                            <span>Run analysis to see performance metrics</span>
+                            <span>Click "Auto-Optimize" to find optimal parameters</span>
                         </div>
 
-                        <!-- Walk-Forward Results (Inner Content) -->
-                        <div id="wfa-results" class="results-block hidden">
+                        <!-- All Results Shown Together -->
+                        <div id="all-results" class="results-block hidden">
+                            <!-- Summary Metrics -->
                             <div class="metrics-grid">
                                 <div class="metric">
-                                    <span class="metric-label">Stability Score</span>
-                                    <span class="metric-value" id="wfa-stability">—</span>
+                                    <span class="metric-label">Robustness Score</span>
+                                    <span class="metric-value robustness-score" id="comp-robustness">—</span>
                                 </div>
                                 <div class="metric">
-                                    <span class="metric-label">Avg OOS Return</span>
-                                    <span class="metric-value" id="wfa-avg-return">—</span>
+                                    <span class="metric-label">Best Sharpe</span>
+                                    <span class="metric-value" id="comp-sharpe">—</span>
                                 </div>
                                 <div class="metric">
-                                    <span class="metric-label">Win Rate</span>
-                                    <span class="metric-value" id="wfa-win-rate">—</span>
+                                    <span class="metric-label">WF Stability</span>
+                                    <span class="metric-value" id="comp-wf-stability">—</span>
                                 </div>
                                 <div class="metric">
-                                    <span class="metric-label">OOS Sharpe</span>
-                                    <span class="metric-value" id="wfa-oos-sharpe">—</span>
+                                    <span class="metric-label">Param CV</span>
+                                    <span class="metric-value" id="comp-param-cv">—</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Positive %</span>
+                                    <span class="metric-value" id="comp-positive-pct">—</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Iterations</span>
+                                    <span class="metric-value" id="comp-iterations">—</span>
                                 </div>
                             </div>
-                            <div class="action-buttons">
-                                <button type="button" class="btn btn-primary" onclick="goToDeploy()">
-                                    🚀 Deploy Strategy
-                                </button>
-                            </div>
-                        </div>
 
-                        <!-- Sensitivity Results (Inner Content) -->
-                        <div id="sensitivity-results" class="results-block hidden">
-                            <div class="metrics-grid">
-                                <div class="metric">
-                                    <span class="metric-label">Best Params</span>
-                                    <span class="metric-value" id="sens-best-param">—</span>
-                                </div>
-                                <div class="metric">
-                                    <span class="metric-label">Max Sharpe</span>
-                                    <span class="metric-value" id="sens-max-sharpe">—</span>
+                            <!-- Optimized Parameters -->
+                            <div class="param-summary" id="comp-param-summary">
+                                <!-- Populated dynamically -->
+                            </div>
+
+                            <!-- Walk-Forward Analysis Results -->
+                            <div style="margin-top: 24px; padding: 16px; background: rgba(59, 130, 246, 0.1); border-radius: 8px;">
+                                <h4 style="margin-bottom: 12px; color: #60a5fa;">📊 Walk-Forward Validation</h4>
+                                <div class="metrics-grid">
+                                    <div class="metric">
+                                        <span class="metric-label">Stability Score</span>
+                                        <span class="metric-value" id="wfa-stability-inline">—</span>
+                                    </div>
+                                    <div class="metric">
+                                        <span class="metric-label">Avg OOS Return</span>
+                                        <span class="metric-value" id="wfa-avg-return-inline">—</span>
+                                    </div>
+                                    <div class="metric">
+                                        <span class="metric-label">Win Rate</span>
+                                        <span class="metric-value" id="wfa-win-rate-inline">—</span>
+                                    </div>
+                                    <div class="metric">
+                                        <span class="metric-label">OOS Sharpe</span>
+                                        <span class="metric-value" id="wfa-oos-sharpe-inline">—</span>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="action-buttons">
-                                <button type="button" class="btn btn-secondary" onclick="applyBestParams()">
-                                    ✓ Apply Best Parameters
-                                </button>
-                                <button type="button" class="btn btn-primary" onclick="goToDeploy()">
-                                    🚀 Deploy Strategy
+
+                            <!-- Parameter Dispersion Details -->
+                            <div style="margin-top: 16px; padding: 16px; background: rgba(139, 92, 246, 0.1); border-radius: 8px;">
+                                <h4 style="margin-bottom: 12px; color: #a78bfa;">📈 Parameter Dispersion Analysis</h4>
+                                <div class="metrics-grid">
+                                    <div class="metric">
+                                        <span class="metric-label">Sharpe Std Dev</span>
+                                        <span class="metric-value" id="disp-sharpe-std">—</span>
+                                    </div>
+                                    <div class="metric">
+                                        <span class="metric-label">Return Std Dev</span>
+                                        <span class="metric-value" id="disp-return-std">—</span>
+                                    </div>
+                                    <div class="metric">
+                                        <span class="metric-label">Sharpe Range</span>
+                                        <span class="metric-value" id="disp-sharpe-range">—</span>
+                                    </div>
+                                    <div class="metric">
+                                        <span class="metric-label">Return Range</span>
+                                        <span class="metric-value" id="disp-return-range">—</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="action-buttons" style="margin-top: 24px;">
+                                <button type="button" class="btn btn-primary" onclick="goToBacktestWithOptimizedParams()">
+                                    Next: Backtest with Optimized Parameters →
                                 </button>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Charts Area -->
-                    <div class="card chart-card-full" id="optimize-chart-card">
-                        <h3 id="optimize-chart-title">Analysis Display</h3>
-                        <div id="optimize-chart" style="width:100%;height:450px;">
+                    <!-- Parameter Sweep Chart -->
+                    <div class="card chart-card-full">
+                        <h3>Parameter Sweep Results</h3>
+                        <div id="param-sweep-chart" style="width:100%;height:400px;">
                             <div class="placeholder-content">
                                 <span class="placeholder-icon">📊</span>
-                                <span>Run an analysis to see results</span>
+                                <span>Run optimization to see parameter sweep</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 3D Sensitivity Heatmap -->
+                    <div class="card chart-card-full" id="sensitivity-chart-card">
+                        <h3>3D Sensitivity Heatmap</h3>
+                        <div id="sensitivity-chart" style="width:100%;height:450px;">
+                            <div class="placeholder-content">
+                                <span class="placeholder-icon">🔥</span>
+                                <span>Run optimization to see sensitivity analysis</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Walk-Forward Windows Chart -->
+                    <div class="card chart-card-full">
+                        <h3>Walk-Forward Window Performance</h3>
+                        <div id="walk-forward-chart" style="width:100%;height:400px;">
+                            <div class="placeholder-content">
+                                <span class="placeholder-icon">🔄</span>
+                                <span>Run optimization to see walk-forward validation</span>
                             </div>
                         </div>
                     </div>

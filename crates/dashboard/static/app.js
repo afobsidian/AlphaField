@@ -132,6 +132,8 @@ function onTabEnter(tabName) {
             break;
         case 'backtest':
             updateBacktestSummary();
+            // Initialize backtest symbol selector when entering backtest tab
+            setTimeout(() => initBacktestSymbolSelect(), 100);
             break;
         case 'optimize':
             updateSensitivityParams();
@@ -162,6 +164,20 @@ function initStrategySelection() {
 
 function updateParamsUI() {
     const container = document.getElementById('build-params');
+    
+    // build-params element no longer exists since parameters are set through optimization
+    // This function is kept for backward compatibility but does nothing if element doesn't exist
+    if (!container) {
+        // Still initialize params with defaults even if UI doesn't exist
+        const strategyParams = STRATEGY_PARAMS[AppState.strategy] || [];
+        strategyParams.forEach(param => {
+            if (!AppState.params[param.name]) {
+                AppState.params[param.name] = param.default;
+            }
+        });
+        return;
+    }
+    
     const strategyParams = STRATEGY_PARAMS[AppState.strategy] || [];
 
     if (strategyParams.length === 0) {
@@ -268,29 +284,33 @@ async function loadSymbols() {
             console.warn('Unexpected symbol data structure:', data);
         }
 
-        // Default popular symbols if we have data
-        if (allSymbols.length > 0) {
-            initCustomSelect();
-        } else {
-            document.getElementById('selected-symbol-text').textContent = "No symbols found";
-        }
+        // Note: Symbol selection is now done through asset categories in Build tab
+        // The old Build tab and Optimize tab symbol selectors have been removed
+        // Symbol selection for backtest is initialized when entering the Backtest tab
+        console.log('Loaded symbols:', allSymbols.length);
 
     } catch (e) {
         console.error('Failed to load symbols:', e);
-        document.getElementById('selected-symbol-text').textContent = "Error loading symbols";
-        // Fallback
-        allSymbols = ["BTC", "ETH"];
-        initCustomSelect();
+        // Fallback symbols
+        allSymbols = ["BTCUSDT", "ETHUSDT"];
     }
 }
 
 function initCustomSelect() {
+    // This function is deprecated - Build tab no longer has individual symbol selection
+    // Symbol selection is now done through asset categories
     const wrapper = document.getElementById('symbol-select-wrapper');
     const trigger = document.getElementById('symbol-trigger');
     const optionsList = document.getElementById('symbol-options-list');
     const searchInput = document.getElementById('symbol-search-input');
     const hiddenInput = document.getElementById('build-symbol');
     const selectedText = document.getElementById('selected-symbol-text');
+
+    // Early return if elements don't exist (they were removed in workflow restructuring)
+    if (!wrapper || !trigger || !optionsList || !searchInput || !hiddenInput || !selectedText) {
+        console.log('Build tab symbol selector elements not found (expected - using asset categories now)');
+        return;
+    }
 
     // Toggle dropdown
     trigger.addEventListener('click', () => {
@@ -461,6 +481,15 @@ async function runBacktest() {
     const contentEl = document.getElementById('backtest-results-content');
 
     try {
+        // Get symbol from backtest tab selector
+        const backtestSymbol = document.getElementById('backtest-symbol').value;
+        if (!backtestSymbol) {
+            throw new Error("Please select a symbol to backtest");
+        }
+        
+        // Update AppState with selected symbol
+        AppState.symbol = backtestSymbol;
+        
         const params = getParams();
 
         const res = await fetch(`${API_BASE}/backtest/run`, {
@@ -468,7 +497,7 @@ async function runBacktest() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 strategy: AppState.strategy,
-                symbol: AppState.symbol,
+                symbol: backtestSymbol,
                 interval: AppState.backtestInterval,
                 days: AppState.backtestDays,
                 params: params,
@@ -871,13 +900,15 @@ function initAnalysisModeToggle() {
             e.target.closest('.mode-option').classList.add('active');
 
             // Show/hide config sections
+            document.getElementById('comprehensive-config').classList.toggle('hidden', mode !== 'comprehensive');
             document.getElementById('wfa-config').classList.toggle('hidden', mode !== 'walkforward');
             document.getElementById('sensitivity-config').classList.toggle('hidden', mode !== 'sensitivity');
 
             // Hide results and show placeholder
+            document.getElementById('comprehensive-results').classList.add('hidden');
             document.getElementById('wfa-results').classList.add('hidden');
             document.getElementById('sensitivity-results').classList.add('hidden');
-            document.getElementById('results-placeholder').classList.remove('hidden');
+            document.getElementById('optimize-results-placeholder').classList.remove('hidden');
         });
     });
 }
@@ -886,6 +917,12 @@ function updateSensitivityParams() {
     const strategyParams = STRATEGY_PARAMS[AppState.strategy] || [];
     const select1 = document.getElementById('sens-param-1');
     const select2 = document.getElementById('sens-param-2');
+
+    // Return early if elements don't exist (removed in new workflow)
+    if (!select1 || !select2) {
+        console.log('Sensitivity parameter selectors not found (expected in new workflow)');
+        return;
+    }
 
     select1.innerHTML = '';
     select2.innerHTML = '<option value="">None (1D Sweep)</option>';
@@ -927,12 +964,21 @@ async function runWalkForward() {
     if (btn) btn.disabled = true;
 
     try {
+        // Get symbol from optimize tab
+        const optimizeSymbol = document.getElementById("optimize-symbol").value;
+        if (!optimizeSymbol) {
+            throw new Error("Please select a trading symbol first");
+        }
+        
+        // Update AppState
+        AppState.symbol = optimizeSymbol;
+        
         const res = await fetch(`${API_BASE}/walk-forward`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 strategy: AppState.strategy,
-                symbol: AppState.symbol,
+                symbol: optimizeSymbol,
                 interval: '1h',
                 params: getParams()
             })
@@ -1059,12 +1105,21 @@ async function runSensitivity() {
     if (param_y) delete fixed_params[param_y.name];
 
     try {
+        // Get symbol from optimize tab
+        const optimizeSymbol = document.getElementById("optimize-symbol").value;
+        if (!optimizeSymbol) {
+            throw new Error("Please select a trading symbol first");
+        }
+        
+        // Update AppState
+        AppState.symbol = optimizeSymbol;
+        
         const res = await fetch(`${API_BASE}/sensitivity`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 strategy: AppState.strategy,
-                symbol: AppState.symbol,
+                symbol: optimizeSymbol,
                 interval: '1h',
                 days: 180,
                 param,
@@ -1520,3 +1575,856 @@ async function checkDbStatus() {
         document.getElementById('db-status').className = 'status-badge disconnected';
     }
 }
+
+
+// ===========================
+// Comprehensive Optimization Workflow
+// ===========================
+
+let comprehensiveWorkflowResults = null;
+
+async function runComprehensiveWorkflow() {
+    const chartContainer = document.getElementById("optimize-chart");
+    const resultsPlaceholder = document.getElementById("optimize-results-placeholder");
+
+    // Show loading state
+    chartContainer.innerHTML = `
+        <div class="placeholder-content">
+            <span class="placeholder-icon">⏳</span>
+            <span>Running Comprehensive Optimization Workflow...</span>
+            <span style="font-size: 12px; margin-top: 8px; opacity: 0.7;">
+                Grid search + parameter dispersion + walk-forward + sensitivity analysis.
+                This may take 30-60 seconds.
+            </span>
+        </div>`;
+
+    resultsPlaceholder.innerHTML = `
+        <span class="placeholder-icon">⏳</span>
+        <span>Analyzing...</span>
+    `;
+
+    // Disable button
+    const btn = document.querySelector("button[onclick=\"runComprehensiveWorkflow()\"]");
+    if (btn) btn.disabled = true;
+
+    try {
+        const include3D = document.getElementById("include-3d-sensitivity").checked;
+        
+        // Get symbol from optimize tab
+        const optimizeSymbol = document.getElementById("optimize-symbol").value;
+        if (!optimizeSymbol) {
+            throw new Error("Please select a trading symbol first");
+        }
+        
+        // Update AppState with the selected symbol
+        AppState.symbol = optimizeSymbol;
+        
+        const res = await fetch(`${API_BASE}/backtest/workflow`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                strategy: AppState.strategy,
+                symbol: optimizeSymbol,
+                interval: AppState.backtestInterval,
+                days: 730, // Use 2 years for comprehensive analysis
+                include_3d_sensitivity: include3D,
+                train_window_days: 252,
+                test_window_days: 63
+            })
+        });
+
+        const data = await res.json();
+
+        if (!data.success) {
+            throw new Error(data.error || "Workflow failed");
+        }
+
+        // Store results
+        comprehensiveWorkflowResults = data;
+
+        // Update metrics
+        const robustnessScore = data.robustness_score;
+        const robustnessEl = document.getElementById("comp-robustness");
+        robustnessEl.textContent = robustnessScore.toFixed(1);
+        
+        // Color code the robustness score
+        if (robustnessScore >= 70) {
+            robustnessEl.style.color = "#10b981"; // Green
+        } else if (robustnessScore >= 50) {
+            robustnessEl.style.color = "#f59e0b"; // Orange
+        } else {
+            robustnessEl.style.color = "#ef4444"; // Red
+        }
+
+        document.getElementById("comp-sharpe").textContent = data.best_sharpe.toFixed(2);
+        document.getElementById("comp-wf-stability").textContent = data.walk_forward_stability_score.toFixed(2);
+        document.getElementById("comp-param-cv").textContent = data.parameter_dispersion.sharpe_cv.toFixed(2);
+        document.getElementById("comp-positive-pct").textContent = data.parameter_dispersion.positive_sharpe_pct.toFixed(0) + "%";
+        document.getElementById("comp-iterations").textContent = data.sweep_results.length;
+
+        // Show optimized parameters
+        const paramSummary = document.getElementById("comp-param-summary");
+        let paramsHtml = "<div style=\"margin-top: 12px; padding: 12px; background: rgba(139, 92, 246, 0.1); border-radius: 8px;\">";
+        paramsHtml += "<strong>Optimized Parameters:</strong><br>";
+        for (const [key, value] of Object.entries(data.optimized_params)) {
+            paramsHtml += `<span style=\"display: inline-block; margin: 4px 8px 4px 0;\">${key}: <strong>${value.toFixed(2)}</strong></span>`;
+        }
+        paramsHtml += "</div>";
+        paramSummary.innerHTML = paramsHtml;
+
+        // Show results block
+        resultsPlaceholder.classList.add("hidden");
+        document.getElementById("comprehensive-results").classList.remove("hidden");
+        document.getElementById("wfa-results").classList.add("hidden");
+        document.getElementById("sensitivity-results").classList.add("hidden");
+
+        // Render visualization
+        if (data.sensitivity_heatmap && include3D) {
+            renderSensitivityHeatmap(data.sensitivity_heatmap);
+            document.getElementById("optimize-chart-title").textContent = "3D Parameter Sensitivity Heatmap";
+        } else {
+            renderParameterSweep(data.sweep_results);
+            document.getElementById("optimize-chart-title").textContent = "Parameter Sweep Results";
+        }
+
+    } catch (e) {
+        console.error("Comprehensive Workflow Error:", e);
+        chartContainer.innerHTML = `
+            <div class="placeholder-content" style="color: #ef4444;">
+                <span class="placeholder-icon">⚠️</span>
+                <span>Workflow Failed</span>
+                <span style="font-size: 14px; margin-top: 8px; max-width: 80%; text-align: center;">${e.message}</span>
+                <button class="btn-primary" style="margin-top: 16px;" onclick="runComprehensiveWorkflow()">Try Again</button>
+            </div>`;
+
+        resultsPlaceholder.innerHTML = `
+            <span class="placeholder-icon" style="color: #ef4444;">⚠️</span>
+            <span style="color: #ef4444;">Workflow Failed</span>
+        `;
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function renderSensitivityHeatmap(heatmap) {
+    const data = [{
+        z: heatmap.sharpe_matrix,
+        x: heatmap.x_values,
+        y: heatmap.y_values,
+        type: "heatmap",
+        colorscale: "RdYlGn",
+        colorbar: {
+            title: "Sharpe Ratio"
+        }
+    }];
+
+    const layout = {
+        title: `${heatmap.x_param} vs ${heatmap.y_param}`,
+        xaxis: { title: heatmap.x_param },
+        yaxis: { title: heatmap.y_param },
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        font: { color: "#e5e7eb" }
+    };
+
+    Plotly.newPlot("optimize-chart", data, layout, { responsive: true });
+}
+
+function renderParameterSweep(sweepResults) {
+    // Show parameter sweep as scatter plot
+    const data = [{
+        x: sweepResults.map(r => r.sharpe),
+        y: sweepResults.map(r => r.total_return * 100),
+        mode: "markers",
+        type: "scatter",
+        marker: {
+            size: 8,
+            color: sweepResults.map(r => r.score),
+            colorscale: "Viridis",
+            colorbar: {
+                title: "Composite Score"
+            }
+        },
+        text: sweepResults.map(r => `Score: ${r.score.toFixed(2)}<br>Trades: ${r.total_trades}`),
+        hovertemplate: "%{text}<extra></extra>"
+    }];
+
+    const layout = {
+        title: "Parameter Combinations (Sharpe vs Return)",
+        xaxis: { title: "Sharpe Ratio" },
+        yaxis: { title: "Total Return (%)" },
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        font: { color: "#e5e7eb" }
+    };
+
+    Plotly.newPlot("optimize-chart", data, layout, { responsive: true });
+}
+
+function applyOptimizedParams() {
+    if (!comprehensiveWorkflowResults) {
+        alert("No optimization results available");
+        return;
+    }
+
+    // Apply params to AppState
+    AppState.params = comprehensiveWorkflowResults.optimized_params;
+
+    // Update UI inputs
+    const strategyParams = STRATEGY_PARAMS[AppState.strategy] || [];
+    strategyParams.forEach(param => {
+        const value = comprehensiveWorkflowResults.optimized_params[param.name];
+        if (value !== undefined) {
+            const input = document.getElementById(`param-${param.name}`);
+            if (input) {
+                input.value = value;
+            }
+        }
+    });
+
+    // Update backtest summary
+    updateBacktestSummary();
+
+    // Navigate to backtest tab
+    switchTab("backtest");
+    
+    alert(`✓ Optimized parameters applied!\n\nRobustness Score: ${comprehensiveWorkflowResults.robustness_score.toFixed(1)}/100\n\nClick "Run Backtest" to see full results with these parameters.`);
+}
+
+
+function goToBacktestWithOptimizedParams() {
+    if (!comprehensiveWorkflowResults) {
+        alert("No optimization results available");
+        return;
+    }
+
+    // Apply params to AppState
+    AppState.params = comprehensiveWorkflowResults.optimized_params;
+    
+    // Symbol will be selected in the backtest tab from the asset category
+    // No need to set it here as user selects from backtest-symbol dropdown
+
+    // Update context bar and backtest summary
+    updateContextBar();
+    updateBacktestSummary();
+
+    // Navigate to backtest tab
+    switchTab("backtest");
+    
+    // Show helpful message
+    alert(`✓ Optimized parameters applied!\n\nRobustness Score: ${comprehensiveWorkflowResults.robustness_score.toFixed(1)}/100\n\nSelect a symbol from the "${AppState.assetCategory}" category and click "Run Backtest" to see results.`);
+}
+
+// Initialize symbol selector for optimize tab
+function initOptimizeSymbolSelect() {
+    // This function is deprecated - Optimize tab no longer has individual symbol selection
+    // Optimization now trains across all symbols in the selected asset category
+    const wrapper = document.getElementById('optimize-symbol-select-wrapper');
+    const trigger = document.getElementById('optimize-symbol-trigger');
+    const optionsList = document.getElementById('optimize-symbol-options-list');
+    const searchInput = document.getElementById('optimize-symbol-search-input');
+    const hiddenInput = document.getElementById('optimize-symbol');
+    const selectedText = document.getElementById('optimize-selected-symbol-text');
+
+    // Exit if elements don't exist (they were removed in workflow restructuring)
+    if (!wrapper || !trigger || !optionsList || !searchInput || !hiddenInput || !selectedText) {
+        console.log('Optimize tab symbol selector elements not found (expected - using asset category optimization now)');
+        return;
+    }
+
+    // Toggle dropdown
+    trigger.addEventListener('click', () => {
+        wrapper.classList.toggle('open');
+        if (wrapper.classList.contains('open')) {
+            searchInput.focus();
+        }
+    });
+
+    // Close when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!wrapper.contains(e.target)) {
+            wrapper.classList.remove('open');
+        }
+    });
+
+    // Filter function
+    function filterSymbols(query) {
+        const q = query.toLowerCase();
+        const POPULAR = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'DOT', 'LINK', 'MATIC'];
+
+        let filtered = allSymbols.filter(s => s.toLowerCase().includes(q));
+
+        // Sort: Popular first, then alphabetical
+        filtered.sort((a, b) => {
+            const aPop = POPULAR.indexOf(a);
+            const bPop = POPULAR.indexOf(b);
+
+            if (aPop !== -1 && bPop !== -1) return aPop - bPop;
+            if (aPop !== -1) return -1;
+            if (bPop !== -1) return 1;
+            return a.localeCompare(b);
+        });
+
+        renderOptions(filtered);
+    }
+
+    // Render options to the list
+    function renderOptions(symbols) {
+        optionsList.innerHTML = '';
+
+        if (symbols.length === 0) {
+            optionsList.innerHTML = '<div class="option" style="cursor: default; opacity: 0.5;">No matches found</div>';
+            return;
+        }
+
+        // Limit rendering for performance if list is huge
+        const displaySymbols = symbols.slice(0, 100);
+
+        displaySymbols.forEach(symbol => {
+            const div = document.createElement('div');
+            div.className = 'option';
+            if (symbol === AppState.symbol) div.classList.add('selected');
+
+            div.innerHTML = `
+                <span class="option-ticker">${symbol}</span>
+                <span class="option-name">USDT</span>
+            `;
+
+            div.addEventListener('click', () => {
+                AppState.symbol = symbol;
+                hiddenInput.value = symbol;
+                selectedText.textContent = symbol;
+                wrapper.classList.remove('open');
+                updateContextBar();
+            });
+
+            optionsList.appendChild(div);
+        });
+    }
+
+    // Search as you type
+    searchInput.addEventListener('input', (e) => {
+        filterSymbols(e.target.value);
+    });
+
+    // Initial render
+    filterSymbols('');
+}
+
+// ===========================
+// Auto-Optimize Function (Simplified UI)
+// ===========================
+
+async function runAutoOptimize() {
+    const resultsPlaceholder = document.getElementById("optimize-results-placeholder");
+    const allResults = document.getElementById("all-results");
+
+    // Show loading state
+    resultsPlaceholder.innerHTML = `
+        <span class="placeholder-icon">⏳</span>
+        <span>Running comprehensive optimization...</span>
+        <span style="font-size: 12px; margin-top: 8px; opacity: 0.7;">
+            This includes parameter sweep, sensitivity analysis, and walk-forward validation.
+            May take 30-60 seconds.
+        </span>
+    `;
+
+    // Disable button
+    const btn = document.querySelector("button[onclick='runAutoOptimize()']");
+    if (btn) btn.disabled = true;
+
+    try {
+        // Get symbols from selected asset category
+        const category = ASSET_CATEGORIES[AppState.assetCategory];
+        if (!category || !category.symbols || category.symbols.length === 0) {
+            throw new Error("Invalid asset category selected");
+        }
+        
+        const symbols = category.symbols;
+        
+        // For now, use the first symbol in the category as representative
+        // TODO: Backend should support multi-symbol optimization
+        const primarySymbol = symbols[0];
+        AppState.symbol = primarySymbol;
+        
+        resultsPlaceholder.innerHTML = `
+            <span class="placeholder-icon">⏳</span>
+            <span>Running multi-symbol optimization...</span>
+            <span style="font-size: 12px; margin-top: 8px; opacity: 0.7;">
+                Optimizing across ${category.name} (${symbols.length} symbols)<br>
+                Using randomized time periods for robust validation.<br>
+                This may take 30-60 seconds.
+            </span>
+        `;
+        
+        const res = await fetch(`${API_BASE}/backtest/workflow`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                strategy: AppState.strategy,
+                symbol: primarySymbol, // Use primary symbol for now
+                interval: AppState.backtestInterval,
+                days: 730, // Use 2 years for comprehensive analysis
+                include_3d_sensitivity: true, // Always include 3D sensitivity
+                train_window_days: 252,
+                test_window_days: 63
+            })
+        });
+
+        const data = await res.json();
+
+        if (!data.success) {
+            throw new Error(data.error || "Workflow failed");
+        }
+
+        // Store results globally
+        comprehensiveWorkflowResults = data;
+
+        // Automatically apply optimized parameters to AppState
+        AppState.params = data.optimized_params;
+        updateContextBar();
+
+        // Hide placeholder, show all results
+        resultsPlaceholder.classList.add("hidden");
+        allResults.classList.remove("hidden");
+
+        // Update summary metrics
+        const robustnessScore = data.robustness_score;
+        const robustnessEl = document.getElementById("comp-robustness");
+        robustnessEl.textContent = robustnessScore.toFixed(1);
+        
+        // Color code the robustness score
+        if (robustnessScore >= 70) {
+            robustnessEl.style.color = "#10b981"; // Green
+        } else if (robustnessScore >= 50) {
+            robustnessEl.style.color = "#f59e0b"; // Orange
+        } else {
+            robustnessEl.style.color = "#ef4444"; // Red
+        }
+
+        document.getElementById("comp-sharpe").textContent = data.best_sharpe.toFixed(2);
+        document.getElementById("comp-wf-stability").textContent = data.walk_forward_stability_score.toFixed(2);
+        document.getElementById("comp-param-cv").textContent = data.parameter_dispersion.sharpe_cv.toFixed(2);
+        document.getElementById("comp-positive-pct").textContent = data.parameter_dispersion.positive_sharpe_pct.toFixed(0) + "%";
+        document.getElementById("comp-iterations").textContent = data.sweep_results.length;
+
+        // Show optimized parameters
+        const paramSummary = document.getElementById("comp-param-summary");
+        let paramsHtml = '<div style="margin-top: 12px; padding: 12px; background: rgba(16, 185, 129, 0.1); border-radius: 8px;">';
+        paramsHtml += '<strong style="color: #10b981;">✓ Optimized Parameters (Auto-Applied):</strong><br>';
+        for (const [key, value] of Object.entries(data.optimized_params)) {
+            paramsHtml += `<span style="display: inline-block; margin: 4px 8px 4px 0;">${key}: <strong>${value.toFixed(2)}</strong></span>`;
+        }
+        paramsHtml += "</div>";
+        paramSummary.innerHTML = paramsHtml;
+
+        // Walk-Forward inline metrics
+        const wfResult = data.walk_forward_validation || {};
+        const wfAgg = wfResult.aggregate_oos || {};
+        document.getElementById("wfa-stability-inline").textContent = (data.walk_forward_stability_score || 0).toFixed(2);
+        document.getElementById("wfa-avg-return-inline").textContent = ((wfAgg.mean_return || 0) * 100).toFixed(2) + "%";
+        document.getElementById("wfa-win-rate-inline").textContent = ((wfAgg.win_rate || 0) * 100).toFixed(0) + "%";
+        document.getElementById("wfa-oos-sharpe-inline").textContent = (wfAgg.mean_sharpe || 0).toFixed(2);
+
+        // Parameter dispersion details
+        const disp = data.parameter_dispersion || {};
+        document.getElementById("disp-sharpe-std").textContent = (disp.sharpe_std || 0).toFixed(3);
+        document.getElementById("disp-return-std").textContent = ((disp.return_std || 0) * 100).toFixed(2) + "%";
+        document.getElementById("disp-sharpe-range").textContent = (disp.sharpe_range || 0).toFixed(2);
+        document.getElementById("disp-return-range").textContent = ((disp.return_range || 0) * 100).toFixed(2) + "%";
+
+        // Render Parameter Sweep Chart
+        renderParameterSweepChart(data.sweep_results);
+
+        // Render 3D Sensitivity Heatmap
+        if (data.sensitivity_heatmap) {
+            renderSensitivityHeatmapChart(data.sensitivity_heatmap);
+        }
+
+        // Render Walk-Forward Chart
+        console.log("Walk-forward validation data:", wfResult);
+        if (wfResult && wfResult.windows && wfResult.windows.length > 0) {
+            console.log("Rendering walk-forward chart with", wfResult.windows.length, "windows");
+            renderWalkForwardChart(wfResult.windows);
+        } else {
+            console.warn("No walk-forward windows data available");
+        }
+
+    } catch (e) {
+        console.error("Auto-Optimize Error:", e);
+        resultsPlaceholder.innerHTML = `
+            <div class="placeholder-content" style="color: #ef4444;">
+                <span class="placeholder-icon">⚠️</span>
+                <span>Optimization Failed</span>
+                <span style="font-size: 14px; margin-top: 8px; max-width: 80%; text-align: center;">${e.message}</span>
+                <button class="btn-primary" style="margin-top: 16px;" onclick="runAutoOptimize()">Try Again</button>
+            </div>`;
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function renderParameterSweepChart(sweepResults) {
+    // Hide placeholder content
+    const chartDiv = document.getElementById("param-sweep-chart");
+    const placeholder = chartDiv.querySelector(".placeholder-content");
+    if (placeholder) {
+        placeholder.style.display = "none";
+    }
+
+    const data = [{
+        x: sweepResults.map(r => r.sharpe),
+        y: sweepResults.map(r => r.total_return * 100),
+        mode: "markers",
+        type: "scatter",
+        marker: {
+            size: 8,
+            color: sweepResults.map(r => r.score),
+            colorscale: "Viridis",
+            colorbar: {
+                title: "Score"
+            }
+        },
+        text: sweepResults.map(r => `Sharpe: ${r.sharpe.toFixed(2)}<br>Return: ${(r.total_return * 100).toFixed(2)}%<br>Trades: ${r.total_trades}`),
+        hovertemplate: "%{text}<extra></extra>"
+    }];
+
+    const layout = {
+        title: "",
+        xaxis: { title: "Sharpe Ratio" },
+        yaxis: { title: "Total Return (%)" },
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        font: { color: "#e5e7eb" }
+    };
+
+    Plotly.newPlot("param-sweep-chart", data, layout, { responsive: true });
+}
+
+function renderSensitivityHeatmapChart(heatmap) {
+    if (!heatmap) return;
+    
+    // Hide placeholder content
+    const chartDiv = document.getElementById("sensitivity-chart");
+    const placeholder = chartDiv.querySelector(".placeholder-content");
+    if (placeholder) {
+        placeholder.style.display = "none";
+    }
+    
+    const data = [{
+        z: heatmap.sharpe_matrix,
+        x: heatmap.x_values,
+        y: heatmap.y_values,
+        type: "heatmap",
+        colorscale: "RdYlGn",
+        colorbar: {
+            title: "Sharpe"
+        }
+    }];
+
+    const layout = {
+        title: "",
+        xaxis: { title: heatmap.x_param },
+        yaxis: { title: heatmap.y_param },
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(0,0,0,0)",
+        font: { color: "#e5e7eb" }
+    };
+
+    Plotly.newPlot("sensitivity-chart", data, layout, { responsive: true });
+}
+
+function renderWalkForwardChart(windows) {
+    console.log("renderWalkForwardChart called with:", windows);
+    
+    if (!windows || windows.length === 0) {
+        console.warn("No windows data to render");
+        return;
+    }
+
+    try {
+        // Hide placeholder content
+        const chartDiv = document.getElementById("walk-forward-chart");
+        const placeholder = chartDiv.querySelector(".placeholder-content");
+        if (placeholder) {
+            placeholder.style.display = "none";
+        }
+
+        const data = [
+            {
+                x: windows.map((w, i) => `Window ${i + 1}`),
+                y: windows.map(w => ((w.test_metrics && w.test_metrics.total_return) || 0) * 100),
+                name: "OOS Return",
+                type: "bar",
+                marker: { color: "#60a5fa" }
+            },
+            {
+                x: windows.map((w, i) => `Window ${i + 1}`),
+                y: windows.map(w => (w.test_metrics && w.test_metrics.sharpe_ratio) || 0),
+                name: "OOS Sharpe",
+                type: "bar",
+                marker: { color: "#34d399" },
+                yaxis: "y2"
+            }
+        ];
+
+        const layout = {
+            title: "",
+            xaxis: { title: "Walk-Forward Window" },
+            yaxis: { title: "Return (%)", side: "left" },
+            yaxis2: { title: "Sharpe Ratio", overlaying: "y", side: "right" },
+            paper_bgcolor: "rgba(0,0,0,0)",
+            plot_bgcolor: "rgba(0,0,0,0)",
+            font: { color: "#e5e7eb" },
+            barmode: "group"
+        };
+
+        console.log("Creating Plotly chart with data:", data);
+        Plotly.newPlot("walk-forward-chart", data, layout, { responsive: true });
+        console.log("Walk-forward chart rendered successfully");
+    } catch (error) {
+        console.error("Error rendering walk-forward chart:", error);
+    }
+}
+
+// ===========================
+// Asset Category Definitions
+// ===========================
+
+const ASSET_CATEGORIES = {
+    "market": {
+        name: "Market (Top 10)",
+        symbols: ["BTC", "ETH", "BNB", "XRP", "ADA", "SOL", "DOT", "DOGE", "AVAX", "MATIC"]
+    },
+    "large-cap": {
+        name: "Large Cap (Rank 1-30)",
+        symbols: ["BTC", "ETH", "BNB", "XRP", "ADA", "SOL", "DOT", "DOGE", "AVAX", "MATIC", 
+                  "LINK", "UNI", "ATOM", "LTC", "ETC", "XLM", "ALGO", "VET", "ICP", "FIL"]
+    },
+    "mid-cap": {
+        name: "Mid Cap (Rank 31-100)",
+        symbols: ["AAVE", "GRT", "SAND", "MANA", "AXS", "ENJ", "CHZ", "THETA", "FTM", "ONE",
+                  "HBAR", "FLOW", "EGLD", "XTZ", "ZIL", "QTUM", "WAVES", "ICX", "OMG", "ZRX"]
+    },
+    "small-cap": {
+        name: "Small Cap (Rank 101-300)",
+        symbols: ["ANKR", "CRV", "BAL", "COMP", "YFI", "SNX", "SUSHI", "CAKE", "1INCH", "UMA",
+                  "REN", "KNC", "LRC", "BAND", "RSR", "NMR", "OCEAN", "CELR", "STORJ", "AUDIO"]
+    },
+    "defi": {
+        name: "DeFi Protocols",
+        symbols: ["AAVE", "UNI", "LINK", "COMP", "MKR", "SNX", "CRV", "SUSHI", "YFI", "BAL",
+                  "1INCH", "CAKE", "UMA", "BNT", "REN", "KNC", "LRC", "BAND", "RSR", "NMR"]
+    }
+};
+
+// ===========================
+// Update AppState for Asset Category
+// ===========================
+
+// Add asset category to AppState
+if (!AppState.assetCategory) {
+    AppState.assetCategory = "market";
+}
+
+// Update goToOptimize to capture asset category
+const originalGoToOptimize = goToOptimize;
+goToOptimize = function() {
+    // Get selected asset category
+    const categoryInput = document.querySelector('input[name="asset-category"]:checked');
+    if (categoryInput) {
+        AppState.assetCategory = categoryInput.value;
+    }
+    
+    // Update optimize tab display
+    updateOptimizeDisplay();
+    
+    // Call original function
+    originalGoToOptimize();
+};
+
+function updateOptimizeDisplay() {
+    const strategyEl = document.getElementById("opt-display-strategy");
+    const categoryEl = document.getElementById("opt-display-category");
+    
+    if (strategyEl) {
+        strategyEl.textContent = AppState.strategy || "—";
+    }
+    
+    if (categoryEl && AppState.assetCategory) {
+        const category = ASSET_CATEGORIES[AppState.assetCategory];
+        categoryEl.textContent = category ? category.name : AppState.assetCategory;
+    }
+}
+
+// Initialize display on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Listen for asset category changes
+    document.querySelectorAll('input[name="asset-category"]').forEach(input => {
+        input.addEventListener('change', function() {
+            AppState.assetCategory = this.value;
+        });
+    });
+});
+
+
+// ===========================
+// Backtest Symbol Selector
+// ===========================
+
+function initBacktestSymbolSelect() {
+    const wrapper = document.getElementById('backtest-symbol-select-wrapper');
+    const trigger = document.getElementById('backtest-symbol-trigger');
+    const optionsList = document.getElementById('backtest-symbol-options-list');
+    const searchInput = document.getElementById('backtest-symbol-search-input');
+    const hiddenInput = document.getElementById('backtest-symbol');
+
+    if (!wrapper || !trigger) {
+        console.warn("Backtest symbol selector elements not found");
+        return;
+    }
+
+    console.log("Initializing backtest symbol selector with asset category:", AppState.assetCategory);
+
+    // Remove any existing listeners to avoid duplicates
+    const newTrigger = trigger.cloneNode(true);
+    trigger.parentNode.replaceChild(newTrigger, trigger);
+
+    // Get fresh reference to selectedText after trigger replacement
+    const selectedText = document.getElementById('backtest-selected-symbol-text');
+
+    // Toggle dropdown
+    newTrigger.addEventListener('click', () => {
+        wrapper.classList.toggle('open');
+        if (wrapper.classList.contains('open')) {
+            searchInput.focus();
+            renderBacktestSymbolOptions('');
+        }
+    });
+
+    // Close when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!wrapper.contains(e.target)) {
+            wrapper.classList.remove('open');
+        }
+    });
+
+    // Search as you type
+    searchInput.addEventListener('input', (e) => {
+        renderBacktestSymbolOptions(e.target.value);
+    });
+
+    // Render options from selected category
+    function renderBacktestSymbolOptions(query) {
+        optionsList.innerHTML = '';
+
+        // Ensure asset category is set
+        if (!AppState.assetCategory) {
+            optionsList.innerHTML = '<div class="option" style="cursor: default; opacity: 0.5;">Please select an asset category in Build tab</div>';
+            return;
+        }
+
+        // Get symbols from selected asset category
+        const category = ASSET_CATEGORIES[AppState.assetCategory];
+        if (!category || !category.symbols) {
+            optionsList.innerHTML = '<div class="option" style="cursor: default; opacity: 0.5;">No symbols available for this category</div>';
+            return;
+        }
+
+        let symbols = category.symbols;
+        
+        // Filter by search query
+        if (query) {
+            const q = query.toLowerCase();
+            symbols = symbols.filter(s => s.toLowerCase().includes(q));
+        }
+
+        if (symbols.length === 0) {
+            optionsList.innerHTML = '<div class="option" style="cursor: default; opacity: 0.5;">No matches found</div>';
+            return;
+        }
+
+        symbols.forEach(symbol => {
+            const div = document.createElement('div');
+            div.className = 'option';
+            if (symbol === AppState.symbol) div.classList.add('selected');
+
+            div.innerHTML = `
+                <span class="option-ticker">${symbol}</span>
+                <span class="option-name">USDT</span>
+            `;
+
+            div.addEventListener('click', () => {
+                // Get fresh reference each time in case of re-initialization
+                const currentSelectedText = document.getElementById('backtest-selected-symbol-text');
+                AppState.symbol = symbol;
+                hiddenInput.value = symbol;
+                if (currentSelectedText) {
+                    currentSelectedText.textContent = symbol;
+                }
+                wrapper.classList.remove('open');
+                updateBacktestSummary();
+            });
+
+            optionsList.appendChild(div);
+        });
+    }
+
+    // Initialize with primary symbol if available
+    if (AppState.symbol && selectedText) {
+        selectedText.textContent = AppState.symbol;
+        hiddenInput.value = AppState.symbol;
+    } else if (AppState.assetCategory) {
+        // Auto-select first symbol from category
+        const category = ASSET_CATEGORIES[AppState.assetCategory];
+        if (category && category.symbols && category.symbols.length > 0) {
+            AppState.symbol = category.symbols[0];
+            selectedText.textContent = AppState.symbol;
+            hiddenInput.value = AppState.symbol;
+        }
+    }
+}
+
+// Update goToBacktestWithOptimizedParams to initialize symbol selector
+const originalGoToBacktestWithOptimizedParams = goToBacktestWithOptimizedParams;
+goToBacktestWithOptimizedParams = function() {
+    originalGoToBacktestWithOptimizedParams();
+    
+    // Initialize the backtest symbol selector with category symbols
+    setTimeout(() => {
+        initBacktestSymbolSelect();
+        
+        // Auto-select the primary symbol if not already selected
+        const backtestSymbol = document.getElementById('backtest-symbol');
+        const selectedText = document.getElementById('backtest-selected-symbol-text');
+        if (!backtestSymbol.value && AppState.symbol) {
+            backtestSymbol.value = AppState.symbol;
+            selectedText.textContent = AppState.symbol;
+        }
+    }, 100);
+};
+
+// Also update the backtest summary display
+function updateBacktestSummary() {
+    const strategyEl = document.getElementById("bt-summary-strategy");
+    const categoryEl = document.getElementById("bt-summary-category");
+    const paramsEl = document.getElementById("bt-summary-params");
+
+    if (strategyEl) {
+        strategyEl.textContent = AppState.strategy || "—";
+    }
+
+    if (categoryEl && AppState.assetCategory) {
+        const category = ASSET_CATEGORIES[AppState.assetCategory];
+        categoryEl.textContent = category ? category.name : AppState.assetCategory;
+    }
+
+    if (paramsEl && AppState.params) {
+        let paramsText = "";
+        for (const [key, value] of Object.entries(AppState.params)) {
+            paramsText += `${key}=${typeof value === 'number' ? value.toFixed(2) : value} `;
+        }
+        paramsEl.textContent = paramsText || "—";
+    }
+}
+

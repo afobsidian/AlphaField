@@ -1136,3 +1136,39 @@ body {
 .optimize-controls .mode-option {
     padding: 12px;
 }
+/* Comprehensive Workflow Specific Styles */
+.robustness-score {
+    font-size: 1.5em;
+    font-weight: 700;
+}
+
+.param-summary {
+    margin-top: 12px;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.param-summary strong {
+    color: var(--primary-color);
+}
+
+/* Adjust mode options for 3 items */
+.optimize-controls .mode-options {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+}
+
+.optimize-controls .mode-option {
+    padding: 10px;
+    font-size: 13px;
+}
+
+.optimize-controls .mode-icon {
+    font-size: 16px;
+}
+
+.optimize-controls .mode-name {
+    font-size: 12px;
+}
+

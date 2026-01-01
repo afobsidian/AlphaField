@@ -139,6 +139,77 @@ Run a backtest with specified parameters.
 }
 ```
 
+### POST /api/backtest/optimize
+
+Run parameter optimization using grid search.
+
+**Request:**
+```json
+{
+  "strategy": "GoldenCross",
+  "symbol": "BTCUSDT",
+  "interval": "1h",
+  "days": 180
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "optimized_params": {
+    "fast_period": 10.0,
+    "slow_period": 50.0
+  },
+  "best_score": 0.68,
+  "best_sharpe": 1.85,
+  "best_return": 0.42,
+  "iterations": 144,
+  "elapsed_ms": 25430,
+  "sweep_results": [...]
+}
+```
+
+### POST /api/backtest/workflow
+
+**NEW**: Run comprehensive optimization workflow with validation.
+
+Combines grid search optimization, parameter dispersion analysis, walk-forward validation, and 3D sensitivity analysis to find robust parameters and avoid overfitting.
+
+**Request:**
+```json
+{
+  "strategy": "GoldenCross",
+  "symbol": "BTCUSDT",
+  "interval": "1h",
+  "days": 730,
+  "include_3d_sensitivity": true,
+  "train_window_days": 252,
+  "test_window_days": 63
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "optimized_params": {
+    "fast_period": 10.0,
+    "slow_period": 50.0
+  },
+  "robustness_score": 73.5,
+  "parameter_dispersion": {
+    "sharpe_cv": 0.35,
+    "positive_sharpe_pct": 68.5
+  },
+  "walk_forward_stability_score": 0.72,
+  "sensitivity_heatmap": {...},
+  "elapsed_ms": 45230
+}
+```
+
+See [Optimization Workflow Documentation](optimization_workflow.md) for complete details.
+
 ---
 
 ## Advanced Analysis

@@ -585,3 +585,335 @@ pub async fn optimize_params(
         }
     }
 }
+
+// ===========================
+// Comprehensive Optimization Workflow API
+// ===========================
+
+use alphafield_backtest::{OptimizationWorkflow, ParameterDispersion, WorkflowConfig};
+
+// Time interval constants for bars per day calculation
+const BARS_PER_DAY_1M: usize = 1440;
+const BARS_PER_DAY_5M: usize = 288;
+const BARS_PER_DAY_15M: usize = 96;
+const BARS_PER_DAY_1H: usize = 24;
+const BARS_PER_DAY_4H: usize = 6;
+const BARS_PER_DAY_1D: usize = 1;
+const BARS_PER_DAY_DEFAULT: usize = 24; // Default to hourly
+
+// Walk-forward step size constant (approximate trading days per month)
+const TRADING_DAYS_PER_MONTH: usize = 21;
+
+#[derive(Debug, Deserialize)]
+pub struct WorkflowRequest {
+    pub strategy: String,
+    pub symbol: String,
+    pub interval: String,
+    pub days: u32,
+    /// Optional: Enable/disable 3D sensitivity analysis (default: true)
+    pub include_3d_sensitivity: Option<bool>,
+    /// Optional: Training window for walk-forward (in days, default: 252)
+    pub train_window_days: Option<usize>,
+    /// Optional: Testing window for walk-forward (in days, default: 63)
+    pub test_window_days: Option<usize>,
+}
+
+#[derive(Serialize)]
+pub struct WorkflowResponse {
+    pub success: bool,
+    /// Optimized parameters from grid search
+    pub optimized_params: HashMap<String, f64>,
+    /// Best composite score from optimization
+    pub best_score: f64,
+    /// Best Sharpe ratio from optimization
+    pub best_sharpe: f64,
+    /// Best return from optimization
+    pub best_return: f64,
+    /// In-sample performance metrics
+    pub in_sample_sharpe: f64,
+    pub in_sample_return: f64,
+    pub in_sample_max_drawdown: f64,
+    /// Walk-forward validation results (aggregate metrics - kept for backward compatibility)
+    pub walk_forward_mean_return: f64,
+    pub walk_forward_median_return: f64,
+    pub walk_forward_stability_score: f64,
+    pub walk_forward_worst_drawdown: f64,
+    pub walk_forward_windows: usize,
+    /// Full walk-forward validation results (includes windows data for visualization)
+    pub walk_forward_validation: Option<alphafield_backtest::WalkForwardResult>,
+    /// Parameter dispersion statistics
+    pub parameter_dispersion: ParameterDispersion,
+    /// Overall robustness score (0-100)
+    pub robustness_score: f64,
+    /// All tested parameter combinations for visualization
+    pub sweep_results: Vec<ParamSweepResult>,
+    /// 3D sensitivity heatmap data (if enabled)
+    pub sensitivity_heatmap: Option<alphafield_backtest::sensitivity::HeatmapData>,
+    /// Execution time
+    pub elapsed_ms: u64,
+    pub error: Option<String>,
+}
+
+pub async fn run_optimization_workflow(
+    State(_state): State<Arc<AppState>>,
+    Json(req): Json<WorkflowRequest>,
+) -> Json<WorkflowResponse> {
+    let start = std::time::Instant::now();
+    info!(
+        strategy = %req.strategy,
+        symbol = %req.symbol,
+        "Starting comprehensive optimization workflow"
+    );
+
+    // 1. Date Range
+    use chrono::{Duration, Utc};
+    let end_time = Utc::now();
+    let start_time = end_time - Duration::days(req.days as i64);
+
+    // 2. Fetch Data
+    let fetch_symbol = req.symbol.clone();
+    let fetch_interval = req.interval.clone();
+
+    let fetch_result = tokio::spawn(async move {
+        fetch_data_with_cache(fetch_symbol, fetch_interval, start_time, end_time).await
+    })
+    .await
+    .map_err(|e| e.to_string())
+    .and_then(|res| res);
+
+    let bars = match fetch_result {
+        Ok((bars, _status)) => bars,
+        Err(e) => {
+            error!(error = %e, "Failed to fetch data for optimization workflow");
+            return Json(WorkflowResponse {
+                success: false,
+                optimized_params: HashMap::new(),
+                best_score: 0.0,
+                best_sharpe: 0.0,
+                best_return: 0.0,
+                in_sample_sharpe: 0.0,
+                in_sample_return: 0.0,
+                in_sample_max_drawdown: 0.0,
+                walk_forward_mean_return: 0.0,
+                walk_forward_median_return: 0.0,
+                walk_forward_stability_score: 0.0,
+                walk_forward_worst_drawdown: 0.0,
+                walk_forward_windows: 0,
+                walk_forward_validation: None,
+                parameter_dispersion: ParameterDispersion::default(),
+                robustness_score: 0.0,
+                sweep_results: vec![],
+                sensitivity_heatmap: None,
+                elapsed_ms: start.elapsed().as_millis() as u64,
+                error: Some(format!("Failed to fetch data: {}", e)),
+            });
+        }
+    };
+
+    if bars.is_empty() {
+        return Json(WorkflowResponse {
+            success: false,
+            optimized_params: HashMap::new(),
+            best_score: 0.0,
+            best_sharpe: 0.0,
+            best_return: 0.0,
+            in_sample_sharpe: 0.0,
+            in_sample_return: 0.0,
+            in_sample_max_drawdown: 0.0,
+            walk_forward_mean_return: 0.0,
+            walk_forward_median_return: 0.0,
+            walk_forward_stability_score: 0.0,
+            walk_forward_worst_drawdown: 0.0,
+            walk_forward_windows: 0,
+            walk_forward_validation: None,
+            parameter_dispersion: ParameterDispersion::default(),
+            robustness_score: 0.0,
+            sweep_results: vec![],
+            sensitivity_heatmap: None,
+            elapsed_ms: start.elapsed().as_millis() as u64,
+            error: Some("No data available for optimization".to_string()),
+        });
+    }
+
+    // 3. Get parameter bounds
+    let bounds = get_strategy_bounds(&req.strategy);
+    if bounds.is_empty() {
+        return Json(WorkflowResponse {
+            success: false,
+            optimized_params: HashMap::new(),
+            best_score: 0.0,
+            best_sharpe: 0.0,
+            best_return: 0.0,
+            in_sample_sharpe: 0.0,
+            in_sample_return: 0.0,
+            in_sample_max_drawdown: 0.0,
+            walk_forward_mean_return: 0.0,
+            walk_forward_median_return: 0.0,
+            walk_forward_stability_score: 0.0,
+            walk_forward_worst_drawdown: 0.0,
+            walk_forward_windows: 0,
+            walk_forward_validation: None,
+            parameter_dispersion: ParameterDispersion::default(),
+            robustness_score: 0.0,
+            sweep_results: vec![],
+            sensitivity_heatmap: None,
+            elapsed_ms: start.elapsed().as_millis() as u64,
+            error: Some(format!("Unknown strategy: {}", req.strategy)),
+        });
+    }
+
+    // 4. Configure workflow
+    let bars_per_day = match req.interval.as_str() {
+        "1m" => BARS_PER_DAY_1M,
+        "5m" => BARS_PER_DAY_5M,
+        "15m" => BARS_PER_DAY_15M,
+        "1h" => BARS_PER_DAY_1H,
+        "4h" => BARS_PER_DAY_4H,
+        "1d" => BARS_PER_DAY_1D,
+        _ => BARS_PER_DAY_DEFAULT,
+    };
+
+    let train_window_bars = req.train_window_days.unwrap_or(252) * bars_per_day;
+    let test_window_bars = req.test_window_days.unwrap_or(63) * bars_per_day;
+
+    let workflow_config = WorkflowConfig {
+        initial_capital: 100_000.0,
+        fee_rate: 0.001,
+        slippage: alphafield_backtest::SlippageModel::FixedPercent(0.0005),
+        walk_forward_config: alphafield_backtest::WalkForwardConfig {
+            train_window: train_window_bars,
+            test_window: test_window_bars,
+            step_size: TRADING_DAYS_PER_MONTH * bars_per_day,
+            initial_capital: 100_000.0,
+            fee_rate: 0.001,
+        },
+        include_3d_sensitivity: req.include_3d_sensitivity.unwrap_or(true),
+        train_test_split_ratio: 0.70, // Use default 70/30 split
+    };
+
+    // 5. Determine sensitivity parameters (first two from bounds for 3D visualization)
+    let sensitivity_params = if workflow_config.include_3d_sensitivity && bounds.len() >= 2 {
+        let param_x = alphafield_backtest::ParameterRange::new(
+            &bounds[0].name,
+            bounds[0].min,
+            bounds[0].max,
+            bounds[0].step,
+        );
+        let param_y = alphafield_backtest::ParameterRange::new(
+            &bounds[1].name,
+            bounds[1].min,
+            bounds[1].max,
+            bounds[1].step,
+        );
+        Some((param_x, param_y))
+    } else {
+        None
+    };
+
+    // 6. Run workflow in blocking task
+    let strategy_name = req.strategy.clone();
+    let symbol = req.symbol.clone();
+
+    let workflow_result = tokio::task::spawn_blocking(move || {
+        let workflow = OptimizationWorkflow::new(workflow_config);
+
+        // Create factory closure
+        let factory = |params: &HashMap<String, f64>| {
+            StrategyFactory::create_backtest(&strategy_name, params, &symbol, 100_000.0)
+        };
+
+        workflow.run(&bars, &symbol, &factory, &bounds, sensitivity_params)
+    })
+    .await;
+
+    match workflow_result {
+        Ok(Ok(result)) => {
+            info!(
+                robustness_score = result.robustness_score,
+                best_sharpe = result.optimization.best_sharpe,
+                wf_stability = result.walk_forward_validation.stability_score,
+                elapsed_ms = start.elapsed().as_millis(),
+                "Optimization workflow complete"
+            );
+
+            Json(WorkflowResponse {
+                success: true,
+                optimized_params: result.optimization.best_params,
+                best_score: result.optimization.best_score,
+                best_sharpe: result.optimization.best_sharpe,
+                best_return: result.optimization.best_return,
+                in_sample_sharpe: result.in_sample_metrics.sharpe_ratio,
+                in_sample_return: result.in_sample_metrics.total_return,
+                in_sample_max_drawdown: result.in_sample_metrics.max_drawdown,
+                walk_forward_mean_return: result.walk_forward_validation.aggregate_oos.mean_return,
+                walk_forward_median_return: result
+                    .walk_forward_validation
+                    .aggregate_oos
+                    .median_return,
+                walk_forward_stability_score: result.walk_forward_validation.stability_score,
+                walk_forward_worst_drawdown: result
+                    .walk_forward_validation
+                    .aggregate_oos
+                    .worst_drawdown,
+                walk_forward_windows: result.walk_forward_validation.windows.len(),
+                walk_forward_validation: Some(result.walk_forward_validation),
+                parameter_dispersion: result.parameter_dispersion,
+                robustness_score: result.robustness_score,
+                sweep_results: result.optimization.all_results,
+                sensitivity_heatmap: result.sensitivity_3d.and_then(|s| s.heatmap),
+                elapsed_ms: start.elapsed().as_millis() as u64,
+                error: None,
+            })
+        }
+        Ok(Err(e)) => {
+            error!(error = %e, "Optimization workflow failed");
+            Json(WorkflowResponse {
+                success: false,
+                optimized_params: HashMap::new(),
+                best_score: 0.0,
+                best_sharpe: 0.0,
+                best_return: 0.0,
+                in_sample_sharpe: 0.0,
+                in_sample_return: 0.0,
+                in_sample_max_drawdown: 0.0,
+                walk_forward_mean_return: 0.0,
+                walk_forward_median_return: 0.0,
+                walk_forward_stability_score: 0.0,
+                walk_forward_worst_drawdown: 0.0,
+                walk_forward_windows: 0,
+                walk_forward_validation: None,
+                parameter_dispersion: ParameterDispersion::default(),
+                robustness_score: 0.0,
+                sweep_results: vec![],
+                sensitivity_heatmap: None,
+                elapsed_ms: start.elapsed().as_millis() as u64,
+                error: Some(e),
+            })
+        }
+        Err(e) => {
+            error!(error = %e, "Optimization workflow task panicked");
+            Json(WorkflowResponse {
+                success: false,
+                optimized_params: HashMap::new(),
+                best_score: 0.0,
+                best_sharpe: 0.0,
+                best_return: 0.0,
+                in_sample_sharpe: 0.0,
+                in_sample_return: 0.0,
+                in_sample_max_drawdown: 0.0,
+                walk_forward_mean_return: 0.0,
+                walk_forward_median_return: 0.0,
+                walk_forward_stability_score: 0.0,
+                walk_forward_worst_drawdown: 0.0,
+                walk_forward_windows: 0,
+                walk_forward_validation: None,
+                parameter_dispersion: ParameterDispersion::default(),
+                robustness_score: 0.0,
+                sweep_results: vec![],
+                sensitivity_heatmap: None,
+                elapsed_ms: start.elapsed().as_millis() as u64,
+                error: Some(format!("Internal error: {}", e)),
+            })
+        }
+    }
+}

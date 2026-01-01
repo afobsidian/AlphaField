@@ -15,13 +15,14 @@ AlphaField features a robust multi-source data layer, modular strategy system, e
 |---------|-------------|
 | **Unified Data Layer** | Multi-source integration (Binance, CoinGecko, Coinlayer) with smart routing |
 | **Interactive Dashboard** | Real-time data management, symbol search, and visual backtesting |
+| **Optimization-First Workflow** | Automated parameter optimization before backtesting with multi-symbol validation |
+| **Asset Category Training** | Train strategies across predefined symbol baskets (Market, Large/Mid/Small Cap, DeFi) |
 | **TimescaleDB Storage** | Time-series optimized with hypertables and compression |
 | **Event-Driven Backtesting** | Simulate strategies with slippage, fees, and latency modeling |
 | **Sentiment Analysis** | Fear & Greed Index integration + Asset-specific sentiment metrics |
-| **Advanced Analytics** | Monte Carlo, Walk-Forward, Sensitivity Analysis, Correlation Matrix |
+| **Comprehensive Optimization** | Parameter sweep, walk-forward validation, sensitivity analysis, and robustness scoring |
 | **Data Quality Monitoring** | Gap detection, outlier detection, ingestion alerting |
 | **Risk Management** | Circuit breakers, position limits, drift monitoring |
-| **Walk Forward Analysis** | Rolling window training/testing for robustness validation |
 
 ---
 
@@ -120,7 +121,7 @@ Technical indicators and example strategies.
 ---
 
 ### `crates/backtest`
-Event-driven backtesting engine with advanced analytics.
+Event-driven backtesting engine with comprehensive optimization workflow.
 
 | Component | Description |
 |-----------|-------------|
@@ -129,14 +130,16 @@ Event-driven backtesting engine with advanced analytics.
 | `ExchangeSimulator` | Order matching with slippage/fees |
 | `StrategyAdapter` | Bridges Strategy trait to backtest engine |
 | `PerformanceMetrics` | CAGR, Sharpe, Sortino, Max Drawdown, etc. |
+| `OptimizationWorkflow` | 6-phase pipeline: grid search, dispersion stats, walk-forward, sensitivity, robustness scoring |
 
 **Advanced Analysis:**
 | Module | Description |
 |--------|-------------|
-| `WalkForwardAnalyzer` | Rolling train/test validation |
+| `WalkForwardAnalyzer` | Rolling train/test validation across time windows |
 | `MonteCarloSimulator` | Trade sequence shuffling for robustness |
-| `SensitivityAnalyzer` | Parameter grid search with heatmaps |
+| `SensitivityAnalyzer` | Parameter grid search with 3D heatmaps |
 | `CorrelationAnalyzer` | Multi-strategy correlation matrix |
+| `ParameterDispersion` | Statistical analysis (CV, ranges, positive %) to detect overfitting |
 
 ---
 
@@ -166,6 +169,7 @@ Axum web server with REST API and WebSocket streaming.
 | `/api/orders` | GET | Order history |
 | `/api/performance` | GET | Performance metrics |
 | `/api/backtest/run` | POST | Run backtest with optional sentiment data |
+| `/api/backtest/workflow` | POST | **NEW**: Comprehensive optimization workflow (grid search + validation) |
 | `/api/monte-carlo` | POST | Run Monte Carlo simulation |
 | `/api/correlation` | POST | Calculate strategy correlation |
 | `/api/sensitivity` | POST | Parameter sensitivity analysis |
@@ -187,13 +191,22 @@ Axum web server with REST API and WebSocket streaming.
 
 ### 🖥️ Dashboard UI
 
-The `crates/dashboard` crate serves a React/Vanilla JS frontend at `http://localhost:8080`.
+The `crates/dashboard` crate serves a Vanilla JS frontend at `http://localhost:8080`.
 
-**Key Views:**
-- **Dashboard**: Real-time portfolio metrics, equity curve, and position monitoring.
+**Optimization-First Workflow (Restructured):**
+1. **Build Tab**: Select trading strategy + Asset category (Market/Large Cap/Mid Cap/Small Cap/DeFi)
+2. **Optimize Tab**: One-click Auto-Optimize across all symbols in category with comprehensive results
+   - Parameter sweep scatter plot
+   - 3D sensitivity heatmap
+   - Walk-forward validation charts
+   - Robustness score (0-100) with overfitting detection
+   - Parameters automatically applied for backtesting
+3. **Backtest Tab**: Select specific symbol from category → Run backtest with optimized parameters
+4. **Deploy Tab**: Deploy validated strategy
+
+**Additional Views:**
 - **Data Manager**: Interface to fetch, view, and inspect market data (gaps, outliers).
-- **Backtest**: Configure and run simulations with visual results (charts, trade lists).
-- **Analysis**: Advanced tools for Monte Carlo simulation, Correlation matrix, and Walk Forward Analysis.
+- **Analysis**: Advanced tools for Monte Carlo simulation, Correlation matrix, and custom Walk Forward Analysis.
 - **Sentiment**: Fear & Greed index history and asset-specific sentiment metrics.
 
 ---
@@ -301,6 +314,7 @@ docker build -t alphafield .
 | Document | Description |
 |----------|-------------|
 | [Architecture](doc/architecture.md) | System design and data flow |
+| [Optimization Workflow](doc/optimization_workflow.md) | **NEW**: Comprehensive parameter optimization guide |
 | [Detailed Design](doc/detailed_design.md) | Technical specifications |
 | [Roadmap](doc/roadmap.md) | Development phases and progress |
 | [Project Plan](doc/project_plan.md) | Implementation timeline |
