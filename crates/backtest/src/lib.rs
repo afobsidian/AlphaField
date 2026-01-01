@@ -12,8 +12,8 @@ pub mod error;
 pub mod exchange;
 pub mod metrics;
 pub mod monte_carlo;
-pub mod optimizer;
 pub mod optimization_workflow;
+pub mod optimizer;
 pub mod portfolio;
 pub mod rolling_stats;
 pub mod sensitivity;
@@ -36,11 +36,11 @@ pub use error::BacktestError;
 pub use exchange::{ExchangeSimulator, SlippageModel};
 pub use metrics::PerformanceMetrics;
 pub use monte_carlo::{MonteCarloConfig, MonteCarloResult, MonteCarloSimulator};
-pub use optimizer::{
-    get_strategy_bounds, OptimizationResult, ParamBounds, ParamSweepResult, ParameterOptimizer,
-};
 pub use optimization_workflow::{
     OptimizationWorkflow, ParameterDispersion, WorkflowConfig, WorkflowResult,
+};
+pub use optimizer::{
+    get_strategy_bounds, OptimizationResult, ParamBounds, ParamSweepResult, ParameterOptimizer,
 };
 pub use portfolio::Portfolio;
 pub use rolling_stats::{MonthlyReturn, RollingStats};

@@ -660,8 +660,8 @@ pub async fn run_optimization_workflow(
 ) -> Json<WorkflowResponse> {
     let start = std::time::Instant::now();
     info!(
-        strategy = %req.strategy, 
-        symbol = %req.symbol, 
+        strategy = %req.strategy,
+        symbol = %req.symbol,
         "Starting comprehensive optimization workflow"
     );
 
@@ -816,19 +816,13 @@ pub async fn run_optimization_workflow(
 
     let workflow_result = tokio::task::spawn_blocking(move || {
         let workflow = OptimizationWorkflow::new(workflow_config);
-        
+
         // Create factory closure
         let factory = |params: &HashMap<String, f64>| {
             StrategyFactory::create_backtest(&strategy_name, params, &symbol, 100_000.0)
         };
-        
-        workflow.run(
-            &bars,
-            &symbol,
-            &factory,
-            &bounds,
-            sensitivity_params,
-        )
+
+        workflow.run(&bars, &symbol, &factory, &bounds, sensitivity_params)
     })
     .await;
 
@@ -852,9 +846,15 @@ pub async fn run_optimization_workflow(
                 in_sample_return: result.in_sample_metrics.total_return,
                 in_sample_max_drawdown: result.in_sample_metrics.max_drawdown,
                 walk_forward_mean_return: result.walk_forward_validation.aggregate_oos.mean_return,
-                walk_forward_median_return: result.walk_forward_validation.aggregate_oos.median_return,
+                walk_forward_median_return: result
+                    .walk_forward_validation
+                    .aggregate_oos
+                    .median_return,
                 walk_forward_stability_score: result.walk_forward_validation.stability_score,
-                walk_forward_worst_drawdown: result.walk_forward_validation.aggregate_oos.worst_drawdown,
+                walk_forward_worst_drawdown: result
+                    .walk_forward_validation
+                    .aggregate_oos
+                    .worst_drawdown,
                 walk_forward_windows: result.walk_forward_validation.windows.len(),
                 walk_forward_validation: Some(result.walk_forward_validation),
                 parameter_dispersion: result.parameter_dispersion,
@@ -917,4 +917,3 @@ pub async fn run_optimization_workflow(
         }
     }
 }
-

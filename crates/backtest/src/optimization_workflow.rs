@@ -13,7 +13,9 @@ use crate::engine::BacktestEngine;
 use crate::exchange::SlippageModel;
 use crate::metrics::PerformanceMetrics;
 use crate::optimizer::{OptimizationResult, ParamBounds, ParameterOptimizer};
-use crate::sensitivity::{ParameterRange, SensitivityAnalyzer, SensitivityConfig, SensitivityResult};
+use crate::sensitivity::{
+    ParameterRange, SensitivityAnalyzer, SensitivityConfig, SensitivityResult,
+};
 use crate::strategy::Strategy;
 use crate::walk_forward::{WalkForwardAnalyzer, WalkForwardConfig, WalkForwardResult};
 use alphafield_core::Bar;
@@ -119,18 +121,12 @@ impl ParameterDispersion {
         let positive_sharpe = sharpe_values.iter().filter(|&&x| x > 0.0).count() as f64;
         let positive_return = return_values.iter().filter(|&&x| x > 0.0).count() as f64;
 
-        let sharpe_min = sharpe_values
-            .iter()
-            .cloned()
-            .fold(f64::INFINITY, f64::min);
+        let sharpe_min = sharpe_values.iter().cloned().fold(f64::INFINITY, f64::min);
         let sharpe_max = sharpe_values
             .iter()
             .cloned()
             .fold(f64::NEG_INFINITY, f64::max);
-        let return_min = return_values
-            .iter()
-            .cloned()
-            .fold(f64::INFINITY, f64::min);
+        let return_min = return_values.iter().cloned().fold(f64::INFINITY, f64::min);
         let return_max = return_values
             .iter()
             .cloned()
@@ -242,8 +238,12 @@ impl OptimizationWorkflow {
         // Phase 1: Grid Search Optimization on in-sample data
         info!("Phase 1: Running grid search optimization");
         let optimizer = ParameterOptimizer::new(self.config.initial_capital, self.config.fee_rate);
-        let optimization_result =
-            optimizer.optimize(in_sample_data, symbol, |params| strategy_factory(params), bounds)?;
+        let optimization_result = optimizer.optimize(
+            in_sample_data,
+            symbol,
+            |params| strategy_factory(params),
+            bounds,
+        )?;
 
         info!(
             best_sharpe = optimization_result.best_sharpe,
@@ -264,7 +264,8 @@ impl OptimizationWorkflow {
 
         // Phase 3: Walk-Forward Validation on full dataset
         info!("Phase 3: Running walk-forward validation");
-        let walk_forward_analyzer = WalkForwardAnalyzer::new(self.config.walk_forward_config.clone());
+        let walk_forward_analyzer =
+            WalkForwardAnalyzer::new(self.config.walk_forward_config.clone());
 
         // Create strategy factory that uses optimized parameters
         let optimized_params = optimization_result.best_params.clone();
@@ -273,8 +274,7 @@ impl OptimizationWorkflow {
                 .expect("Failed to create strategy with optimized parameters")
         };
 
-        let walk_forward_result =
-            walk_forward_analyzer.analyze(data, symbol, wf_factory)?;
+        let walk_forward_result = walk_forward_analyzer.analyze(data, symbol, wf_factory)?;
 
         info!(
             windows = walk_forward_result.windows.len(),
@@ -287,7 +287,7 @@ impl OptimizationWorkflow {
         let sensitivity_3d = if self.config.include_3d_sensitivity {
             if let Some((param_x, param_y)) = sensitivity_params {
                 info!("Phase 4: Running 3D sensitivity analysis");
-                
+
                 let sens_config = SensitivityConfig {
                     initial_capital: self.config.initial_capital,
                     fee_rate: self.config.fee_rate,
@@ -299,7 +299,7 @@ impl OptimizationWorkflow {
                 let fixed_params = optimization_result.best_params.clone();
                 let x_name = param_x.name.clone();
                 let y_name = param_y.name.clone();
-                
+
                 let sens_factory = |x_val: f64, y_val: f64| -> Option<Box<dyn Strategy>> {
                     let mut params = fixed_params.clone();
                     params.insert(x_name.clone(), x_val);
@@ -307,7 +307,8 @@ impl OptimizationWorkflow {
                     strategy_factory(&params)
                 };
 
-                match analyzer.analyze_2d(in_sample_data, symbol, &param_x, &param_y, sens_factory) {
+                match analyzer.analyze_2d(in_sample_data, symbol, &param_x, &param_y, sens_factory)
+                {
                     Ok(result) => {
                         info!("3D sensitivity analysis complete");
                         Some(result)

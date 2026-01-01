@@ -3,9 +3,7 @@
 //! This test verifies that the complete optimization workflow runs successfully
 //! with a simple strategy and mock data.
 
-use alphafield_backtest::{
-    OptimizationWorkflow, ParameterRange, StrategyAdapter, WorkflowConfig,
-};
+use alphafield_backtest::{OptimizationWorkflow, ParameterRange, StrategyAdapter, WorkflowConfig};
 use alphafield_core::Bar;
 use alphafield_strategy::GoldenCrossStrategy;
 use chrono::{Duration, Utc};
@@ -84,7 +82,11 @@ fn test_optimization_workflow_basic() {
     let result = workflow.run(&data, symbol, &factory, &bounds, None);
 
     // Verify workflow completed successfully
-    assert!(result.is_ok(), "Workflow should complete successfully: {:?}", result.err());
+    assert!(
+        result.is_ok(),
+        "Workflow should complete successfully: {:?}",
+        result.err()
+    );
 
     let workflow_result = result.unwrap();
 
@@ -121,9 +123,18 @@ fn test_optimization_workflow_basic() {
     );
 
     println!("✓ Workflow completed successfully");
-    println!("  - Iterations tested: {}", workflow_result.optimization.iterations_tested);
-    println!("  - Best Sharpe: {:.2}", workflow_result.optimization.best_sharpe);
-    println!("  - Robustness score: {:.2}", workflow_result.robustness_score);
+    println!(
+        "  - Iterations tested: {}",
+        workflow_result.optimization.iterations_tested
+    );
+    println!(
+        "  - Best Sharpe: {:.2}",
+        workflow_result.optimization.best_sharpe
+    );
+    println!(
+        "  - Robustness score: {:.2}",
+        workflow_result.robustness_score
+    );
     println!(
         "  - Walk-forward stability: {:.2}",
         workflow_result.walk_forward_validation.stability_score
@@ -186,7 +197,10 @@ fn test_optimization_workflow_with_sensitivity() {
     // Run workflow with 3D sensitivity
     let result = workflow.run(&data, symbol, &factory, &bounds, Some((param_x, param_y)));
 
-    assert!(result.is_ok(), "Workflow with 3D sensitivity should succeed");
+    assert!(
+        result.is_ok(),
+        "Workflow with 3D sensitivity should succeed"
+    );
 
     let workflow_result = result.unwrap();
 
@@ -197,18 +211,28 @@ fn test_optimization_workflow_with_sensitivity() {
     );
 
     let sensitivity = workflow_result.sensitivity_3d.unwrap();
-    assert!(
-        sensitivity.heatmap.is_some(),
-        "Heatmap should be generated"
-    );
+    assert!(sensitivity.heatmap.is_some(), "Heatmap should be generated");
 
     let heatmap = sensitivity.heatmap.unwrap();
-    assert_eq!(heatmap.x_param, "fast_period", "X parameter should be fast_period");
-    assert_eq!(heatmap.y_param, "slow_period", "Y parameter should be slow_period");
-    assert!(!heatmap.sharpe_matrix.is_empty(), "Sharpe matrix should not be empty");
+    assert_eq!(
+        heatmap.x_param, "fast_period",
+        "X parameter should be fast_period"
+    );
+    assert_eq!(
+        heatmap.y_param, "slow_period",
+        "Y parameter should be slow_period"
+    );
+    assert!(
+        !heatmap.sharpe_matrix.is_empty(),
+        "Sharpe matrix should not be empty"
+    );
 
     println!("✓ Workflow with 3D sensitivity completed successfully");
-    println!("  - Heatmap dimensions: {}x{}", heatmap.x_values.len(), heatmap.y_values.len());
+    println!(
+        "  - Heatmap dimensions: {}x{}",
+        heatmap.x_values.len(),
+        heatmap.y_values.len()
+    );
 }
 
 #[test]
