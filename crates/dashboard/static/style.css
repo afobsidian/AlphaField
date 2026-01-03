@@ -388,7 +388,13 @@ body {
    Grids & Layouts
    =========================== */
 
-.build-grid,
+.build-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+    align-items: start;
+}
+
 .deploy-grid {
     display: grid;
     grid-template-columns: 350px 1fr;
@@ -1136,6 +1142,7 @@ body {
 .optimize-controls .mode-option {
     padding: 12px;
 }
+
 /* Comprehensive Workflow Specific Styles */
 .robustness-score {
     font-size: 1.5em;
@@ -1244,16 +1251,17 @@ body {
     accent-color: var(--primary-color);
 }
 
-#rsi-panel, #macd-panel {
+#rsi-panel,
+#macd-panel {
     background: rgba(255, 255, 255, 0.03);
     padding: 16px;
     border-radius: 8px;
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-#rsi-panel h4, #macd-panel h4 {
+#rsi-panel h4,
+#macd-panel h4 {
     margin: 0 0 12px 0;
     font-size: 14px;
     color: var(--text-primary);
 }
-

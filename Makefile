@@ -14,6 +14,14 @@ ci: fmt lint test
 docker-build:
 	docker build -t alphafield:latest .
 
+## Start Docker database
+docker-db-up:
+	docker-compose up -d timescaledb
+
+## Stop Docker database
+docker-db-down:
+	docker-compose down -v timescaledb
+
 ## Start Docker environment
 docker-up:
 	docker-compose up -d
@@ -86,6 +94,8 @@ help:
 	@echo ""
 	@echo "Docker:"
 	@echo "  docker-build   - Build Docker image"
+	@echo "  docker-db-up   - Start Docker database"
+	@echo "  docker-db-down - Stop Docker database"
 	@echo "  docker-up      - Start Docker environment"
 	@echo "  docker-down    - Stop Docker environment"
 	@echo "  docker-reset   - Reset Docker environment"

@@ -10,16 +10,24 @@ pub mod drawdown;
 pub mod engine;
 pub mod error;
 pub mod exchange;
+pub mod journal;
 pub mod metrics;
+pub mod ml;
 pub mod monte_carlo;
 pub mod optimization_workflow;
 pub mod optimizer;
 pub mod portfolio;
+pub mod reports;
 pub mod rolling_stats;
 pub mod sensitivity;
 pub mod strategy;
+pub mod tax;
 pub mod trade;
 pub mod walk_forward;
+
+pub use journal::{JournalEntry, TradeJournal};
+pub use reports::{PerformanceReport, PeriodSummary, ReportPeriod, StrategyBreakdown};
+pub use tax::{CostBasisMethod, TaxCalculator, TaxLot, TaxSummary, TaxableEvent};
 
 pub use adapter::StrategyAdapter;
 pub use asset_sentiment::{

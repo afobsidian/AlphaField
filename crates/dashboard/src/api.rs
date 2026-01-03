@@ -11,6 +11,10 @@ use crate::mock_data::{
     generate_mock_orders, generate_mock_performance, generate_mock_portfolio,
     generate_mock_positions, PerformanceMetrics, Portfolio, Position,
 };
+use crate::reports_api::{
+    add_journal_entry, calculate_tax, delete_journal_entry, export_report_csv, export_tax_csv,
+    generate_summary, get_strategy_breakdown, list_journal, update_journal_entry,
+};
 use crate::websocket::DashboardHub;
 use alphafield_core::Order;
 use alphafield_data::DatabaseClient;
@@ -97,6 +101,7 @@ use crate::backtest_api::{
 };
 use crate::chart_api::get_chart_data;
 use crate::data_api::{delete_symbol, fetch_symbol, get_trading_pairs, list_symbols};
+use crate::ml_api::{delete_model, list_models, train_model, train_multi_symbol, validate_model};
 use crate::quality_api::{check_freshness, check_gaps, check_outliers, get_quality_summary};
 use crate::sentiment_api::{get_current_sentiment, get_sentiment_history, sync_sentiment_data};
 use crate::websocket::websocket_handler;
@@ -151,5 +156,24 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/api/sentiment/current", get(get_current_sentiment))
         .route("/api/sentiment/history", get(get_sentiment_history))
         .route("/api/sentiment/sync", post(sync_sentiment_data))
+        // ML models
+        .route("/api/ml/train", post(train_model))
+        .route("/api/ml/train/multi", post(train_multi_symbol))
+        .route("/api/ml/models", get(list_models))
+        .route("/api/ml/models/:id", delete(delete_model))
+        .route("/api/ml/validate", post(validate_model))
+        // Reports
+        .route("/api/reports/summary", post(generate_summary))
+        .route("/api/reports/strategy", post(get_strategy_breakdown))
+        .route("/api/reports/export", post(export_report_csv))
+        // Journal
+        .route("/api/journal", get(list_journal).post(add_journal_entry))
+        .route(
+            "/api/journal/:id",
+            axum::routing::put(update_journal_entry).delete(delete_journal_entry),
+        )
+        // Tax
+        .route("/api/tax/calculate", post(calculate_tax))
+        .route("/api/tax/export", post(export_tax_csv))
         .with_state(state)
 }

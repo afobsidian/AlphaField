@@ -133,37 +133,34 @@
 
                     <!-- Asset Category Selection Card -->
                     <div class="card strategy-card">
-                        <h3>Select Asset Category</h3>
-                        <p style="font-size: 13px; opacity: 0.8; margin-bottom: 16px;">
-                            Optimization will train across multiple assets in this category using random time periods
-                        </p>
+                        <h3>Asset Category</h3>
                         <div class="strategy-options">
                             <label class="strategy-option">
                                 <input type="radio" name="asset-category" value="market" checked>
                                 <div class="strategy-info">
                                     <span class="strategy-name">📊 Market</span>
-                                    <span class="strategy-desc">Top 10 by market cap</span>
+                                    <span class="strategy-desc">Top 10 by cap</span>
                                 </div>
                             </label>
                             <label class="strategy-option">
                                 <input type="radio" name="asset-category" value="large-cap">
                                 <div class="strategy-info">
                                     <span class="strategy-name">🏢 Large Cap</span>
-                                    <span class="strategy-desc">Established coins (rank 1-30)</span>
+                                    <span class="strategy-desc">Rank 1-30</span>
                                 </div>
                             </label>
                             <label class="strategy-option">
                                 <input type="radio" name="asset-category" value="mid-cap">
                                 <div class="strategy-info">
                                     <span class="strategy-name">🔷 Mid Cap</span>
-                                    <span class="strategy-desc">Growing projects (rank 31-100)</span>
+                                    <span class="strategy-desc">Rank 31-100</span>
                                 </div>
                             </label>
                             <label class="strategy-option">
                                 <input type="radio" name="asset-category" value="small-cap">
                                 <div class="strategy-info">
                                     <span class="strategy-name">💎 Small Cap</span>
-                                    <span class="strategy-desc">Emerging tokens (rank 101-300)</span>
+                                    <span class="strategy-desc">Rank 101-300</span>
                                 </div>
                             </label>
                             <label class="strategy-option">
@@ -174,15 +171,53 @@
                                 </div>
                             </label>
                         </div>
+                    </div>
 
-                        <!-- Action Button -->
-                        <div style="margin-top: 24px; text-align: center;">
-                            <button type="button" class="btn btn-primary btn-action" onclick="goToOptimize()"
-                                style="min-width: 200px;">
-                                Next: Optimize Parameters →
-                            </button>
+                    <!-- ML Enhancement Card -->
+                    <div class="card strategy-card">
+                        <h3>🤖 ML Enhancement</h3>
+                        <div class="strategy-options">
+                            <label class="strategy-option"
+                                style="background: rgba(139, 92, 246, 0.1); border-color: rgba(139, 92, 246, 0.3);">
+                                <input type="checkbox" id="ml-enabled" onchange="toggleMLMode()">
+                                <div class="strategy-info">
+                                    <span class="strategy-name">Enable ML</span>
+                                    <span class="strategy-desc">Train model during optimization</span>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div id="ml-options" class="hidden"
+                            style="margin-top: 12px; padding: 12px; background: rgba(139, 92, 246, 0.05); border-radius: 8px;">
+                            <div class="form-group" style="margin-bottom: 12px;">
+                                <label
+                                    style="display: block; margin-bottom: 6px; font-weight: 500; font-size: 12px;">Model
+                                    Type</label>
+                                <select id="ml-model-type" class="form-select" onchange="updateMLModelType(this.value)"
+                                    style="padding: 8px 12px; font-size: 12px;">
+                                    <option value="linear">Linear Regression</option>
+                                    <option value="logistic">Logistic Regression</option>
+                                    <option value="rf">Random Forest</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label style="display: block; margin-bottom: 6px; font-weight: 500; font-size: 12px;">
+                                    Confidence: <span id="ml-confidence-value">60%</span>
+                                </label>
+                                <input type="range" id="ml-confidence" min="50" max="90" step="5" value="60"
+                                    style="width: 100%;" onchange="updateMLConfidence(this.value)">
+                            </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- Action Button (Full Width) -->
+                <div style="margin-top: 24px; text-align: center;">
+                    <button type="button" class="btn btn-primary btn-action" onclick="goToOptimize()"
+                        style="max-width: 400px;">
+                        Next: Optimize Parameters →
+                    </button>
                 </div>
             </section>
 
@@ -428,9 +463,14 @@
                                     <span style="font-weight: 600;">Strategy:</span>
                                     <span id="opt-display-strategy">—</span>
                                 </div>
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div
+                                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                                     <span style="font-weight: 600;">Asset Category:</span>
                                     <span id="opt-display-category">—</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-weight: 600;">ML Enhancement:</span>
+                                    <span id="opt-display-ml">Disabled</span>
                                 </div>
                             </div>
                             <p style="font-size: 13px; opacity: 0.8;">
@@ -449,6 +489,8 @@
                                 <br>• Parameter dispersion analysis
                                 <br>• Walk-forward validation
                                 <br>• Robustness scoring
+                                <br><span id="ml-pipeline-item" class="hidden">• 🤖 ML model training &amp;
+                                    validation</span>
                             </p>
                             <button type="button" class="btn btn-primary btn-action" onclick="runAutoOptimize()"
                                 style="width: 100%; padding: 16px; font-size: 16px;">
@@ -588,6 +630,209 @@
                             <div class="placeholder-content">
                                 <span class="placeholder-icon">🔄</span>
                                 <span>Run optimization to see walk-forward validation</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Reports Tab -->
+            <section id="reports-view" class="view-section">
+                <div class="view-header display-flex justify-content-between">
+                    <div>
+                        <h1>📊 Trade Reports</h1>
+                        <p>Performance analytics, trade journal, and tax reporting</p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <ul class="nav nav-tabs card-header-tabs" id="reportTabs" role="tablist">
+                            <li class="nav-item">
+                                <button class="nav-link active" data-bs-toggle="tab"
+                                    data-bs-target="#performance-report" type="button">Performance</button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tax-report"
+                                    type="button">Tax</button>
+                            </li>
+                            <li class="nav-item">
+                                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#trade-journal"
+                                    type="button">Journal</button>
+                            </li>
+                        </ul>
+                        <button class="btn btn-outline-primary btn-sm" id="export-csv-btn" onclick="exportReportCSV()">
+                            <i class="fas fa-download"></i> Export CSV
+                        </button>
+                    </div>
+                    <div class="card-body">
+                        <div class="tab-content" id="reportContent">
+                            <!-- Performance Report -->
+                            <div class="tab-pane fade show active" id="performance-report">
+                                <div class="row mb-3 align-items-center">
+                                    <div class="col-auto">
+                                        <label class="form-label mb-0">Period:</label>
+                                    </div>
+                                    <div class="col-auto">
+                                        <select class="form-select form-select-sm" id="report-period"
+                                            onchange="updatePerformanceReport()">
+                                            <option value="Daily">Daily</option>
+                                            <option value="Weekly">Weekly</option>
+                                            <option value="Monthly" selected>Monthly</option>
+                                            <option value="Yearly">Yearly</option>
+                                        </select>
+                                    </div>
+                                    <div class="col text-end">
+                                        <div class="text-muted small" id="report-last-generated"></div>
+                                    </div>
+                                </div>
+
+                                <div id="performance-summary-container">
+                                    <div class="alert alert-info" id="report-placeholder">
+                                        Run a backtest to generate performance data.
+                                    </div>
+
+                                    <div id="report-metrics" style="display:none;">
+                                        <!-- Overall Stats -->
+                                        <div class="row g-3 mb-4">
+                                            <div class="col-md-3">
+                                                <div class="metric-card">
+                                                    <div class="metric-label">Total P&L</div>
+                                                    <div class="metric-value big" id="report-total-pnl">--</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="metric-card">
+                                                    <div class="metric-label">Win Rate</div>
+                                                    <div class="metric-value" id="report-win-rate">--</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="metric-card">
+                                                    <div class="metric-label">Profit Factor</div>
+                                                    <div class="metric-value" id="report-profit-factor">--</div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-3">
+                                                <div class="metric-card">
+                                                    <div class="metric-label">Trades</div>
+                                                    <div class="metric-value" id="report-total-trades">--</div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Period Breakdown Chart -->
+                                        <div class="chart-container mb-4" style="height: 300px;">
+                                            <div id="report-pnl-chart"></div>
+                                        </div>
+
+                                        <!-- Period Table -->
+                                        <h5>Period Breakdown</h5>
+                                        <div class="table-responsive">
+                                            <table class="table table-sm table-hover" id="report-period-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Period</th>
+                                                        <th>P&L</th>
+                                                        <th>Trades</th>
+                                                        <th>Win Rate</th>
+                                                        <th>Best Trade</th>
+                                                        <th>Worst Trade</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Tax Report -->
+                            <div class="tab-pane fade" id="tax-report">
+                                <div class="row mb-4 align-items-center">
+                                    <div class="col-auto">
+                                        <label class="form-label mb-0">Cost Basis Method:</label>
+                                    </div>
+                                    <div class="col-auto">
+                                        <select class="form-select form-select-sm" id="tax-method">
+                                            <option value="FIFO">FIFO (First-In First-Out)</option>
+                                            <option value="LIFO">LIFO (Last-In First-Out)</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-auto">
+                                        <button class="btn btn-primary btn-sm"
+                                            onclick="generateTaxReport()">Calculate</button>
+                                    </div>
+                                    <div class="col text-end">
+                                        <button class="btn btn-outline-secondary btn-sm" onclick="exportTaxCSV()"
+                                            disabled id="btn-export-tax">
+                                            Download Tax CSV
+                                        </button>
+                                    </div>
+                                </div>
+                                <div id="tax-summary-container">
+                                    <div class="alert alert-info" id="tax-placeholder">
+                                        Calculates realized gains/losses based on completed trades.
+                                    </div>
+
+                                    <div id="tax-results" style="display:none;">
+                                        <h5>Annual Summary</h5>
+                                        <table class="table table-sm table-bordered mb-4" id="tax-yearly-table">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th>Year</th>
+                                                    <th>Short-Term Gain</th>
+                                                    <th>Long-Term Gain</th>
+                                                    <th>Total Net Gain/Loss</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody></tbody>
+                                        </table>
+
+                                        <h5>Taxable Events</h5>
+                                        <div class="table-responsive" style="max_height: 400px; overflow-y: auto;">
+                                            <table class="table table-sm table-hover" id="tax-events-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Date Sold</th>
+                                                        <th>Symbol</th>
+                                                        <th>Qty</th>
+                                                        <th>Proceeds</th>
+                                                        <th>Cost Basis</th>
+                                                        <th>Gain/Loss</th>
+                                                        <th>Term</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody></tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Trade Journal -->
+                            <div class="tab-pane fade" id="trade-journal">
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle" id="journal-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Symbol</th>
+                                                <th>Side</th>
+                                                <th>P&L</th>
+                                                <th>Tags</th>
+                                                <th style="width: 30%;">Notes</th>
+                                                <th>Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <!-- Journal entries -->
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="text-center p-3 text-muted" id="journal-empty">
+                                    No journal entries found. Runs trades to populate journal.
+                                </div>
                             </div>
                         </div>
                     </div>

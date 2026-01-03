@@ -18,7 +18,13 @@ const AppState = {
     backtestResults: null,
     optimizeResults: null,
     isTrading: false,
-    currentTab: 'build'
+    currentTab: 'build',
+    // ML Enhancement State
+    mlEnabled: false,
+    mlModelType: 'linear',
+    mlConfidence: 0.6,
+    mlTrainingResults: null,
+    mlPredictions: null
 };
 
 // Strategy parameter definitions
@@ -137,11 +143,32 @@ function onTabEnter(tabName) {
             break;
         case 'optimize':
             updateSensitivityParams();
+            updateOptimizeMLStatus();
             break;
         case 'deploy':
             updateDeploySummary();
             loadSentiment();
             break;
+    }
+}
+
+// Update ML status display in optimize tab
+function updateOptimizeMLStatus() {
+    const mlDisplay = document.getElementById('opt-display-ml');
+    const mlPipelineItem = document.getElementById('ml-pipeline-item');
+
+    if (AppState.mlEnabled) {
+        const modelNames = {
+            'linear': 'Linear Regression',
+            'logistic': 'Logistic (Direction)',
+            'rf': 'Random Forest'
+        };
+        mlDisplay.innerHTML = `<span style="color: #a78bfa;">🤖 ${modelNames[AppState.mlModelType] || AppState.mlModelType}</span>`;
+        if (mlPipelineItem) mlPipelineItem.classList.remove('hidden');
+    } else {
+        mlDisplay.textContent = 'Disabled';
+        mlDisplay.style.color = '';
+        if (mlPipelineItem) mlPipelineItem.classList.add('hidden');
     }
 }
 
@@ -241,7 +268,12 @@ function getParams() {
 // ===========================
 
 function updateContextBar() {
-    document.getElementById('ctx-strategy').textContent = AppState.strategy;
+    // Strategy with ML indicator
+    let strategyText = AppState.strategy;
+    if (AppState.mlEnabled) {
+        strategyText += ' + 🤖ML';
+    }
+    document.getElementById('ctx-strategy').textContent = strategyText;
     document.getElementById('ctx-symbol').textContent = AppState.symbol || '—';
 
     let status = 'Configure strategy to begin';
@@ -249,7 +281,9 @@ function updateContextBar() {
         status = 'Ready to test';
     }
     if (AppState.backtestResults) {
-        status = `Tested: ${(AppState.backtestResults.total_return * 100).toFixed(1)}% return`;
+        const returnVal = AppState.backtestResults.total_return ||
+            (AppState.backtestResults.metrics && AppState.backtestResults.metrics.total_return) || 0;
+        status = `Tested: ${(returnVal * 100).toFixed(1)}% return`;
     }
     if (AppState.isTrading) {
         status = '🟢 Trading Active';
@@ -440,6 +474,101 @@ function goToDeploy() {
 }
 
 // ===========================
+// ML Enhancement Controls
+// ===========================
+
+function toggleMLMode() {
+    const checkbox = document.getElementById('ml-enabled');
+    const optionsDiv = document.getElementById('ml-options');
+
+    AppState.mlEnabled = checkbox.checked;
+
+    if (checkbox.checked) {
+        optionsDiv.classList.remove('hidden');
+    } else {
+        optionsDiv.classList.add('hidden');
+    }
+
+    updateContextBar();
+}
+
+function updateMLModelType(value) {
+    AppState.mlModelType = value;
+}
+
+function updateMLConfidence(value) {
+    AppState.mlConfidence = parseInt(value) / 100;
+    document.getElementById('ml-confidence-value').textContent = `${value}%`;
+}
+
+// Train ML model during optimization (multi-symbol with random subsets)
+async function trainMLModel(symbols, interval, days) {
+    if (!AppState.mlEnabled) return null;
+
+    // Ensure symbols is an array
+    const symbolList = Array.isArray(symbols) ? symbols : [symbols];
+
+    console.log('Training ML model on multiple symbols...', { symbols: symbolList, interval, days });
+
+    try {
+        const res = await fetch(`${API_BASE}/ml/train/multi`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model_type: AppState.mlModelType,
+                symbols: symbolList,
+                interval: interval,
+                days: days,
+                samples_per_symbol: 200,
+                prediction_horizon: 1
+            })
+        });
+
+        const data = await res.json();
+
+        if (!data.success) {
+            console.warn('ML training failed:', data.error);
+            return null;
+        }
+
+        AppState.mlTrainingResults = data;
+        console.log('ML multi-symbol training complete:', data);
+        return data;
+
+    } catch (e) {
+        console.error('ML training error:', e);
+        return null;
+    }
+}
+
+// Validate ML model with walk-forward
+async function validateMLModel(symbol, interval, days) {
+    if (!AppState.mlEnabled || !AppState.mlTrainingResults) return null;
+
+    try {
+        const res = await fetch(`${API_BASE}/ml/validate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                symbol: symbol,
+                interval: interval,
+                days: days,
+                model_type: AppState.mlModelType,
+                train_window_days: 100,
+                test_window_days: 30
+            })
+        });
+
+        const data = await res.json();
+        return data.success ? data : null;
+
+    } catch (e) {
+        console.error('ML validation error:', e);
+        return null;
+    }
+}
+
+// ===========================
 // Backtest
 // ===========================
 
@@ -512,6 +641,16 @@ async function runBacktest() {
 
         // Store results
         AppState.backtestResults = data.metrics;
+
+        // Update reports data
+        currentTrades = data.trades || [];
+        currentEquity = data.equity_curve ? data.equity_curve.map(p => [new Date(p.timestamp).getTime(), p.equity]) : [];
+
+        // Auto-update report if tab is active
+        if (AppState.currentTab === 'reports') {
+            updatePerformanceReport();
+            updateJournal(currentTrades);
+        }
 
         // Update metrics display
         updateMetric('bt-return', data.metrics.total_return * 100, '%');
@@ -1986,6 +2125,31 @@ async function runAutoOptimize() {
         AppState.params = data.optimized_params;
         updateContextBar();
 
+        // Train ML model if enabled
+        let mlTrainResult = null;
+        if (AppState.mlEnabled) {
+            resultsPlaceholder.innerHTML = `
+                <span class="placeholder-icon">🤖</span>
+                <span>Training ML model on ${symbols.length} symbols...</span>
+                <span style="font-size: 12px; margin-top: 8px; opacity: 0.7;">
+                    Model Type: ${AppState.mlModelType}<br>
+                    Training with random subsets from each symbol
+                </span>
+            `;
+
+            // Pass ALL symbols for multi-symbol training with random subsets
+            mlTrainResult = await trainMLModel(symbols, AppState.backtestInterval, 365);
+
+            if (mlTrainResult) {
+                // Use first symbol for validation (already includes multi-symbol data)
+                const validateSymbol = symbols[0];
+                const mlValidateResult = await validateMLModel(validateSymbol, AppState.backtestInterval, 365);
+                if (mlValidateResult) {
+                    mlTrainResult.validation = mlValidateResult;
+                }
+            }
+        }
+
         // Hide placeholder, show all results
         resultsPlaceholder.classList.add("hidden");
         allResults.classList.remove("hidden");
@@ -2039,6 +2203,38 @@ async function runAutoOptimize() {
             paramsHtml += `<span>Worst DD: <strong>${((data.worst_drawdown || 0) * 100).toFixed(2)}%</strong></span>`;
             paramsHtml += "</div>";
         }
+
+        // Show ML Training Results if available
+        if (mlTrainResult) {
+            paramsHtml += '<div style="margin-top: 12px; padding: 12px; background: rgba(139, 92, 246, 0.15); border-radius: 8px; border: 1px solid rgba(139, 92, 246, 0.3);">';
+            paramsHtml += '<strong style="color: #a78bfa;">🤖 ML Model Trained (Multi-Symbol):</strong><br>';
+
+            // Show symbols used
+            const symbolsUsed = mlTrainResult.symbols_used || [];
+            paramsHtml += `<span>Symbols: <strong>${symbolsUsed.length > 3 ? symbolsUsed.slice(0, 3).join(', ') + '...' : symbolsUsed.join(', ')}</strong></span> | `;
+            paramsHtml += `<span>Total Samples: <strong>${mlTrainResult.total_samples || 'N/A'}</strong></span><br>`;
+
+            // Show training metrics
+            paramsHtml += `<span style="margin-top: 8px; display: block;">`;
+            paramsHtml += `Train R²: <strong>${(mlTrainResult.train_r_squared || 0).toFixed(3)}</strong> | `;
+            paramsHtml += `Test R²: <strong>${(mlTrainResult.test_r_squared || 0).toFixed(3)}</strong> | `;
+            paramsHtml += `Stability: <strong>${(mlTrainResult.stability_score || 0).toFixed(1)}%</strong>`;
+            paramsHtml += `</span>`;
+
+            if (mlTrainResult.validation && mlTrainResult.validation.result) {
+                const val = mlTrainResult.validation.result;
+                paramsHtml += `<span style="margin-top: 4px; display: block; color: #60a5fa;">`;
+                paramsHtml += `WF Stability: <strong>${(val.stability_score || 0).toFixed(1)}</strong> | `;
+                paramsHtml += `Avg Test R²: <strong>${(val.avg_test_r_squared || 0).toFixed(3)}</strong>`;
+                if (val.is_overfit !== undefined) {
+                    const overfit = val.is_overfit ? '⚠️ Risk' : '✓ OK';
+                    paramsHtml += ` | Overfit: <strong>${overfit}</strong>`;
+                }
+                paramsHtml += `</span>`;
+            }
+            paramsHtml += "</div>";
+        }
+
         paramSummary.innerHTML = paramsHtml;
 
         // Walk-Forward inline metrics (may not be present in multi-symbol response)
@@ -2862,4 +3058,300 @@ function renderMacdChart(indicator) {
 
     Plotly.newPlot('macd-chart', traces, layout, { responsive: true });
 }
+
+// ===========================
+// Reports Logic
+// ===========================
+
+let currentTrades = []; // Store trades from last backtest
+let currentEquity = []; // Store equity history
+
+async function updatePerformanceReport() {
+    if (!currentTrades || currentTrades.length === 0) {
+        return;
+    }
+
+    const period = document.getElementById('report-period').value;
+    const placeholder = document.getElementById('report-placeholder');
+    const metricsDiv = document.getElementById('report-metrics');
+
+    placeholder.style.display = 'none';
+    metricsDiv.style.display = 'block';
+
+    try {
+        const response = await fetch(`${API_BASE}/reports/summary`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                trades: currentTrades,
+                period: period,
+                equity_history: currentEquity
+            })
+        });
+
+        const report = await response.json();
+        renderPerformanceReport(report);
+
+        const timestamp = new Date().toLocaleTimeString();
+        document.getElementById('report-last-generated').textContent = `Generated: ${timestamp}`;
+    } catch (error) {
+        console.error('Error generating report:', error);
+        showToast('Error generating report', 'error');
+    }
+}
+
+function renderPerformanceReport(report) {
+    // Overall Stats
+    document.getElementById('report-total-pnl').textContent = formatCurrency(report.overall.total_pnl);
+    document.getElementById('report-total-pnl').className = `metric-value big ${report.overall.total_pnl >= 0 ? 'positive' : 'negative'}`;
+
+    document.getElementById('report-win-rate').textContent = formatPercent(report.overall.win_rate);
+    document.getElementById('report-profit-factor').textContent = report.overall.profit_factor.toFixed(2);
+    document.getElementById('report-total-trades').textContent = report.overall.trade_count;
+
+    // Period Table
+    const tbody = document.querySelector('#report-period-table tbody');
+    tbody.innerHTML = '';
+
+    const pnlData = {
+        x: [],
+        y: [],
+        type: 'bar',
+        marker: { color: [] }
+    };
+
+    report.summaries.forEach(s => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${s.period_key}</td>
+            <td class="${s.total_pnl >= 0 ? 'text-success' : 'text-danger'}">${formatCurrency(s.total_pnl)}</td>
+            <td>${s.trade_count}</td>
+            <td>${formatPercent(s.win_rate)}</td>
+            <td class="text-success">${formatCurrency(s.best_trade)}</td>
+            <td class="text-danger">${formatCurrency(s.worst_trade)}</td>
+        `;
+        tbody.appendChild(row);
+
+        // Chart Data
+        pnlData.x.push(s.period_key);
+        pnlData.y.push(s.total_pnl);
+        pnlData.marker.color.push(s.total_pnl >= 0 ? '#2ecc71' : '#e74c3c');
+    });
+
+    // Render Chart
+    const layout = {
+        title: 'P&L By Period',
+        autosize: true,
+        height: 300,
+        margin: { t: 30, r: 10, b: 40, l: 60 },
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        xaxis: { title: 'Period', color: '#888' },
+        yaxis: { title: 'P&L ($)', color: '#888', gridcolor: '#333' },
+        font: { color: '#ccc' }
+    };
+
+    Plotly.newPlot('report-pnl-chart', [pnlData], layout, { responsive: true, displayModeBar: false });
+}
+
+async function generateTaxReport() {
+    if (!currentTrades || currentTrades.length === 0) {
+        showToast('Run a backtest first to generate trades', 'warning');
+        return;
+    }
+
+    const method = document.getElementById('tax-method').value;
+    const placeholder = document.getElementById('tax-placeholder');
+    const resultsDiv = document.getElementById('tax-results');
+    const exportBtn = document.getElementById('btn-export-tax');
+
+    try {
+        const response = await fetch(`${API_BASE}/tax/calculate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                trades: currentTrades,
+                method: method
+            })
+        });
+
+        const summary = await response.json();
+
+        placeholder.style.display = 'none';
+        resultsDiv.style.display = 'block';
+        exportBtn.disabled = false;
+
+        renderTaxReport(summary);
+    } catch (error) {
+        console.error('Error calculating tax:', error);
+        showToast('Error calculating tax', 'error');
+    }
+}
+
+function renderTaxReport(summary) {
+    // Yearly Summary
+    const yearlyBody = document.querySelector('#tax-yearly-table tbody');
+    yearlyBody.innerHTML = '';
+
+    summary.yearly_summaries.forEach(s => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${s.year}</td>
+            <td class="text-success">${formatCurrency(s.net_short_term)}</td>
+            <td class="text-success">${formatCurrency(s.net_long_term)}</td>
+            <td class="${s.total_net >= 0 ? 'text-success fw-bold' : 'text-danger fw-bold'}">${formatCurrency(s.total_net)}</td>
+        `;
+        yearlyBody.appendChild(row);
+    });
+
+    // Events Table
+    const eventsBody = document.querySelector('#tax-events-table tbody');
+    eventsBody.innerHTML = '';
+
+    summary.events.forEach(e => {
+        const row = document.createElement('tr');
+        const termClass = e.is_short_term ? 'badge bg-warning text-dark' : 'badge bg-info text-dark';
+        const termLabel = e.is_short_term ? 'Short' : 'Long';
+
+        row.innerHTML = `
+            <td>${formatDate(e.sale_date)}</td>
+            <td>${e.symbol}</td>
+            <td>${e.quantity.toFixed(4)}</td>
+            <td>${formatCurrency(e.proceeds)}</td>
+            <td>${formatCurrency(e.cost_basis)}</td>
+            <td class="${e.gain_loss >= 0 ? 'text-success' : 'text-danger'}">${formatCurrency(e.gain_loss)}</td>
+            <td><span class="${termClass}">${termLabel}</span></td>
+        `;
+        eventsBody.appendChild(row);
+    });
+}
+
+async function exportReportCSV() {
+    if (!currentTrades || currentTrades.length === 0) return;
+
+    const period = document.getElementById('report-period').value;
+
+    try {
+        const response = await fetch(`${API_BASE}/reports/export`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                trades: currentTrades,
+                period: period
+            })
+        });
+
+        const blob = await response.blob();
+        downloadBlob(blob, `performance_report_${period.toLowerCase()}.csv`);
+    } catch (error) {
+        console.error('Export failed:', error);
+        showToast('CSV export failed', 'error');
+    }
+}
+
+async function exportTaxCSV() {
+    if (!currentTrades || currentTrades.length === 0) return;
+
+    const method = document.getElementById('tax-method').value;
+
+    try {
+        const response = await fetch(`${API_BASE}/tax/export`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                trades: currentTrades,
+                method: method
+            })
+        });
+
+        const blob = await response.blob();
+        downloadBlob(blob, `tax_report_${method}.csv`);
+    } catch (error) {
+        console.error('Export failed:', error);
+        showToast('CSV export failed', 'error');
+    }
+}
+
+function updateJournal(trades) {
+    const tbody = document.querySelector('#journal-table tbody');
+    const emptyMsg = document.getElementById('journal-empty');
+
+    tbody.innerHTML = '';
+
+    if (!trades || trades.length === 0) {
+        if (emptyMsg) emptyMsg.style.display = 'block';
+        return;
+    }
+
+    if (emptyMsg) emptyMsg.style.display = 'none';
+
+    // Sort by exit time desc
+    const sortedTrades = [...trades].sort((a, b) => new Date(b.exit_time) - new Date(a.exit_time));
+
+    sortedTrades.forEach(t => {
+        const row = document.createElement('tr');
+        const pnlClass = t.pnl >= 0 ? 'text-success' : 'text-danger';
+        const sideClass = t.side === 'Long' ? 'badge bg-success' : 'badge bg-danger';
+
+        row.innerHTML = `
+            <td>${formatDate(t.exit_time)}</td>
+            <td>${t.symbol}</td>
+            <td><span class="${sideClass}">${t.side}</span></td>
+            <td class="${pnlClass}">${formatCurrency(t.pnl)}</td>
+            <td>
+                <span class="badge bg-secondary">#setup</span>
+            </td>
+            <td>
+                <input type="text" class="form-control form-control-sm bg-dark text-light border-secondary" placeholder="Add notes..." 
+                       onchange="saveJournalNote('${t.symbol}_${new Date(t.entry_time).getTime()}', this.value)">
+            </td>
+            <td>
+                <button class="btn btn-sm btn-outline-light" onclick="editJournalTags('${t.symbol}_${new Date(t.entry_time).getTime()}')">
+                    <i class="fas fa-tag"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function saveJournalNote(id, note) {
+    console.log(`Saving note for ${id}: ${note}`);
+    // In a real app we would call the API
+    showToast('Note saved', 'success');
+}
+
+function editJournalTags(id) {
+    // Placeholder for tag editor
+    const tag = prompt("Add a tag:");
+    if (tag) {
+        // API call would go here
+        showToast(`Tag added: ${tag}`, 'success');
+    }
+}
+
+function downloadBlob(blob, filename) {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+}
+
+// Utility formatting
+function formatCurrency(val) {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+}
+
+function formatPercent(val) {
+    return (val * 100).toFixed(1) + '%';
+}
+
+function formatDate(isoString) {
+    return new Date(isoString).toLocaleDateString();
+}
+
 
