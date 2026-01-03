@@ -99,6 +99,12 @@ use crate::analysis_api::{
 use crate::backtest_api::{
     optimize_params, run_backtest, run_multi_symbol_workflow, run_optimization_workflow,
 };
+use crate::bots_api::{
+    create_dca_bot, create_grid_bot, create_trailing_order, delete_dca_bot, delete_grid_bot,
+    delete_trailing_order, get_bot_status, list_dca_bots, list_grid_bots, list_trailing_orders,
+    pause_dca_bot, start_dca_bot, start_grid_bot, start_trailing_order, stop_dca_bot,
+    stop_grid_bot, stop_trailing_order,
+};
 use crate::chart_api::get_chart_data;
 use crate::data_api::{delete_symbol, fetch_symbol, get_trading_pairs, list_symbols};
 use crate::ml_api::{delete_model, list_models, train_model, train_multi_symbol, validate_model};
@@ -175,5 +181,26 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Tax
         .route("/api/tax/calculate", post(calculate_tax))
         .route("/api/tax/export", post(export_tax_csv))
+        // Bots - DCA
+        .route("/api/bots/dca", get(list_dca_bots).post(create_dca_bot))
+        .route("/api/bots/dca/:id/start", post(start_dca_bot))
+        .route("/api/bots/dca/:id/pause", post(pause_dca_bot))
+        .route("/api/bots/dca/:id/stop", post(stop_dca_bot))
+        .route("/api/bots/dca/:id", delete(delete_dca_bot))
+        // Bots - Grid
+        .route("/api/bots/grid", get(list_grid_bots).post(create_grid_bot))
+        .route("/api/bots/grid/:id/start", post(start_grid_bot))
+        .route("/api/bots/grid/:id/stop", post(stop_grid_bot))
+        .route("/api/bots/grid/:id", delete(delete_grid_bot))
+        // Bots - Trailing
+        .route(
+            "/api/bots/trailing",
+            get(list_trailing_orders).post(create_trailing_order),
+        )
+        .route("/api/bots/trailing/:id/start", post(start_trailing_order))
+        .route("/api/bots/trailing/:id/stop", post(stop_trailing_order))
+        .route("/api/bots/trailing/:id", delete(delete_trailing_order))
+        // Bots - Status
+        .route("/api/bots/status", get(get_bot_status))
         .with_state(state)
 }

@@ -60,6 +60,7 @@ dependencies = [
  "chrono",
  "dotenvy",
  "futures",
+ "lazy_static",
  "rand",
  "serde",
  "serde_json",

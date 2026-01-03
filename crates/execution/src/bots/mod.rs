@@ -7,9 +7,9 @@ pub mod dca;
 pub mod grid;
 pub mod trailing;
 
-pub use dca::{DCABot, DCAConfig};
-pub use grid::{GridBot, GridConfig};
-pub use trailing::{TrailingOrder, TrailingConfig, TrailingType};
+pub use dca::{AmountType, DCABot, DCAConfig, Frequency};
+pub use grid::{GridBot, GridConfig, GridLevel};
+pub use trailing::{TrailingConfig, TrailingOrder, TrailingType};
 
 use alphafield_core::Result;
 use chrono::{DateTime, Utc};
