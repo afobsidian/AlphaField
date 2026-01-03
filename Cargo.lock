@@ -23,6 +23,7 @@ version = "0.1.0"
 dependencies = [
  "alphafield-core",
  "alphafield-data",
+ "alphafield-execution",
  "alphafield-strategy",
  "chrono",
  "dotenvy",

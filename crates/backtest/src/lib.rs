@@ -5,6 +5,7 @@
 pub mod adapter;
 pub mod asset_sentiment;
 pub mod benchmark;
+pub mod bot_strategies;
 pub mod correlation;
 pub mod drawdown;
 pub mod engine;
@@ -35,6 +36,7 @@ pub use asset_sentiment::{
     MomentumZone, RsiZone,
 };
 pub use benchmark::{BenchmarkComparison, BenchmarkConfig, BenchmarkType};
+pub use bot_strategies::{DCABotStrategy, GridBotStrategy, TrailingStopStrategy};
 pub use correlation::{
     CorrelationAnalyzer, CorrelationConfig, CorrelationMatrix, CorrelationResult,
 };

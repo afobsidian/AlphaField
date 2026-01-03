@@ -4,6 +4,8 @@
 
 AlphaField includes three types of automated trading bots that execute predefined strategies without manual intervention. This guide covers configuration, usage, and best practices for each bot type.
 
+**Key Integration**: Bot strategies fully integrate with AlphaField's **Build → Optimize → Backtest** workflow, allowing you to validate bot performance before live deployment.
+
 ---
 
 ## 📊 Overview
@@ -25,6 +27,72 @@ All bots share these capabilities:
 - **Risk Controls**: Built-in safeguards prevent runaway behavior
 - **Persistence**: State saved for seamless restarts
 - **REST API**: Full programmatic control
+- **✨ Backtesting Integration**: Test bots with historical data before going live
+- **✨ Parameter Optimization**: Find optimal bot settings using walk-forward analysis
+
+---
+
+## 🧪 Backtesting & Optimization
+
+Before deploying any bot to live trading, you should **always backtest** it first using AlphaField's backtesting engine.
+
+### Why Backtest Bots?
+
+- **Validate Strategy**: Ensure the bot logic works as expected
+- **Optimize Parameters**: Find the best settings (frequency, grid levels, trailing %, etc.)
+- **Risk Assessment**: Understand potential drawdowns and win rates
+- **Compare Performance**: Test against buy-and-hold or other strategies
+
+### How to Backtest Bots
+
+Bots implement the same `Strategy` trait as traditional strategies, so they work with all existing tools:
+
+```rust
+use alphafield_backtest::{BacktestEngine, DCABotStrategy, PerformanceMetrics};
+use alphafield_execution::Frequency;
+
+// Create a DCA bot strategy
+let dca_strategy = DCABotStrategy::simple(
+    "BTCUSDT",
+    100.0,              // Amount per buy
+    Frequency::Weekly,  // Frequency
+    10000.0            // Initial capital
+);
+
+// Run backtest
+let mut engine = BacktestEngine::new(10000.0, "BTCUSDT");
+for bar in historical_bars {
+    engine.process_bar(&bar, Box::new(dca_strategy.clone()))?;
+}
+
+// Analyze results
+let metrics = PerformanceMetrics::from_trades(&engine.trades(), 10000.0);
+println!("Total Return: {:.2}%", metrics.total_return * 100.0);
+```
+
+### Optimization Workflow
+
+Use the existing optimization tools to find the best bot parameters:
+
+1. **Parameter Sweep**: Test different bot configurations
+2. **Walk-Forward Analysis**: Validate on out-of-sample data
+3. **Sensitivity Analysis**: Understand parameter robustness
+4. **Monte Carlo**: Test strategy resilience
+
+**Example**: Optimize DCA frequency and amount:
+```rust
+use alphafield_backtest::OptimizationWorkflow;
+
+// Grid search over frequency and amount
+for frequency in [Frequency::Daily, Frequency::Weekly, Frequency::Monthly] {
+    for amount in [50.0, 100.0, 200.0] {
+        let strategy = DCABotStrategy::simple("BTCUSDT", amount, frequency, 10000.0);
+        // Run backtest and collect metrics...
+    }
+}
+```
+
+See `crates/backtest/examples/bot_backtest.rs` for complete examples.
 
 ---
 
@@ -382,11 +450,143 @@ Replace `{type}` with: `dca`, `grid`, or `trailing`
 
 ---
 
+## 🔄 Recommended Workflow: Build → Optimize → Backtest → Deploy
+
+AlphaField enforces a disciplined workflow to ensure bot strategies are thoroughly validated before live deployment.
+
+### Step 1: Build Your Bot Configuration
+
+Define your bot strategy with initial parameters:
+
+```rust
+// Example: DCA Bot
+let dca_config = DCAConfig {
+    symbol: "BTCUSDT".to_string(),
+    amount_type: AmountType::FixedAmount(100.0),
+    frequency: Frequency::Weekly,
+    max_price: None,
+    total_budget: Some(5000.0),
+};
+```
+
+### Step 2: Optimize Parameters
+
+Use the optimization workflow to find the best parameters:
+
+```rust
+use alphafield_backtest::{OptimizationWorkflow, WorkflowConfig};
+
+// Test different configurations
+let configs = vec![
+    // Vary frequency
+    (Frequency::Daily, 50.0),
+    (Frequency::Weekly, 100.0),
+    (Frequency::Monthly, 400.0),
+];
+
+// Run walk-forward analysis on each
+for (freq, amount) in configs {
+    let strategy = DCABotStrategy::simple("BTCUSDT", amount, freq, 10000.0);
+    // Run backtest and collect metrics
+}
+
+// Choose configuration with best risk-adjusted returns
+```
+
+**Key Metrics to Optimize:**
+- Sharpe Ratio (risk-adjusted returns)
+- Maximum Drawdown (downside risk)
+- Win Rate (consistency)
+- Total Return (profitability)
+
+### Step 3: Backtest with Historical Data
+
+Validate the optimized bot on out-of-sample data:
+
+```rust
+// Use walk-forward analysis for robust validation
+let wf_config = WalkForwardConfig {
+    in_sample_bars: 180,  // 6 months training
+    out_sample_bars: 90,  // 3 months testing
+    step_size: 30,        // Roll forward monthly
+};
+
+let results = WalkForwardAnalyzer::analyze(
+    strategy,
+    historical_bars,
+    wf_config
+)?;
+
+// Check out-of-sample performance
+println!("OOS Sharpe: {:.2}", results.oos_sharpe);
+println!("OOS Max DD: {:.2}%", results.oos_max_drawdown * 100.0);
+```
+
+### Step 4: Deploy to Live Trading
+
+Only after successful backtesting, deploy via the API:
+
+```bash
+# Create and start the bot
+curl -X POST http://localhost:8080/api/bots/dca \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbol": "BTCUSDT",
+    "amount_type": {"FixedAmount": 100.0},
+    "frequency": "Weekly",
+    "max_price": 60000.0,
+    "total_budget": 5000.0
+  }'
+
+# Start the bot
+curl -X POST http://localhost:8080/api/bots/dca/{id}/start
+```
+
+### Step 5: Monitor and Adjust
+
+Continuously monitor bot performance:
+
+```bash
+# Check bot status
+curl http://localhost:8080/api/bots/status
+
+# Review stats
+curl http://localhost:8080/api/bots/dca
+
+# Pause if necessary
+curl -X POST http://localhost:8080/api/bots/dca/{id}/pause
+```
+
+**Red Flags to Watch For:**
+- Actual performance significantly below backtest
+- Excessive slippage or failed orders
+- Market conditions outside training data range
+- Strategy drawdown exceeds backtest maximum
+
+### Best Practices
+
+✅ **DO:**
+- Always backtest before live deployment
+- Use walk-forward analysis for validation
+- Test on multiple market conditions (bull, bear, sideways)
+- Start with small capital to validate live behavior
+- Monitor performance vs. backtest expectations
+
+❌ **DON'T:**
+- Deploy bots without backtesting
+- Over-optimize on limited data
+- Ignore out-of-sample performance
+- Run bots without monitoring
+- Deploy multiple correlated bots simultaneously
+
+---
+
 ## 📚 Further Reading
 
 - [AlphaField API Documentation](./api.md)
+- [Backtesting Guide](./optimization_workflow.md)
 - [Risk Management Guide](./detailed_design.md#risk-management)
-- [Backtesting Bots](./optimization_workflow.md) (simulate bot behavior)
+- [Bot Backtest Example](../crates/backtest/examples/bot_backtest.rs)
 
 ---
 

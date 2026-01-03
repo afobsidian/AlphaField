@@ -16,7 +16,7 @@ AlphaField features a robust multi-source data layer, modular strategy system, e
 | **Unified Data Layer** | Multi-source integration (Binance, CoinGecko, Coinlayer) with smart routing |
 | **Interactive Dashboard** | Real-time data management, symbol search, and visual backtesting |
 | **Interactive Charting** | Candlestick/line/area charts with technical indicators (SMA, EMA, RSI, MACD, BB) |
-| **Automated Trading Bots** | DCA, Grid, and Trailing order bots for hands-off trading strategies |
+| **Automated Trading Bots** | DCA, Grid, and Trailing order bots with full backtest integration |
 | **Optimization-First Workflow** | Automated parameter optimization before backtesting with multi-symbol validation |
 | **Asset Category Training** | Train strategies across predefined symbol baskets (Market, Large/Mid/Small Cap, DeFi) |
 | **TimescaleDB Storage** | Time-series optimized with hypertables and compression |
@@ -163,6 +163,13 @@ Risk management, order execution safeguards, and automated trading bots.
 | `DCABot` | Dollar-cost averaging with scheduled recurring buys |
 | `GridBot` | Automated grid trading within price ranges |
 | `TrailingOrder` | Dynamic stop-loss and take-profit orders |
+
+**Bot Backtest Integration:**
+All bots implement the `Strategy` trait and integrate with:
+- `BacktestEngine` for historical simulation
+- `OptimizationWorkflow` for parameter tuning
+- `WalkForwardAnalyzer` for out-of-sample validation
+- `MonteCarloSimulator` for robustness testing
 
 ---
 
