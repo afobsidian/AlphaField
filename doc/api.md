@@ -559,6 +559,203 @@ Real-time updates for portfolio, positions, trades, and logs.
 
 ---
 
+## Automated Trading Bots
+
+### POST /api/bots/dca
+
+Create a new DCA (Dollar Cost Averaging) bot.
+
+**Request:**
+```json
+{
+  "symbol": "BTCUSDT",
+  "amount_type": {
+    "FixedAmount": 100.0
+  },
+  "frequency": "Daily",
+  "max_price": 50000.0,
+  "total_budget": 10000.0
+}
+```
+
+**Response:**
+```json
+{
+  "id": "bot-uuid",
+  "config": { /* config object */ },
+  "status": "Stopped",
+  "stats": {
+    "orders_executed": 0,
+    "total_volume": 0.0,
+    "total_fees": 0.0,
+    "realized_pnl": 0.0,
+    "started_at": null,
+    "last_execution": null
+  },
+  "total_spent": 0.0,
+  "next_execution": null
+}
+```
+
+### GET /api/bots/dca
+
+List all DCA bots.
+
+**Response:**
+```json
+[
+  {
+    "id": "bot-uuid",
+    "config": { /* config */ },
+    "status": "Active",
+    "stats": { /* stats */ },
+    "total_spent": 500.0,
+    "next_execution": "2026-01-04T12:00:00Z"
+  }
+]
+```
+
+### POST /api/bots/dca/:id/start
+
+Start a DCA bot.
+
+### POST /api/bots/dca/:id/pause
+
+Pause a DCA bot.
+
+### POST /api/bots/dca/:id/stop
+
+Stop a DCA bot.
+
+### DELETE /api/bots/dca/:id
+
+Delete a DCA bot (must be stopped first).
+
+---
+
+### POST /api/bots/grid
+
+Create a new Grid trading bot.
+
+**Request:**
+```json
+{
+  "symbol": "ETHUSDT",
+  "lower_price": 3000.0,
+  "upper_price": 4000.0,
+  "grid_levels": 10,
+  "total_capital": 5000.0,
+  "min_profit_percent": 1.0
+}
+```
+
+**Response:**
+```json
+{
+  "id": "bot-uuid",
+  "config": { /* config */ },
+  "status": "Stopped",
+  "stats": { /* stats */ },
+  "grid_levels": [
+    {
+      "price": 3000.0,
+      "buy_order": null,
+      "sell_order": null,
+      "quantity": 0.5,
+      "profit": 0.0,
+      "trades_count": 0
+    }
+  ],
+  "total_profit": 0.0
+}
+```
+
+### GET /api/bots/grid
+
+List all Grid bots.
+
+### POST /api/bots/grid/:id/start
+
+Start a Grid bot.
+
+### POST /api/bots/grid/:id/stop
+
+Stop a Grid bot.
+
+### DELETE /api/bots/grid/:id
+
+Delete a Grid bot.
+
+---
+
+### POST /api/bots/trailing
+
+Create a new Trailing order.
+
+**Request:**
+```json
+{
+  "symbol": "BTCUSDT",
+  "trailing_type": "StopLoss",
+  "side": "Sell",
+  "quantity": 1.0,
+  "trailing_percent": 5.0,
+  "activation_price": 55000.0,
+  "limit_price": null
+}
+```
+
+**Response:**
+```json
+{
+  "id": "bot-uuid",
+  "config": { /* config */ },
+  "status": "Stopped",
+  "stats": { /* stats */ },
+  "trigger_price": null,
+  "extreme_price": null,
+  "activated": false,
+  "triggered": false
+}
+```
+
+### GET /api/bots/trailing
+
+List all Trailing orders.
+
+### POST /api/bots/trailing/:id/start
+
+Start a Trailing order.
+
+### POST /api/bots/trailing/:id/stop
+
+Stop a Trailing order.
+
+### DELETE /api/bots/trailing/:id
+
+Delete a Trailing order.
+
+---
+
+### GET /api/bots/status
+
+Get overview of all bot statuses.
+
+**Response:**
+```json
+{
+  "total_bots": 15,
+  "active_bots": 8,
+  "paused_bots": 2,
+  "completed_bots": 3,
+  "dca_count": 5,
+  "grid_count": 7,
+  "trailing_count": 3
+}
+```
+
+---
+
 ## Error Responses
 
 All endpoints return errors in this format:

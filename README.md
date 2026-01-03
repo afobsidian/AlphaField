@@ -16,6 +16,7 @@ AlphaField features a robust multi-source data layer, modular strategy system, e
 | **Unified Data Layer** | Multi-source integration (Binance, CoinGecko, Coinlayer) with smart routing |
 | **Interactive Dashboard** | Real-time data management, symbol search, and visual backtesting |
 | **Interactive Charting** | Candlestick/line/area charts with technical indicators (SMA, EMA, RSI, MACD, BB) |
+| **Automated Trading Bots** | DCA, Grid, and Trailing order bots for hands-off trading strategies |
 | **Optimization-First Workflow** | Automated parameter optimization before backtesting with multi-symbol validation |
 | **Asset Category Training** | Train strategies across predefined symbol baskets (Market, Large/Mid/Small Cap, DeFi) |
 | **TimescaleDB Storage** | Time-series optimized with hypertables and compression |
@@ -145,8 +146,9 @@ Event-driven backtesting engine with comprehensive optimization workflow.
 ---
 
 ### `crates/execution`
-Risk management and order execution safeguards.
+Risk management, order execution safeguards, and automated trading bots.
 
+**Risk Checks:**
 | Risk Check | Description |
 |------------|-------------|
 | `MaxOrderValue` | Reject orders exceeding value limit |
@@ -154,6 +156,13 @@ Risk management and order execution safeguards.
 | `MaxDailyLoss` | Circuit breaker on daily PnL |
 | `PositionDrift` | Alert on slippage exceeding threshold |
 | `VolatilityScaledSize` | ATR-based sizing |
+
+**Automated Trading Bots:**
+| Bot Type | Description |
+|----------|-------------|
+| `DCABot` | Dollar-cost averaging with scheduled recurring buys |
+| `GridBot` | Automated grid trading within price ranges |
+| `TrailingOrder` | Dynamic stop-loss and take-profit orders |
 
 ---
 
@@ -185,6 +194,20 @@ Axum web server with REST API and WebSocket streaming.
 | `/api/quality/outliers/:symbol/:interval` | GET | Find price outliers |
 | `/api/quality/freshness` | GET | Data freshness check |
 | `/api/quality/summary` | GET | Data quality health score |
+| `/api/bots/dca` | GET/POST | List or create DCA bots |
+| `/api/bots/dca/:id/start` | POST | Start a DCA bot |
+| `/api/bots/dca/:id/pause` | POST | Pause a DCA bot |
+| `/api/bots/dca/:id/stop` | POST | Stop a DCA bot |
+| `/api/bots/dca/:id` | DELETE | Delete a DCA bot |
+| `/api/bots/grid` | GET/POST | List or create Grid bots |
+| `/api/bots/grid/:id/start` | POST | Start a Grid bot |
+| `/api/bots/grid/:id/stop` | POST | Stop a Grid bot |
+| `/api/bots/grid/:id` | DELETE | Delete a Grid bot |
+| `/api/bots/trailing` | GET/POST | List or create Trailing orders |
+| `/api/bots/trailing/:id/start` | POST | Start a Trailing order |
+| `/api/bots/trailing/:id/stop` | POST | Stop a Trailing order |
+| `/api/bots/trailing/:id` | DELETE | Delete a Trailing order |
+| `/api/bots/status` | GET | Overview of all bot statuses |
 
 **WebSocket:**
 | Endpoint | Description |

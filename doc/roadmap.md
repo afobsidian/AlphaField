@@ -97,26 +97,34 @@ All original phases complete:
 
 ---
 
-### Phase 14: Automated Trading Bots
+### Phase 14: Automated Trading Bots ✅
 
-> Target: Q2 2026 | Priority: **High**
+> Target: Q2 2026 | Priority: **High** | Status: **Complete**
 
 #### DCA Bot
-- [ ] Scheduled recurring buys
-- [ ] Fixed amount or % of available balance
-- [ ] Configurable frequency (daily, weekly, monthly)
-- [ ] Stop if price exceeds threshold
+- [x] Scheduled recurring buys
+- [x] Fixed amount or % of available balance
+- [x] Configurable frequency (minutes, hours, daily, weekly, monthly)
+- [x] Stop if price exceeds threshold
+- [x] Total budget limit
 
 #### Grid Bot
-- [ ] Upper/lower price range
-- [ ] Number of grid levels
-- [ ] Auto buy low / sell high within range
-- [ ] Profit tracking per grid
+- [x] Upper/lower price range
+- [x] Number of grid levels
+- [x] Auto buy low / sell high within range
+- [x] Profit tracking per grid
+- [x] Minimum profit per grid configuration
 
 #### Trailing Orders
-- [ ] Trailing stop-loss (% or fixed distance)
-- [ ] Trailing take-profit
-- [ ] Activation price triggers
+- [x] Trailing stop-loss (% distance)
+- [x] Trailing take-profit (% distance)
+- [x] Activation price triggers
+- [x] PnL calculation and tracking
+
+#### API Integration
+- [x] REST endpoints for bot management
+- [x] Bot status monitoring
+- [x] Create, start, pause, stop, delete operations
 
 ---
 
@@ -314,7 +322,7 @@ All original phases complete:
 | 1-11 | V1 Core Platform | ✅ Complete | - |
 | 12 | Interactive Charting | ✅ Complete | High |
 | 13 | Sentiment Analysis | ✅ Complete | High |
-| 14 | Automated Bots | 🎯 Planned | High |
+| 14 | Automated Bots | ✅ Complete | High |
 | 15 | Advanced Orders | 🎯 Planned | Medium |
 | 16 | Enhanced Reporting | 🎯 Planned | Medium |
 | 17 | Mobile Monitoring | 🎯 Planned | Low |
@@ -328,7 +336,7 @@ All original phases complete:
 1. **Phase 19** (Advanced Backtesting) - Robust strategy validation ✅
 2. **Phase 13** (Sentiment) - Additional alpha source ✅
 3. **Phase 12** (Charting) - Visual feedback on trades ✅
-4. **Phase 14** (Bots) - Hands-off automation
+4. **Phase 14** (Bots) - Hands-off automation ✅
 5. **Phase 18** (ML Models) - Data-driven predictions
 6. **Phase 15** (Advanced Orders) - Better execution
 7. **Phase 16** (Reporting) - Track & optimize
