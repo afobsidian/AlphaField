@@ -3,7 +3,7 @@
 //! Automated recurring buy bot with configurable frequency and price thresholds.
 
 use super::{BotStats, BotStatus, TradingBot};
-use alphafield_core::{Order, OrderSide, OrderType, OrderStatus, QuantError, Result};
+use alphafield_core::{Order, OrderSide, OrderStatus, OrderType, QuantError, Result};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};

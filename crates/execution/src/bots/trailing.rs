@@ -3,7 +3,7 @@
 //! Dynamic stop-loss and take-profit orders that follow price movements.
 
 use super::{BotStats, BotStatus, TradingBot};
-use alphafield_core::{Order, OrderSide, OrderType, OrderStatus, QuantError, Result};
+use alphafield_core::{Order, OrderSide, OrderStatus, OrderType, QuantError, Result};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
@@ -374,12 +374,7 @@ mod tests {
 
     #[test]
     fn test_trailing_stop_loss_creation() {
-        let order = TrailingOrder::stop_loss(
-            "BTCUSDT".to_string(),
-            1.0,
-            5.0,
-            Some(50000.0),
-        );
+        let order = TrailingOrder::stop_loss("BTCUSDT".to_string(), 1.0, 5.0, Some(50000.0));
         assert!(order.is_ok());
 
         let order = order.unwrap();
@@ -389,12 +384,8 @@ mod tests {
 
     #[test]
     fn test_trailing_activation() {
-        let mut order = TrailingOrder::stop_loss(
-            "BTCUSDT".to_string(),
-            1.0,
-            5.0,
-            Some(50000.0),
-        ).unwrap();
+        let mut order =
+            TrailingOrder::stop_loss("BTCUSDT".to_string(), 1.0, 5.0, Some(50000.0)).unwrap();
 
         order.start().unwrap();
 
@@ -414,7 +405,8 @@ mod tests {
             1.0,
             5.0,
             None, // No activation price
-        ).unwrap();
+        )
+        .unwrap();
 
         order.start().unwrap();
 
@@ -436,12 +428,7 @@ mod tests {
 
     #[test]
     fn test_trailing_stop_loss_trigger() {
-        let mut order = TrailingOrder::stop_loss(
-            "BTCUSDT".to_string(),
-            1.0,
-            5.0,
-            None,
-        ).unwrap();
+        let mut order = TrailingOrder::stop_loss("BTCUSDT".to_string(), 1.0, 5.0, None).unwrap();
 
         order.start().unwrap();
 
@@ -464,12 +451,7 @@ mod tests {
 
     #[test]
     fn test_trailing_take_profit_tracking() {
-        let mut order = TrailingOrder::take_profit(
-            "BTCUSDT".to_string(),
-            1.0,
-            5.0,
-            None,
-        ).unwrap();
+        let mut order = TrailingOrder::take_profit("BTCUSDT".to_string(), 1.0, 5.0, None).unwrap();
 
         order.start().unwrap();
 
@@ -491,12 +473,7 @@ mod tests {
 
     #[test]
     fn test_pnl_calculation() {
-        let mut order = TrailingOrder::stop_loss(
-            "BTCUSDT".to_string(),
-            1.0,
-            5.0,
-            None,
-        ).unwrap();
+        let mut order = TrailingOrder::stop_loss("BTCUSDT".to_string(), 1.0, 5.0, None).unwrap();
 
         order.start().unwrap();
         order.set_entry_price(50000.0);

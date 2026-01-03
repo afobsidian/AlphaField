@@ -11,11 +11,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
+use alphafield_core::OrderSide;
 use alphafield_execution::{
     AmountType, BotStats, BotStatus, DCABot, DCAConfig, Frequency, GridBot, GridConfig, GridLevel,
-    TrailingConfig, TrailingOrder, TrailingType, TradingBot,
+    TradingBot, TrailingConfig, TrailingOrder, TrailingType,
 };
-use alphafield_core::OrderSide;
 
 use crate::api::AppState;
 
@@ -431,7 +431,9 @@ pub async fn start_trailing_order(
     let mut orders = BOT_REGISTRY.trailing_orders.write().unwrap();
 
     if let Some(order) = orders.get_mut(&id) {
-        order.start().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        order
+            .start()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
         Ok(Json(TrailingOrderResponse {
             id: id.clone(),
@@ -456,7 +458,9 @@ pub async fn stop_trailing_order(
     let mut orders = BOT_REGISTRY.trailing_orders.write().unwrap();
 
     if let Some(order) = orders.get_mut(&id) {
-        order.stop().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        order
+            .stop()
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
         Ok(Json(TrailingOrderResponse {
             id: id.clone(),

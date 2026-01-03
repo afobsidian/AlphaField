@@ -3,7 +3,7 @@
 //! Automated grid trading bot that places buy and sell orders at predefined price levels.
 
 use super::{BotStats, BotStatus, TradingBot};
-use alphafield_core::{Order, OrderSide, OrderType, OrderStatus, QuantError, Result};
+use alphafield_core::{Order, OrderSide, OrderStatus, OrderType, QuantError, Result};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -191,10 +191,12 @@ impl GridBot {
             .unwrap_or(sell_price.max(price * 1.01)); // At least 1% above
 
         // Find the grid level closest to this price
-        if let Some(level) = grid_levels
-            .iter_mut()
-            .min_by(|a, b| (a.price - price).abs().partial_cmp(&(b.price - price).abs()).unwrap())
-        {
+        if let Some(level) = grid_levels.iter_mut().min_by(|a, b| {
+            (a.price - price)
+                .abs()
+                .partial_cmp(&(b.price - price).abs())
+                .unwrap()
+        }) {
             let sell_order = Order {
                 id: Uuid::new_v4().to_string(),
                 symbol: self.config.symbol.clone(),
