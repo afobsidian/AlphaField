@@ -54,6 +54,11 @@
                     <span class="tab-number">4</span>
                     <span class="tab-label">Deploy</span>
                 </button>
+                <span class="tab-divider">|</span>
+                <button class="workflow-tab" data-tab="bots" onclick="switchTab('bots')">
+                    <span class="tab-icon">🤖</span>
+                    <span class="tab-label">Bots</span>
+                </button>
             </nav>
 
             <!-- Status Indicators -->
@@ -1027,6 +1032,198 @@
                                 <span class="log-time">--:--:--</span>
                                 <span class="log-msg">Configure and start trading to see activity...</span>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== TAB 5: BOTS ==================== -->
+            <section id="bots-view" class="view-section">
+                <div class="view-header">
+                    <h1>🤖 Automated Trading Bots</h1>
+                    <p>Create and manage DCA, Grid, and Trailing order bots</p>
+                </div>
+
+                <!-- Bot Status Overview -->
+                <div class="bot-stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon">📊</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="total-bots">0</div>
+                            <div class="stat-label">Total Bots</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">✅</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="active-bots">0</div>
+                            <div class="stat-label">Active Bots</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">⏸️</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="paused-bots">0</div>
+                            <div class="stat-label">Paused Bots</div>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon">🏁</div>
+                        <div class="stat-content">
+                            <div class="stat-value" id="completed-bots">0</div>
+                            <div class="stat-label">Completed</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bot Type Selection -->
+                <div class="card">
+                    <h3>Create New Bot</h3>
+                    <div class="bot-type-selector">
+                        <button class="bot-type-btn active" data-type="dca" onclick="selectBotType('dca')">
+                            <span class="bot-icon">💰</span>
+                            <span class="bot-name">DCA Bot</span>
+                            <span class="bot-desc">Dollar Cost Averaging</span>
+                        </button>
+                        <button class="bot-type-btn" data-type="grid" onclick="selectBotType('grid')">
+                            <span class="bot-icon">📊</span>
+                            <span class="bot-name">Grid Bot</span>
+                            <span class="bot-desc">Range Trading</span>
+                        </button>
+                        <button class="bot-type-btn" data-type="trailing" onclick="selectBotType('trailing')">
+                            <span class="bot-icon">📈</span>
+                            <span class="bot-name">Trailing Stop</span>
+                            <span class="bot-desc">Dynamic Stop-Loss</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- DCA Bot Configuration -->
+                <div class="card" id="dca-config" style="display: block;">
+                    <h3>DCA Bot Configuration</h3>
+                    <div class="bot-config-grid">
+                        <div class="form-group">
+                            <label>Symbol</label>
+                            <select id="dca-symbol" class="form-control">
+                                <option value="">Select Symbol...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Amount Type</label>
+                            <select id="dca-amount-type" class="form-control" onchange="toggleDCAAmountType()">
+                                <option value="fixed">Fixed Amount</option>
+                                <option value="percent">% of Balance</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="dca-fixed-amount-group">
+                            <label>Amount ($)</label>
+                            <input type="number" id="dca-amount" class="form-control" value="100" min="1" step="1">
+                        </div>
+                        <div class="form-group" id="dca-percent-group" style="display: none;">
+                            <label>Percentage (%)</label>
+                            <input type="number" id="dca-percent" class="form-control" value="10" min="1" max="100" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Frequency</label>
+                            <select id="dca-frequency" class="form-control">
+                                <option value="Daily">Daily</option>
+                                <option value="Weekly" selected>Weekly</option>
+                                <option value="Monthly">Monthly</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Max Price (Optional)</label>
+                            <input type="number" id="dca-max-price" class="form-control" placeholder="Leave empty for no limit" step="0.01">
+                        </div>
+                        <div class="form-group">
+                            <label>Total Budget (Optional)</label>
+                            <input type="number" id="dca-total-budget" class="form-control" placeholder="Leave empty for no limit" step="1">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="createDCABot()">Create DCA Bot</button>
+                </div>
+
+                <!-- Grid Bot Configuration -->
+                <div class="card" id="grid-config" style="display: none;">
+                    <h3>Grid Bot Configuration</h3>
+                    <div class="bot-config-grid">
+                        <div class="form-group">
+                            <label>Symbol</label>
+                            <select id="grid-symbol" class="form-control">
+                                <option value="">Select Symbol...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Lower Price ($)</label>
+                            <input type="number" id="grid-lower-price" class="form-control" value="40000" min="0" step="0.01">
+                        </div>
+                        <div class="form-group">
+                            <label>Upper Price ($)</label>
+                            <input type="number" id="grid-upper-price" class="form-control" value="60000" min="0" step="0.01">
+                        </div>
+                        <div class="form-group">
+                            <label>Grid Levels</label>
+                            <input type="number" id="grid-levels" class="form-control" value="10" min="2" max="50" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Total Capital ($)</label>
+                            <input type="number" id="grid-capital" class="form-control" value="10000" min="1" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Min Profit (%)</label>
+                            <input type="number" id="grid-profit" class="form-control" value="1.0" min="0.1" max="10" step="0.1">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="createGridBot()">Create Grid Bot</button>
+                </div>
+
+                <!-- Trailing Stop Configuration -->
+                <div class="card" id="trailing-config" style="display: none;">
+                    <h3>Trailing Stop Configuration</h3>
+                    <div class="bot-config-grid">
+                        <div class="form-group">
+                            <label>Symbol</label>
+                            <select id="trailing-symbol" class="form-control">
+                                <option value="">Select Symbol...</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Type</label>
+                            <select id="trailing-type" class="form-control">
+                                <option value="StopLoss">Stop-Loss</option>
+                                <option value="TakeProfit">Take-Profit</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Quantity</label>
+                            <input type="number" id="trailing-quantity" class="form-control" value="1.0" min="0.0001" step="0.0001">
+                        </div>
+                        <div class="form-group">
+                            <label>Trailing %</label>
+                            <input type="number" id="trailing-percent" class="form-control" value="5.0" min="0.1" max="50" step="0.1">
+                        </div>
+                        <div class="form-group">
+                            <label>Activation Price (Optional)</label>
+                            <input type="number" id="trailing-activation" class="form-control" placeholder="Price to start trailing" step="0.01">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="createTrailingOrder()">Create Trailing Order</button>
+                </div>
+
+                <!-- Active Bots List -->
+                <div class="card">
+                    <h3>Active Bots</h3>
+                    <div class="bot-tabs">
+                        <button class="bot-tab active" onclick="filterBots('all')">All</button>
+                        <button class="bot-tab" onclick="filterBots('dca')">DCA</button>
+                        <button class="bot-tab" onclick="filterBots('grid')">Grid</button>
+                        <button class="bot-tab" onclick="filterBots('trailing')">Trailing</button>
+                    </div>
+                    <div id="bots-list" class="bots-container">
+                        <div class="empty-state">
+                            <span class="empty-icon">🤖</span>
+                            <p>No bots created yet</p>
+                            <small>Create your first bot above to get started</small>
                         </div>
                     </div>
                 </div>

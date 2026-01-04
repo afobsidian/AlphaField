@@ -149,6 +149,9 @@ function onTabEnter(tabName) {
             updateDeploySummary();
             loadSentiment();
             break;
+        case 'bots':
+            loadBots();
+            break;
     }
 }
 
@@ -3355,3 +3358,380 @@ function formatDate(isoString) {
 }
 
 
+
+// ===========================
+// Bot Management
+// ===========================
+
+let currentBotType = 'dca';
+let activeBots = { dca: [], grid: [], trailing: [] };
+
+function selectBotType(type) {
+    currentBotType = type;
+    
+    // Update button states
+    document.querySelectorAll('.bot-type-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.type === type);
+    });
+    
+    // Show/hide config panels
+    document.getElementById('dca-config').style.display = type === 'dca' ? 'block' : 'none';
+    document.getElementById('grid-config').style.display = type === 'grid' ? 'block' : 'none';
+    document.getElementById('trailing-config').style.display = type === 'trailing' ? 'block' : 'none';
+}
+
+function toggleDCAAmountType() {
+    const amountType = document.getElementById('dca-amount-type').value;
+    document.getElementById('dca-fixed-amount-group').style.display = amountType === 'fixed' ? 'block' : 'none';
+    document.getElementById('dca-percent-group').style.display = amountType === 'percent' ? 'block' : 'none';
+}
+
+async function createDCABot() {
+    const symbol = document.getElementById('dca-symbol').value;
+    if (!symbol) {
+        showToast('Please select a symbol', 'error');
+        return;
+    }
+    
+    const amountType = document.getElementById('dca-amount-type').value;
+    const amount = amountType === 'fixed' 
+        ? parseFloat(document.getElementById('dca-amount').value)
+        : parseFloat(document.getElementById('dca-percent').value);
+    
+    const frequency = document.getElementById('dca-frequency').value;
+    const maxPrice = document.getElementById('dca-max-price').value;
+    const totalBudget = document.getElementById('dca-total-budget').value;
+    
+    const config = {
+        symbol,
+        amount_type: amountType === 'fixed' 
+            ? { FixedAmount: amount }
+            : { PercentOfBalance: amount },
+        frequency,
+        max_price: maxPrice ? parseFloat(maxPrice) : null,
+        total_budget: totalBudget ? parseFloat(totalBudget) : null
+    };
+    
+    try {
+        const response = await fetch(`${API_BASE}/bots/dca`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        
+        if (response.ok) {
+            const bot = await response.json();
+            showToast('DCA Bot created successfully!', 'success');
+            loadBots();
+        } else {
+            showToast('Failed to create DCA Bot', 'error');
+        }
+    } catch (error) {
+        console.error('Error creating DCA bot:', error);
+        showToast('Error creating DCA Bot', 'error');
+    }
+}
+
+async function createGridBot() {
+    const symbol = document.getElementById('grid-symbol').value;
+    if (!symbol) {
+        showToast('Please select a symbol', 'error');
+        return;
+    }
+    
+    const config = {
+        symbol,
+        lower_price: parseFloat(document.getElementById('grid-lower-price').value),
+        upper_price: parseFloat(document.getElementById('grid-upper-price').value),
+        grid_levels: parseInt(document.getElementById('grid-levels').value),
+        total_capital: parseFloat(document.getElementById('grid-capital').value),
+        min_profit_percent: parseFloat(document.getElementById('grid-profit').value)
+    };
+    
+    try {
+        const response = await fetch(`${API_BASE}/bots/grid`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        
+        if (response.ok) {
+            const bot = await response.json();
+            showToast('Grid Bot created successfully!', 'success');
+            loadBots();
+        } else {
+            showToast('Failed to create Grid Bot', 'error');
+        }
+    } catch (error) {
+        console.error('Error creating Grid bot:', error);
+        showToast('Error creating Grid Bot', 'error');
+    }
+}
+
+async function createTrailingOrder() {
+    const symbol = document.getElementById('trailing-symbol').value;
+    if (!symbol) {
+        showToast('Please select a symbol', 'error');
+        return;
+    }
+    
+    const activation = document.getElementById('trailing-activation').value;
+    
+    const config = {
+        symbol,
+        trailing_type: document.getElementById('trailing-type').value,
+        side: "Sell",
+        quantity: parseFloat(document.getElementById('trailing-quantity').value),
+        trailing_percent: parseFloat(document.getElementById('trailing-percent').value),
+        activation_price: activation ? parseFloat(activation) : null,
+        limit_price: null
+    };
+    
+    try {
+        const response = await fetch(`${API_BASE}/bots/trailing`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config)
+        });
+        
+        if (response.ok) {
+            const bot = await response.json();
+            showToast('Trailing Order created successfully!', 'success');
+            loadBots();
+        } else {
+            showToast('Failed to create Trailing Order', 'error');
+        }
+    } catch (error) {
+        console.error('Error creating Trailing order:', error);
+        showToast('Error creating Trailing Order', 'error');
+    }
+}
+
+async function loadBots() {
+    try {
+        // Load all bot types
+        const [dcaRes, gridRes, trailingRes, statusRes] = await Promise.all([
+            fetch(`${API_BASE}/bots/dca`),
+            fetch(`${API_BASE}/bots/grid`),
+            fetch(`${API_BASE}/bots/trailing`),
+            fetch(`${API_BASE}/bots/status`)
+        ]);
+        
+        activeBots.dca = await dcaRes.json();
+        activeBots.grid = await gridRes.json();
+        activeBots.trailing = await trailingRes.json();
+        const status = await statusRes.json();
+        
+        // Update stats
+        document.getElementById('total-bots').textContent = status.total_bots;
+        document.getElementById('active-bots').textContent = status.active_bots;
+        document.getElementById('paused-bots').textContent = status.paused_bots;
+        document.getElementById('completed-bots').textContent = status.completed_bots;
+        
+        // Render bots list
+        renderBotsList();
+    } catch (error) {
+        console.error('Error loading bots:', error);
+    }
+}
+
+function renderBotsList(filter = 'all') {
+    const container = document.getElementById('bots-list');
+    const allBots = [];
+    
+    if (filter === 'all' || filter === 'dca') {
+        activeBots.dca.forEach(bot => allBots.push({ type: 'dca', data: bot }));
+    }
+    if (filter === 'all' || filter === 'grid') {
+        activeBots.grid.forEach(bot => allBots.push({ type: 'grid', data: bot }));
+    }
+    if (filter === 'all' || filter === 'trailing') {
+        activeBots.trailing.forEach(bot => allBots.push({ type: 'trailing', data: bot }));
+    }
+    
+    if (allBots.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <span class="empty-icon">🤖</span>
+                <p>No bots found</p>
+                <small>Create your first bot above to get started</small>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = allBots.map(({ type, data }) => {
+        const statusClass = data.status === 'Active' ? 'status-active' : 
+                           data.status === 'Paused' ? 'status-paused' : 
+                           data.status === 'Completed' ? 'status-completed' : 'status-stopped';
+        
+        const icon = type === 'dca' ? '💰' : type === 'grid' ? '📊' : '📈';
+        const typeName = type === 'dca' ? 'DCA' : type === 'grid' ? 'Grid' : 'Trailing';
+        
+        return `
+            <div class="bot-card">
+                <div class="bot-header">
+                    <div class="bot-title">
+                        <span class="bot-icon">${icon}</span>
+                        <span class="bot-type">${typeName}</span>
+                        <span class="bot-symbol">${data.config.symbol}</span>
+                    </div>
+                    <span class="bot-status ${statusClass}">${data.status}</span>
+                </div>
+                <div class="bot-stats">
+                    <div class="bot-stat">
+                        <span class="stat-label">Orders</span>
+                        <span class="stat-value">${data.stats.orders_executed}</span>
+                    </div>
+                    <div class="bot-stat">
+                        <span class="stat-label">Volume</span>
+                        <span class="stat-value">$${data.stats.total_volume.toFixed(2)}</span>
+                    </div>
+                    <div class="bot-stat">
+                        <span class="stat-label">PnL</span>
+                        <span class="stat-value ${data.stats.realized_pnl >= 0 ? 'text-success' : 'text-danger'}">
+                            $${data.stats.realized_pnl.toFixed(2)}
+                        </span>
+                    </div>
+                </div>
+                <div class="bot-actions">
+                    ${data.status === 'Stopped' || data.status === 'Paused' ? 
+                        `<button class="btn btn-sm btn-success" onclick="startBot('${type}', '${data.id}')">Start</button>` : ''}
+                    ${data.status === 'Active' ? 
+                        `<button class="btn btn-sm btn-warning" onclick="pauseBot('${type}', '${data.id}')">Pause</button>` : ''}
+                    ${data.status === 'Paused' ? 
+                        `<button class="btn btn-sm btn-info" onclick="resumeBot('${type}', '${data.id}')">Resume</button>` : ''}
+                    ${data.status === 'Active' || data.status === 'Paused' ? 
+                        `<button class="btn btn-sm btn-danger" onclick="stopBot('${type}', '${data.id}')">Stop</button>` : ''}
+                    ${data.status === 'Stopped' || data.status === 'Completed' ? 
+                        `<button class="btn btn-sm btn-danger" onclick="deleteBot('${type}', '${data.id}')">Delete</button>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function filterBots(type) {
+    // Update tab states
+    document.querySelectorAll('.bot-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    event.target.classList.add('active');
+    
+    renderBotsList(type);
+}
+
+async function startBot(type, id) {
+    try {
+        const response = await fetch(`${API_BASE}/bots/${type}/${id}/start`, {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            showToast('Bot started', 'success');
+            loadBots();
+        } else {
+            showToast('Failed to start bot', 'error');
+        }
+    } catch (error) {
+        console.error('Error starting bot:', error);
+        showToast('Error starting bot', 'error');
+    }
+}
+
+async function pauseBot(type, id) {
+    try {
+        const response = await fetch(`${API_BASE}/bots/${type}/${id}/pause`, {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            showToast('Bot paused', 'success');
+            loadBots();
+        } else {
+            showToast('Failed to pause bot', 'error');
+        }
+    } catch (error) {
+        console.error('Error pausing bot:', error);
+        showToast('Error pausing bot', 'error');
+    }
+}
+
+async function resumeBot(type, id) {
+    // For DCA bots only
+    try {
+        const response = await fetch(`${API_BASE}/bots/${type}/${id}/start`, {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            showToast('Bot resumed', 'success');
+            loadBots();
+        } else {
+            showToast('Failed to resume bot', 'error');
+        }
+    } catch (error) {
+        console.error('Error resuming bot:', error);
+        showToast('Error resuming bot', 'error');
+    }
+}
+
+async function stopBot(type, id) {
+    try {
+        const response = await fetch(`${API_BASE}/bots/${type}/${id}/stop`, {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            showToast('Bot stopped', 'success');
+            loadBots();
+        } else {
+            showToast('Failed to stop bot', 'error');
+        }
+    } catch (error) {
+        console.error('Error stopping bot:', error);
+        showToast('Error stopping bot', 'error');
+    }
+}
+
+async function deleteBot(type, id) {
+    if (!confirm('Are you sure you want to delete this bot?')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/bots/${type}/${id}`, {
+            method: 'DELETE'
+        });
+        
+        if (response.ok) {
+            showToast('Bot deleted', 'success');
+            loadBots();
+        } else {
+            showToast('Failed to delete bot', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting bot:', error);
+        showToast('Error deleting bot', 'error');
+    }
+}
+
+// Load bot symbols when symbols are loaded
+const originalLoadSymbols = loadSymbols;
+loadSymbols = async function() {
+    await originalLoadSymbols();
+    
+    // Populate bot symbol dropdowns
+    const symbolSelect = document.getElementById('symbol-select');
+    if (symbolSelect && symbolSelect.options.length > 0) {
+        const symbols = Array.from(symbolSelect.options).map(opt => opt.value).filter(v => v);
+        
+        ['dca-symbol', 'grid-symbol', 'trailing-symbol'].forEach(id => {
+            const select = document.getElementById(id);
+            if (select) {
+                select.innerHTML = '<option value="">Select Symbol...</option>' +
+                    symbols.map(s => `<option value="${s}">${s}</option>`).join('');
+            }
+        });
+    }
+};
