@@ -119,6 +119,22 @@ Go to **Backtest** tab:
 - **Metrics**: Total return, Sharpe ratio, max drawdown
 - **Trades**: Entry/exit points
 
+### 5. Explore Advanced Features (Optional)
+
+**Machine Learning:**
+- Go to **ML** tab
+- Select a model type (Linear Regression, Random Forest, etc.)
+- Configure features and parameters
+- Train model on historical data
+- Validate with walk-forward analysis
+
+**Advanced Orders:**
+- Go to **Orders** tab
+- Create OCO orders (One-Cancels-Other)
+- Set up bracket orders with stop-loss and take-profit
+- Use iceberg orders for large position management
+- Configure limit-chase orders for dynamic price following
+
 ---
 
 ## Running Examples
@@ -157,6 +173,30 @@ curl -X POST http://localhost:8080/api/data/fetch \
 curl -X POST http://localhost:8080/api/backtest/run \
   -H "Content-Type: application/json" \
   -d '{"strategy": "GoldenCross", "symbol": "BTC", "interval": "1h", "days": 30}'
+```
+
+### Train ML Model (NEW)
+```bash
+curl -X POST http://localhost:8080/api/ml/train \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_type": "RandomForest",
+    "features": ["returns_5", "volatility_20", "rsi_14"],
+    "symbol": "BTC",
+    "interval": "1h",
+    "days": 365
+  }'
+```
+
+### Create OCO Order (NEW)
+```bash
+curl -X POST http://localhost:8080/api/orders/oco \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbol": "BTC",
+    "primary": {"side": "Buy", "price": 40000, "quantity": 0.5},
+    "secondary": {"side": "Sell", "price": 39000, "quantity": 0.5}
+  }'
 ```
 
 ---

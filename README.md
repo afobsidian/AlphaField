@@ -24,6 +24,8 @@ AlphaField features a robust multi-source data layer, modular strategy system, e
 | **Comprehensive Optimization** | Parameter sweep, walk-forward validation, sensitivity analysis, and robustness scoring |
 | **Data Quality Monitoring** | Gap detection, outlier detection, ingestion alerting |
 | **Risk Management** | Circuit breakers, position limits, drift monitoring |
+| **Machine Learning** | **NEW**: ML-based trading models with feature engineering, model training, and validation |
+| **Advanced Order Types** | **NEW**: OCO, bracket, iceberg, and limit-chase orders with comprehensive order management |
 
 ---
 
@@ -142,6 +144,15 @@ Event-driven backtesting engine with comprehensive optimization workflow.
 | `CorrelationAnalyzer` | Multi-strategy correlation matrix |
 | `ParameterDispersion` | Statistical analysis (CV, ranges, positive %) to detect overfitting |
 
+**Machine Learning (NEW):**
+| Module | Description |
+|--------|-------------|
+| `FeatureExtractor` | Feature engineering from OHLCV data (returns, volatility, momentum, volume) |
+| `DataSplitter` | Time-series aware train/test splits with walk-forward support |
+| `MLModels` | Linear regression, decision trees, random forests, ensemble models |
+| `MLStrategy` | ML-based trading strategies with model persistence |
+| `MLValidation` | Walk-forward validation and overfitting detection |
+
 ---
 
 ### `crates/execution`
@@ -154,6 +165,15 @@ Risk management and order execution safeguards.
 | `MaxDailyLoss` | Circuit breaker on daily PnL |
 | `PositionDrift` | Alert on slippage exceeding threshold |
 | `VolatilityScaledSize` | ATR-based sizing |
+
+**Advanced Order Types (NEW):**
+| Order Type | Description |
+|------------|-------------|
+| `OCO` | One-Cancels-Other orders (primary + secondary order) |
+| `Bracket` | Entry order with stop-loss and take-profit |
+| `Iceberg` | Large orders split into smaller visible portions |
+| `LimitChase` | Automatically adjust limit orders to follow price |
+| `OrderManager` | Comprehensive order queue and lifecycle management |
 
 ---
 
@@ -186,6 +206,25 @@ Axum web server with REST API and WebSocket streaming.
 | `/api/quality/freshness` | GET | Data freshness check |
 | `/api/quality/summary` | GET | Data quality health score |
 
+**Machine Learning Endpoints (NEW):**
+| `/api/ml/train` | POST | Train ML model with specified features and parameters |
+| `/api/ml/predict` | POST | Generate predictions using trained ML model |
+| `/api/ml/validate` | POST | Validate ML model with walk-forward analysis |
+| `/api/ml/models` | GET | List available ML models |
+| `/api/ml/models/:id` | GET | Get specific ML model details |
+
+**Advanced Orders Endpoints (NEW):**
+| `/api/orders/pending` | GET | Get pending orders (filter by symbol) |
+| `/api/orders/queue` | GET | Get order queue summary |
+| `/api/orders/oco` | POST | Create OCO (One-Cancels-Other) order |
+| `/api/orders/bracket` | POST | Create bracket order (entry + SL + TP) |
+| `/api/orders/iceberg` | POST | Create iceberg order (split large order) |
+| `/api/orders/limit-chase` | POST | Create limit-chase order |
+| `/api/orders/:id` | PUT | Modify existing order |
+| `/api/orders/:id` | DELETE | Cancel order |
+| `/api/orders/partial-tp` | POST | Partial take-profit on position |
+| `/api/orders/scale` | POST | Scale in/out of position |
+
 **WebSocket:**
 | Endpoint | Description |
 |----------|-------------|
@@ -214,6 +253,8 @@ The `crates/dashboard` crate serves a Vanilla JS frontend at `http://localhost:8
 - **Data Manager**: Interface to fetch, view, and inspect market data (gaps, outliers).
 - **Analysis**: Advanced tools for Monte Carlo simulation, Correlation matrix, and custom Walk Forward Analysis.
 - **Sentiment**: Fear & Greed index history and asset-specific sentiment metrics.
+- **Orders Tab (NEW)**: Advanced order management interface for OCO, bracket, iceberg, and limit-chase orders
+- **ML Tab (NEW)**: Machine learning model training, validation, and deployment interface
 
 ---
 
@@ -325,6 +366,8 @@ docker build -t alphafield .
 | [Roadmap](doc/roadmap.md) | Development phases and progress |
 | [Project Plan](doc/project_plan.md) | Implementation timeline |
 | [API Reference](doc/api.md) | Complete API documentation |
+| [ML Documentation](doc/ml.md) | **NEW**: Machine learning features and usage |
+| [Advanced Orders](doc/orders.md) | **NEW**: Advanced order types and management |
 
 ---
 

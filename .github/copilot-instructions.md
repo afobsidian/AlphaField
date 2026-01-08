@@ -8,8 +8,8 @@ AlphaField is a modular, event-driven algorithmic trading engine for crypto mark
 - **core**: Fundamental types/traits (`Bar`, `Trade`, `Order`, `Signal`, `Strategy`, `QuantError`)
 - **data**: Multi-source ingestion (Binance, CoinGecko, Coinlayer), TimescaleDB storage, data quality monitoring
 - **strategy**: Technical indicators (`SMA`, `EMA`, `RSI`, etc.) and strategies (`GoldenCross`, `MeanReversion`, etc.)
-- **backtest**: Event-driven simulation, walk-forward, Monte Carlo, sensitivity, correlation analysis
-- **execution**: Risk management (circuit breakers, position limits, drift, volatility scaling)
+- **backtest**: Event-driven simulation, walk-forward, Monte Carlo, sensitivity, correlation analysis, **ML-based trading models**
+- **execution**: Risk management (circuit breakers, position limits, drift, volatility scaling), **advanced order types (OCO, bracket, iceberg, limit-chase)**
 - **dashboard**: Axum REST/WebSocket API, web UI (served at http://localhost:8080)
 
 ## 🏗️ Architecture & Data Flow
@@ -28,6 +28,8 @@ See [doc/architecture.md](../../doc/architecture.md) for diagrams and [doc/detai
 - **Data Validation**: All core types have `validate()`. Always call after constructing from external data.
 - **Smart Routing**: `UnifiedDataClient` auto-routes OHLC/price requests and rotates API keys ([crates/data/src/lib.rs]).
 - **Risk Management**: All orders go through `RiskManager` and checks like `MaxOrderValue`, `NoShorts`, `MaxDailyLoss`, `PositionDrift`, `VolatilityScaledSize` ([crates/execution/src/lib.rs]).
+- **Advanced Orders**: OCO, bracket, iceberg, and limit-chase orders managed by `OrderManager` with comprehensive lifecycle management ([crates/execution/src/orders.rs]).
+- **Machine Learning**: Feature engineering, model training, and validation with time-series aware data splitting and overfitting detection ([crates/backtest/src/ml/]).
 - **Testing**: Unit tests in `#[cfg(test)]` modules, focus on edge cases and known-value checks.
 - **Error Handling**: Use `QuantError` for all error types; backtest has `BacktestError` for simulation-specific errors.
 - **Types**: All monetary values are `f64`; timestamps use `chrono::DateTime<Utc>`.
@@ -63,6 +65,8 @@ RUST_LOG=info
 - [doc/detailed_design.md](../../doc/detailed_design.md): Design rationale and patterns
 - [doc/api.md](../../doc/api.md): API endpoints and usage
 - [doc/roadmap.md](../../doc/roadmap.md): Feature roadmap
+- [doc/ml.md](../../doc/ml.md): Machine learning features and usage
+- [doc/orders.md](../../doc/orders.md): Advanced order types and management
 - [Makefile](../../Makefile): All supported dev commands
 
 ## 🛑 Project-Specific Rules

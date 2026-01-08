@@ -290,6 +290,187 @@ Run parameter sensitivity analysis.
 }
 ```
 
+## Machine Learning (NEW)
+
+### POST /api/ml/train
+
+Train a machine learning model with specified features and parameters.
+
+**Request:**
+```json
+{
+  "model_type": "RandomForest",
+  "features": ["returns_5", "volatility_20", "rsi_14", "macd_histogram"],
+  "symbol": "BTC",
+  "interval": "1h",
+  "days": 365,
+  "target": "next_return_5",
+  "train_days": 252,
+  "test_days": 63,
+  "model_name": "btc_5min_predictor"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "model_id": "ml_12345",
+  "model_type": "RandomForest",
+  "features_used": ["returns_5", "volatility_20", "rsi_14"],
+  "training_metrics": {
+    "r2_score": 0.72,
+    "mse": 0.0012,
+    "mae": 0.025
+  },
+  "test_metrics": {
+    "r2_score": 0.68,
+    "mse": 0.0015,
+    "mae": 0.028
+  },
+  "training_time_ms": 4520,
+  "message": "Model trained successfully"
+}
+```
+
+### POST /api/ml/predict
+
+Generate predictions using a trained ML model.
+
+**Request:**
+```json
+{
+  "model_id": "ml_12345",
+  "symbol": "BTC",
+  "interval": "1h",
+  "days": 30
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "predictions": [
+    {
+      "timestamp": "2026-01-01T00:00:00Z",
+      "predicted_return": 0.012,
+      "confidence": 0.85,
+      "features": {"returns_5": 0.02, "volatility_20": 0.03, "rsi_14": 65}
+    }
+  ],
+  "model_info": {
+    "model_type": "RandomForest",
+    "features": ["returns_5", "volatility_20", "rsi_14"],
+    "training_date": "2026-01-01T10:00:00Z"
+  }
+}
+```
+
+### POST /api/ml/validate
+
+Validate ML model with walk-forward analysis to detect overfitting.
+
+**Request:**
+```json
+{
+  "model_id": "ml_12345",
+  "symbol": "BTC",
+  "interval": "1h",
+  "train_window_days": 252,
+  "test_window_days": 63,
+  "num_windows": 5
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "validation_results": {
+    "windows": [
+      {
+        "train_start": "2024-01-01",
+        "test_end": "2024-04-01",
+        "train_r2": 0.75,
+        "test_r2": 0.72,
+        "overfit_score": 0.04
+      }
+    ],
+    "overall_metrics": {
+      "avg_train_r2": 0.74,
+      "avg_test_r2": 0.71,
+      "overall_overfit_score": 0.05,
+      "stability_score": 0.92
+    },
+    "overfitting_detected": false,
+    "recommendation": "Model is robust and suitable for deployment"
+  }
+}
+```
+
+### GET /api/ml/models
+
+List all available ML models.
+
+**Response:**
+```json
+{
+  "success": true,
+  "models": [
+    {
+      "model_id": "ml_12345",
+      "model_type": "RandomForest",
+      "symbol": "BTC",
+      "interval": "1h",
+      "features": ["returns_5", "volatility_20", "rsi_14"],
+      "target": "next_return_5",
+      "training_date": "2026-01-01T10:00:00Z",
+      "performance": {
+        "train_r2": 0.72,
+        "test_r2": 0.68
+      }
+    }
+  ]
+}
+```
+
+### GET /api/ml/models/:id
+
+Get detailed information about a specific ML model.
+
+**Response:**
+```json
+{
+  "success": true,
+  "model": {
+    "model_id": "ml_12345",
+    "model_type": "RandomForest",
+    "symbol": "BTC",
+    "interval": "1h",
+    "features": ["returns_5", "volatility_20", "rsi_14"],
+    "target": "next_return_5",
+    "training_config": {
+      "train_days": 252,
+      "test_days": 63,
+      "random_state": 42
+    },
+    "training_date": "2026-01-01T10:00:00Z",
+    "performance": {
+      "train_r2": 0.72,
+      "test_r2": 0.68,
+      "mse": 0.0015,
+      "mae": 0.028
+    },
+    "feature_importance": [
+      {"feature": "rsi_14", "importance": 0.45},
+      {"feature": "volatility_20", "importance": 0.35},
+      {"feature": "returns_5", "importance": 0.20}
+    ]
+  }
+}
+```
+
 ### POST /api/walk-forward
 
 Run Walk-Forward Analysis (WFA) to validate strategy robustness.
@@ -505,6 +686,284 @@ Get overall data quality health score.
   "symbols_with_outliers": 1,
   "stale_symbols": 1,
   "health_score": 0.85
+}
+```
+
+## Advanced Orders (NEW)
+
+### GET /api/orders/pending
+
+Get pending orders, optionally filtered by symbol.
+
+**Query Parameters:**
+- `symbol` (optional): Filter by symbol
+
+**Response:**
+```json
+{
+  "success": true,
+  "orders": [
+    {
+      "order_id": "order_123",
+      "symbol": "BTC",
+      "side": "Buy",
+      "price": 40000.00,
+      "quantity": 0.5,
+      "order_type": "Limit",
+      "status": "Pending",
+      "created_at": "2026-01-01T10:00:00Z"
+    }
+  ]
+}
+```
+
+### GET /api/orders/queue
+
+Get order queue summary.
+
+**Query Parameters:**
+- `symbol` (optional): Filter by symbol
+
+**Response:**
+```json
+{
+  "success": true,
+  "queues": [
+    {
+      "symbol": "BTC",
+      "pending_count": 5,
+      "total_qty": 2.5,
+      "orders": [
+        {
+          "order_id": "order_123",
+          "side": "Buy",
+          "price": 40000.00,
+          "quantity": 0.5,
+          "position": 1
+        }
+      ]
+    }
+  ]
+}
+```
+
+### POST /api/orders/oco
+
+Create OCO (One-Cancels-Other) order.
+
+**Request:**
+```json
+{
+  "symbol": "BTC",
+  "primary": {
+    "side": "Buy",
+    "price": 40000.00,
+    "quantity": 0.5,
+    "order_type": "Limit"
+  },
+  "secondary": {
+    "side": "Sell",
+    "price": 39000.00,
+    "quantity": 0.5,
+    "order_type": "Stop"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "oco_id": "oco_12345",
+  "primary_order_id": "order_123",
+  "secondary_order_id": "order_124",
+  "status": "Active",
+  "message": "OCO order created successfully"
+}
+```
+
+### POST /api/orders/bracket
+
+Create bracket order (entry + stop-loss + take-profit).
+
+**Request:**
+```json
+{
+  "symbol": "BTC",
+  "entry": {
+    "side": "Buy",
+    "price": 40000.00,
+    "quantity": 0.5,
+    "order_type": "Limit"
+  },
+  "stop_loss": {
+    "price": 39000.00,
+    "order_type": "Stop"
+  },
+  "take_profit": {
+    "price": 41000.00,
+    "order_type": "Limit"
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "bracket_id": "bracket_12345",
+  "entry_order_id": "order_123",
+  "stop_loss_order_id": "order_124",
+  "take_profit_order_id": "order_125",
+  "status": "Pending",
+  "message": "Bracket order created successfully"
+}
+```
+
+### POST /api/orders/iceberg
+
+Create iceberg order (split large order into smaller visible portions).
+
+**Request:**
+```json
+{
+  "symbol": "BTC",
+  "side": "Buy",
+  "total_quantity": 5.0,
+  "visible_quantity": 0.5,
+  "price": 40000.00,
+  "order_type": "Limit",
+  "interval_ms": 1000
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "iceberg_id": "iceberg_12345",
+  "total_quantity": 5.0,
+  "visible_quantity": 0.5,
+  "remaining_quantity": 5.0,
+  "status": "Active",
+  "message": "Iceberg order created successfully"
+}
+```
+
+### POST /api/orders/limit-chase
+
+Create limit-chase order (automatically adjust limit order to follow price).
+
+**Request:**
+```json
+{
+  "symbol": "BTC",
+  "side": "Buy",
+  "initial_price": 40000.00,
+  "quantity": 0.5,
+  "chase_distance": 50.0,
+  "max_price": 40500.0,
+  "expiry_seconds": 3600
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "limit_chase_id": "chase_12345",
+  "current_price": 40000.00,
+  "quantity": 0.5,
+  "status": "Active",
+  "message": "Limit-chase order created successfully"
+}
+```
+
+### PUT /api/orders/:id
+
+Modify an existing order.
+
+**Request:**
+```json
+{
+  "new_price": 40500.00,
+  "new_quantity": 0.75
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "order_id": "order_123",
+  "status": "Modified",
+  "message": "Order modified successfully"
+}
+```
+
+### DELETE /api/orders/:id
+
+Cancel an order.
+
+**Response:**
+```json
+{
+  "success": true,
+  "order_id": "order_123",
+  "status": "Cancelled",
+  "message": "Order cancelled successfully"
+}
+```
+
+### POST /api/orders/partial-tp
+
+Partial take-profit on a position.
+
+**Request:**
+```json
+{
+  "symbol": "BTC",
+  "position_id": "pos_123",
+  "percentage": 0.5,
+  "take_profit_price": 41000.00
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "position_id": "pos_123",
+  "tp_order_id": "order_123",
+  "tp_quantity": 0.25,
+  "remaining_quantity": 0.25,
+  "message": "Partial take-profit order created"
+}
+```
+
+### POST /api/orders/scale
+
+Scale in/out of a position.
+
+**Request:**
+```json
+{
+  "symbol": "BTC",
+  "action": "scale_in",
+  "quantity": 0.25,
+  "price": 39500.00,
+  "target_position_size": 1.0
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "position_id": "pos_123",
+  "scale_order_id": "order_123",
+  "new_position_size": 0.75,
+  "message": "Scale-in order created successfully"
 }
 ```
 

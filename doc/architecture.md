@@ -180,6 +180,15 @@ sequenceDiagram
 | Sensitivity | Parameter grid search |
 | Correlation | Multi-strategy correlation |
 
+**Machine Learning Modules (NEW):**
+| Module | Purpose |
+|--------|---------|
+| FeatureExtractor | Feature engineering from OHLCV data |
+| DataSplitter | Time-series aware train/test splits |
+| MLModels | Regression/classification models |
+| MLStrategy | ML-based trading strategies |
+| MLValidation | Walk-forward validation and overfitting detection |
+
 ---
 
 ### 5. Execution (`crates/execution`)
@@ -203,6 +212,14 @@ graph LR
         VolScale[Volatility Scaling]
     end
     
+    subgraph "Advanced Orders (NEW)"
+        OCO[OCO Orders]
+        Bracket[Bracket Orders]
+        Iceberg[Iceberg Orders]
+        LimitChase[Limit Chase Orders]
+        OrderManager[Order Manager]
+    end
+    
     Order --> Risk
     Risk --> Checks
     Checks --> MaxOrder
@@ -211,6 +228,11 @@ graph LR
     Checks --> Drift
     Checks --> VolScale
     MaxOrder --> Exchange
+    Order --> OrderManager
+    OrderManager --> OCO
+    OrderManager --> Bracket
+    OrderManager --> Iceberg
+    OrderManager --> LimitChase
 ```
 
 ---
@@ -234,6 +256,8 @@ graph TD
         DataAPI[Data API]
         QualityAPI[Quality API]
         AnalysisAPI[Analysis API]
+        MLAPI[ML API]
+        OrdersAPI[Orders API]
     end
     
     subgraph "Frontend"
@@ -247,6 +271,8 @@ graph TD
         SentimentUI[Sentiment UI]
         Tables[Tables]
         Console[Log Console]
+        MLTab[ML Tab: Model Training/Validation]
+        OrdersTab[Orders Tab: Advanced Order Management]
     end
     
     Axum --> REST
@@ -257,6 +283,8 @@ graph TD
     REST --> DataAPI
     REST --> QualityAPI
     REST --> AnalysisAPI
+    REST --> MLAPI
+    REST --> OrdersAPI
     Static --> UI
     UI --> BuildTab
     UI --> OptimizeTab
@@ -267,6 +295,8 @@ graph TD
     UI --> SentimentUI
     UI --> Tables
     UI --> Console
+    UI --> MLTab
+    UI --> OrdersTab
     WS --> UI
 ```
 
