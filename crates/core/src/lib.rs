@@ -1,7 +1,7 @@
 //! # AlphaField Core
 //!
 //! Core data structures and traits for quantitative finance applications.
-//! This crate provides the foundational types used across the entire AlphaField system.
+//! This crate provides foundational types used across the entire AlphaField system.
 //!
 //! ## Performance Characteristics
 //! - All price data uses `f64` for numerical precision
@@ -12,6 +12,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use uuid::Uuid;
 
 // ============================================================================
 // ERROR TYPES
@@ -451,6 +452,12 @@ pub enum OrderStatus {
     Filled,
     Canceled,
     Rejected,
+    /// Part of an OCO group that's waiting to be triggered
+    OcoPending,
+    /// Canceled as part of OCO (other order filled)
+    OcoCanceled,
+    /// Iceberg order - visible portion filled, hidden portion pending
+    IcebergPending,
 }
 
 /// Represents an order to be placed or tracked
@@ -479,6 +486,268 @@ pub struct Order {
 
     /// Creation timestamp
     pub timestamp: DateTime<Utc>,
+
+    /// OCO group ID (if part of a One-Cancels-Other order)
+    #[serde(default)]
+    pub oco_group_id: Option<String>,
+
+    /// Iceberg hidden quantity remaining (for iceberg orders)
+    #[serde(default)]
+    pub iceberg_hidden_qty: Option<f64>,
+
+    /// Stop-loss price (for bracket orders)
+    #[serde(default)]
+    pub stop_loss: Option<f64>,
+
+    /// Take-profit price (for bracket orders)
+    #[serde(default)]
+    pub take_profit: Option<f64>,
+
+    /// Parent order ID (for child orders in bracket/OCO)
+    #[serde(default)]
+    pub parent_order_id: Option<String>,
+
+    /// Limit chase adjustment amount (for limit chase orders)
+    #[serde(default)]
+    pub limit_chase_amount: Option<f64>,
+}
+
+/// OCO (One-Cancels-Other) order group
+/// When one order fills, all other orders in the group are automatically canceled
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OcoOrder {
+    /// Unique group identifier
+    pub group_id: String,
+
+    /// Orders in this OCO group
+    pub orders: Vec<Order>,
+
+    /// Creation timestamp
+    pub timestamp: DateTime<Utc>,
+
+    /// Whether the group is still active
+    pub active: bool,
+
+    /// ID of the order that filled (causing cancellation of others)
+    #[serde(default)]
+    pub filled_order_id: Option<String>,
+}
+
+impl OcoOrder {
+    pub fn new(orders: Vec<Order>) -> Self {
+        Self {
+            group_id: uuid::Uuid::new_v4().to_string(),
+            orders,
+            timestamp: Utc::now(),
+            active: true,
+            filled_order_id: None,
+        }
+    }
+}
+
+/// Bracket order consisting of an entry order with attached stop-loss and take-profit
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BracketOrder {
+    /// Unique bracket identifier
+    pub bracket_id: String,
+
+    /// Entry order (market or limit)
+    pub entry_order: Order,
+
+    /// Stop-loss order
+    pub stop_loss_order: Order,
+
+    /// Take-profit order
+    pub take_profit_order: Order,
+
+    /// Creation timestamp
+    pub timestamp: DateTime<Utc>,
+
+    /// Current state of the bracket
+    pub state: BracketState,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub enum BracketState {
+    /// Entry order pending
+    EntryPending,
+    /// Entry filled, SL/TP active
+    Active,
+    /// Stop-loss filled
+    StopLossFilled,
+    /// Take-profit filled
+    TakeProfitFilled,
+    /// Canceled
+    Canceled,
+}
+
+impl BracketOrder {
+    pub fn new(entry_order: Order, stop_loss_order: Order, take_profit_order: Order) -> Self {
+        let bracket_id = uuid::Uuid::new_v4().to_string();
+
+        // Mark child orders with parent ID
+        let mut sl_order = stop_loss_order;
+        sl_order.parent_order_id = Some(bracket_id.clone());
+
+        let mut tp_order = take_profit_order;
+        tp_order.parent_order_id = Some(bracket_id.clone());
+
+        Self {
+            bracket_id,
+            entry_order,
+            stop_loss_order: sl_order,
+            take_profit_order: tp_order,
+            timestamp: Utc::now(),
+            state: BracketState::EntryPending,
+        }
+    }
+}
+
+/// Iceberg order - splits a large order into smaller visible portions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IcebergOrder {
+    /// Unique iceberg identifier
+    pub iceberg_id: String,
+
+    /// Visible display quantity (per slice)
+    pub visible_quantity: f64,
+
+    /// Total remaining quantity (visible + hidden)
+    pub total_quantity: f64,
+
+    /// Symbol to trade
+    pub symbol: String,
+
+    /// Side (Buy/Sell)
+    pub side: OrderSide,
+
+    /// Limit price
+    pub price: f64,
+
+    /// Creation timestamp
+    pub timestamp: DateTime<Utc>,
+
+    /// Whether the iceberg order is still active
+    pub active: bool,
+
+    /// List of filled slice quantities
+    #[serde(default)]
+    pub filled_slices: Vec<(DateTime<Utc>, f64)>,
+}
+
+impl IcebergOrder {
+    pub fn new(
+        symbol: String,
+        side: OrderSide,
+        price: f64,
+        total_quantity: f64,
+        visible_quantity: f64,
+    ) -> Self {
+        Self {
+            iceberg_id: Uuid::new_v4().to_string(),
+            visible_quantity,
+            total_quantity,
+            symbol,
+            side,
+            price,
+            timestamp: Utc::now(),
+            active: true,
+            filled_slices: Vec::new(),
+        }
+    }
+
+    /// Calculate remaining hidden quantity
+    pub fn hidden_quantity(&self) -> f64 {
+        let filled_total: f64 = self.filled_slices.iter().map(|(_, qty)| qty).sum();
+        let remaining = self.total_quantity - filled_total;
+        (remaining - self.visible_quantity).max(0.0)
+    }
+
+    /// Check if more slices are needed
+    pub fn needs_more_slices(&self) -> bool {
+        self.hidden_quantity() > 0.0
+    }
+}
+
+/// Limit chase order - automatically adjusts limit price if price moves away
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LimitChaseOrder {
+    /// Unique identifier
+    pub chase_id: String,
+
+    /// Original order
+    pub order: Order,
+
+    /// Maximum chase amount (price units or percentage)
+    pub chase_amount: f64,
+
+    /// Whether chase amount is percentage (true) or absolute (false)
+    pub is_percentage: bool,
+
+    /// Number of price adjustments made
+    pub adjustments: usize,
+
+    /// Maximum number of adjustments allowed
+    pub max_adjustments: usize,
+
+    /// Creation timestamp
+    pub timestamp: DateTime<Utc>,
+
+    /// Whether the chase order is still active
+    pub active: bool,
+}
+
+impl LimitChaseOrder {
+    pub fn new(
+        order: Order,
+        chase_amount: f64,
+        is_percentage: bool,
+        max_adjustments: usize,
+    ) -> Self {
+        Self {
+            chase_id: Uuid::new_v4().to_string(),
+            order,
+            chase_amount,
+            is_percentage,
+            adjustments: 0,
+            max_adjustments,
+            timestamp: Utc::now(),
+            active: true,
+        }
+    }
+
+    /// Calculate new limit price based on current market price
+    pub fn calculate_new_limit(&self, current_price: f64) -> Option<f64> {
+        if !self.active || self.adjustments >= self.max_adjustments {
+            return None;
+        }
+
+        let current_limit = self.order.price?;
+
+        let new_limit = if self.is_percentage {
+            if self.order.side == OrderSide::Buy && current_price > current_limit {
+                current_limit * (1.0 + self.chase_amount / 100.0)
+            } else if self.order.side == OrderSide::Sell && current_price < current_limit {
+                current_limit * (1.0 - self.chase_amount / 100.0)
+            } else {
+                return None;
+            }
+        } else if self.order.side == OrderSide::Buy && current_price > current_limit {
+            current_limit + self.chase_amount
+        } else if self.order.side == OrderSide::Sell && current_price < current_limit {
+            current_limit - self.chase_amount
+        } else {
+            return None;
+        };
+
+        Some(new_limit)
+    }
+
+    /// Update order with new limit price
+    pub fn update_limit(&mut self, new_price: f64) {
+        self.order.price = Some(new_price);
+        self.adjustments += 1;
+    }
 }
 
 /// Represents a trade execution
@@ -523,6 +792,126 @@ pub trait ExecutionService: Send + Sync {
 
     /// Get current order status
     async fn get_order(&self, order_id: &str, symbol: &str) -> Result<Order>;
+
+    // ==================== Advanced Order Management Methods ====================
+
+    /// Submit an OCO (One-Cancels-Other) order group
+    /// When one order fills, all other orders in the group are automatically canceled
+    async fn submit_oco_order(&self, oco: &OcoOrder) -> Result<String> {
+        // Default implementation submits orders individually
+        // Real implementations should use exchange-specific OCO endpoints
+        let mut first_order_id = String::new();
+        for order in &oco.orders {
+            first_order_id = self.submit_order(order).await?;
+        }
+        Ok(first_order_id)
+    }
+
+    /// Cancel an OCO order group
+    async fn cancel_oco_order(&self, group_id: &str) -> Result<()> {
+        // Default implementation: find and cancel all orders in the group
+        // Real implementations would use exchange-specific cancellation
+        Err(QuantError::Api(format!(
+            "OCO cancellation not implemented for group {}",
+            group_id
+        )))
+    }
+
+    /// Submit a bracket order (entry + SL + TP)
+    async fn submit_bracket_order(&self, bracket: &BracketOrder) -> Result<String> {
+        // Submit entry order first
+        let entry_id = self.submit_order(&bracket.entry_order).await?;
+
+        // In a real implementation, SL and TP would be conditional on entry fill
+        // For now, we submit them with OCO behavior
+        let oco = OcoOrder {
+            group_id: bracket.bracket_id.clone(),
+            orders: vec![
+                bracket.stop_loss_order.clone(),
+                bracket.take_profit_order.clone(),
+            ],
+            timestamp: bracket.timestamp,
+            active: true,
+            filled_order_id: None,
+        };
+        self.submit_oco_order(&oco).await?;
+
+        Ok(entry_id)
+    }
+
+    /// Submit an iceberg order (split large orders)
+    async fn submit_iceberg_order(&self, iceberg: &IcebergOrder) -> Result<String> {
+        // Submit first visible slice
+        let initial_order = Order {
+            id: uuid::Uuid::new_v4().to_string(),
+            symbol: iceberg.symbol.clone(),
+            side: iceberg.side,
+            order_type: OrderType::Limit,
+            quantity: iceberg.visible_quantity.min(iceberg.total_quantity),
+            price: Some(iceberg.price),
+            status: OrderStatus::New,
+            timestamp: iceberg.timestamp,
+            oco_group_id: None,
+            iceberg_hidden_qty: Some(iceberg.hidden_quantity()),
+            stop_loss: None,
+            take_profit: None,
+            parent_order_id: Some(iceberg.iceberg_id.clone()),
+            limit_chase_amount: None,
+        };
+
+        self.submit_order(&initial_order).await
+    }
+
+    /// Submit a limit chase order
+    async fn submit_limit_chase(&self, chase: &LimitChaseOrder) -> Result<String> {
+        self.submit_order(&chase.order).await
+    }
+
+    /// Modify an existing order (price, quantity, etc.)
+    async fn modify_order(
+        &self,
+        order_id: &str,
+        symbol: &str,
+        new_price: Option<f64>,
+        new_quantity: Option<f64>,
+    ) -> Result<Order> {
+        // Default implementation: cancel and replace
+        // Real implementations would use exchange-specific modify endpoints
+        let old_order = self.get_order(order_id, symbol).await?;
+
+        // Cancel old order
+        self.cancel_order(order_id, symbol).await?;
+
+        // Create new order with modified parameters
+        let mut new_order = old_order.clone();
+        if let Some(price) = new_price {
+            new_order.price = Some(price);
+        }
+        if let Some(qty) = new_quantity {
+            new_order.quantity = qty;
+        }
+
+        let new_id = self.submit_order(&new_order).await?;
+        new_order.id = new_id;
+
+        Ok(new_order)
+    }
+
+    /// Bulk cancel all orders for a symbol
+    async fn cancel_all_orders(&self, symbol: &str) -> Result<()> {
+        // Default implementation: would need to list orders first
+        // Real implementations would use exchange-specific bulk cancel
+        Err(QuantError::Api(format!(
+            "Bulk cancel not implemented for symbol {}",
+            symbol
+        )))
+    }
+
+    /// Get all pending orders
+    async fn get_pending_orders(&self) -> Result<Vec<Order>> {
+        // Default implementation: would need to query all orders
+        Ok(Vec::new())
+    }
 }
 
 // ============================================================================

@@ -407,6 +407,12 @@ mod tests {
             timestamp: chrono::Utc::now(),
             id: String::new(),
             status: alphafield_core::OrderStatus::New,
+            oco_group_id: None,
+            iceberg_hidden_qty: None,
+            stop_loss: None,
+            take_profit: None,
+            parent_order_id: None,
+            limit_chase_amount: None,
         };
 
         let result = check.check(&order);
@@ -428,6 +434,12 @@ mod tests {
             timestamp: chrono::Utc::now(),
             id: String::new(),
             status: alphafield_core::OrderStatus::New,
+            oco_group_id: None,
+            iceberg_hidden_qty: None,
+            stop_loss: None,
+            take_profit: None,
+            parent_order_id: None,
+            limit_chase_amount: None,
         };
 
         assert!(check.check(&order).is_ok());
@@ -459,6 +471,12 @@ mod tests {
             timestamp: chrono::Utc::now(),
             id: String::new(),
             status: alphafield_core::OrderStatus::New,
+            oco_group_id: None,
+            iceberg_hidden_qty: None,
+            stop_loss: None,
+            take_profit: None,
+            parent_order_id: None,
+            limit_chase_amount: None,
         };
 
         let result = check.check(&order);
@@ -481,6 +499,12 @@ mod tests {
             timestamp: chrono::Utc::now(),
             id: String::new(),
             status: alphafield_core::OrderStatus::New,
+            oco_group_id: None,
+            iceberg_hidden_qty: None,
+            stop_loss: None,
+            take_profit: None,
+            parent_order_id: None,
+            limit_chase_amount: None,
         };
 
         assert!(check.check(&order).is_ok());

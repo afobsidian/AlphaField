@@ -45,6 +45,7 @@ dependencies = [
  "serde",
  "thiserror 1.0.69",
  "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -104,6 +105,7 @@ dependencies = [
  "hmac",
  "reqwest",
  "serde",
+ "serde_json",
  "sha2",
  "thiserror 1.0.69",
  "tokio",

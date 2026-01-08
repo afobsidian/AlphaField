@@ -227,6 +227,12 @@ impl ExecutionService for BinanceExecutionClient {
             price: data.price.parse().ok(),
             status,
             timestamp: Utc::now(), // Note: Binance gives transact_time, but we use now() for simplicity or parse it
+            oco_group_id: None,
+            iceberg_hidden_qty: None,
+            stop_loss: None,
+            take_profit: None,
+            parent_order_id: None,
+            limit_chase_amount: None,
         })
     }
 }

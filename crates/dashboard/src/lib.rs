@@ -1,6 +1,6 @@
 //! # AlphaField Dashboard
 //!
-//! Web-based monitoring and analytics dashboard for AlphaField trading system
+//! Axum-based REST API and WebSocket server for real-time trading dashboard
 
 pub mod analysis_api;
 pub mod api;
@@ -9,6 +9,7 @@ pub mod chart_api;
 pub mod data_api;
 pub mod ml_api;
 pub mod mock_data;
+pub mod orders_api;
 pub mod quality_api;
 pub mod reports_api;
 pub mod sentiment_api;

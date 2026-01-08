@@ -82,6 +82,12 @@ pub fn generate_mock_orders() -> Vec<Order> {
             price: Some(92_000.0),
             status: OrderStatus::Filled,
             timestamp: Utc::now() - chrono::Duration::hours(2),
+            oco_group_id: None,
+            iceberg_hidden_qty: None,
+            stop_loss: None,
+            take_profit: None,
+            parent_order_id: None,
+            limit_chase_amount: None,
         },
         Order {
             id: Uuid::new_v4().to_string(),
@@ -92,6 +98,12 @@ pub fn generate_mock_orders() -> Vec<Order> {
             price: Some(3_050.0),
             status: OrderStatus::Filled,
             timestamp: Utc::now() - chrono::Duration::hours(1),
+            oco_group_id: None,
+            iceberg_hidden_qty: None,
+            stop_loss: None,
+            take_profit: None,
+            parent_order_id: None,
+            limit_chase_amount: None,
         },
         Order {
             id: Uuid::new_v4().to_string(),
@@ -102,6 +114,12 @@ pub fn generate_mock_orders() -> Vec<Order> {
             price: Some(138.0),
             status: OrderStatus::Filled,
             timestamp: Utc::now() - chrono::Duration::minutes(30),
+            oco_group_id: None,
+            iceberg_hidden_qty: None,
+            stop_loss: None,
+            take_profit: None,
+            parent_order_id: None,
+            limit_chase_amount: None,
         },
     ]
 }

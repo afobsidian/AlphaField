@@ -1,7 +1,7 @@
 use axum::{
     extract::State,
     response::Json,
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
     Router,
 };
 use serde::{Deserialize, Serialize};
@@ -10,6 +10,13 @@ use std::sync::Arc;
 use crate::mock_data::{
     generate_mock_orders, generate_mock_performance, generate_mock_portfolio,
     generate_mock_positions, PerformanceMetrics, Portfolio, Position,
+};
+use crate::orders_api::{
+    break_even_stop, cancel_all_orders, cancel_bracket_order, cancel_iceberg_order,
+    cancel_limit_chase_order, cancel_oco_order, cancel_order, create_bracket_order,
+    create_iceberg_order, create_limit_chase_order, create_oco_order, get_bracket_orders,
+    get_iceberg_orders, get_limit_chase_orders, get_oco_orders, get_order_queue,
+    get_pending_orders, modify_order, partial_take_profit, scale_in_position, scale_out_position,
 };
 use crate::reports_api::{
     add_journal_entry, calculate_tax, delete_journal_entry, export_report_csv, export_tax_csv,
@@ -175,5 +182,41 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         // Tax
         .route("/api/tax/calculate", post(calculate_tax))
         .route("/api/tax/export", post(export_tax_csv))
+        // Advanced Order Management
+        .route("/api/orders/pending", get(get_pending_orders))
+        .route("/api/orders/queue", get(get_order_queue))
+        .route("/api/orders/:id", put(modify_order))
+        .route("/api/orders/:id/cancel", post(cancel_order))
+        .route("/api/orders/cancel-all/:symbol", post(cancel_all_orders))
+        // OCO Orders
+        .route("/api/orders/oco", post(create_oco_order))
+        .route("/api/orders/oco", get(get_oco_orders))
+        .route("/api/orders/oco/:group_id/cancel", post(cancel_oco_order))
+        // Bracket Orders
+        .route("/api/orders/bracket", post(create_bracket_order))
+        .route("/api/orders/bracket", get(get_bracket_orders))
+        .route(
+            "/api/orders/bracket/:bracket_id/cancel",
+            post(cancel_bracket_order),
+        )
+        // Iceberg Orders
+        .route("/api/orders/iceberg", post(create_iceberg_order))
+        .route("/api/orders/iceberg", get(get_iceberg_orders))
+        .route(
+            "/api/orders/iceberg/:iceberg_id/cancel",
+            post(cancel_iceberg_order),
+        )
+        // Limit Chase Orders
+        .route("/api/orders/limit-chase", post(create_limit_chase_order))
+        .route("/api/orders/limit-chase", get(get_limit_chase_orders))
+        .route(
+            "/api/orders/limit-chase/:chase_id/cancel",
+            post(cancel_limit_chase_order),
+        )
+        // Position Management
+        .route("/api/positions/scale-in", post(scale_in_position))
+        .route("/api/positions/scale-out", post(scale_out_position))
+        .route("/api/positions/partial-tp", post(partial_take_profit))
+        .route("/api/positions/break-even", post(break_even_stop))
         .with_state(state)
 }
