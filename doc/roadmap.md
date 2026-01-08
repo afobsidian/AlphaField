@@ -1,352 +1,349 @@
-# 🗺️ AlphaField Roadmap v2.0
+# 🗺️ AlphaField Roadmap v3.0
 
 > Updated: January 2026  
-> Status: V1 Complete, V2 Planning  
-> Purpose: **Personal Algorithmic Trading Platform**
+> Status: Strategy Research & Validation Focus  
+> Purpose: **Rigorous Strategy Testing Platform**
 
 ---
 
-## 📊 Feature Gap Analysis
+## 🎯 Project Mission
 
-| Feature | AlphaField | Gap Priority |
-|---------|------------|--------------|
-| Backtesting | ✅ Complete | - |
-| Live Trading | ✅ Binance | - |
-| Monte Carlo / Sensitivity | ✅ Complete | - |
-| Risk Management | ✅ Complete | - |
-| **Interactive Charting** | ⚠️ Basic | High |
-| **DCA/Grid Bots** | ❌ Missing | High |
-| **Sentiment Analysis** | ❌ Missing | High |
-| **Advanced Order Types** | ⚠️ Limited | Medium |
-| **Enhanced Reporting** | ⚠️ Basic | Medium |
-| **Mobile Monitoring** | ❌ Missing | Low |
+AlphaField is a **research-first trading platform** focused on:
+1. **Rigorous validation** of trading strategies through comprehensive backtesting
+2. **Quantitative analysis** with statistical significance and robustness metrics
+3. **Strategy discovery** through systematic hypothesis testing
+4. **ML-assisted research** for parameter optimization and feature discovery
+
+**All features must be testable and quantifiable.**
 
 ---
 
-## ✅ V1 Completed Phases (1-11)
+## 📊 Current Capabilities (V1-V2 Complete)
 
-All original phases complete:
-- Foundation & Data Layer
-- Strategy Engine & Indicators
-- Backtesting Engine
-- Live Execution (Binance)
-- Dashboard & Analytics
-- Production Hardening
-- Enhanced Metrics
-- Real-Time Dashboard
-- Stress Testing
-- Data Infrastructure
-- Production Deployment
+### ✅ Foundation Complete
+- Data layer: Multi-source ingestion (Binance, CoinGecko, Coinlayer) → TimescaleDB
+- Backtesting: Event-driven simulation with realistic fills, slippage, fees
+- Risk management: Circuit breakers, position limits, drift monitoring, volatility scaling
+- Dashboard: REST/WebSocket API, real-time monitoring
+- **Advanced backtesting suite**: Walk-forward analysis, Monte Carlo, sensitivity analysis
+- **ML integration**: Feature engineering, model training, parameter optimization
 
----
-
-## 🎯 V2 Roadmap: Personal Trading Enhancements
-
-### Phase 12: Interactive Charting ✅
-
-> Target: Q1 2026 | Priority: **High** | Status: **Complete**
-
-#### Chart Display
-- [x] Multiple timeframes (1m, 5m, 15m, 1h, 4h, 1d)
-- [x] Candlestick, line, area chart types
-
-#### Indicators on Chart
-- [x] SMA/EMA overlay display
-- [x] RSI, MACD in separate panels
-- [x] Bollinger Bands visualization
-- [x] Custom indicator parameter controls
-
-#### Trade Markers
-- [x] Entry/exit points on chart
-- [x] P&L annotations
-- [x] Backtest equity curve overlay
+### ✅ Validation Techniques Available
+- Walk-forward analysis with rolling windows
+- Monte Carlo simulation (trade sequence randomization)
+- Parameter sweep with sensitivity heatmaps
+- Overfitting detection (in-sample vs out-of-sample gaps)
+- Robustness scoring (multi-metric validation)
+- Multi-symbol asset category training
 
 ---
 
-### Phase 13: Sentiment Analysis ✅
+## 🎯 V3 Roadmap: Strategy Research & Validation
 
-> Target: Q1 2026 | Priority: **High** | Status: **Complete**
+### Phase 12: Strategy Library Expansion
 
-#### Data Sources
-- [x] Fear & Greed Index integration (`SentimentClient`)
-- [ ] Twitter/X sentiment API (crypto mentions) - *future*
-- [ ] Reddit sentiment (r/cryptocurrency, r/bitcoin) - *future*
-- [ ] News headline sentiment (CryptoPanic, NewsAPI) - *future*
+> Target: Q1 2026 | Priority: **Critical** | Status: **In Progress**
 
-#### Sentiment Indicators
-- [x] Aggregate sentiment score (bullish/bearish/neutral)
-- [x] Sentiment momentum (rate of change)
-- [ ] Social volume tracking - *future*
-- [ ] Whale alert integration (large transactions) - *future*
+#### Research Framework
+- [x] Hypothesis registration system (written hypothesis → code)
+- [x] Strategy classification framework (trend, mean-reversion, momentum, arbitrage)
+- [x] Performance benchmarking against baseline strategies
+- [ ] Automated strategy discovery (pattern recognition in historical data)
+- [ ] Strategy mutation testing (systematic variation of strategy logic)
+- [ ] Regime-aware strategy library (bull market, bear market, sideways)
 
-#### Strategy Integration
-- [x] Sentiment as strategy input/filter (`SentimentIndicator`)
-- [x] Backtest with historical sentiment data
-- [x] Sentiment divergence detection (price vs sentiment)
-- [x] Per-asset technical sentiment (`AssetSentimentCalculator`)
-- [x] RSI zones, momentum zones, volume ratio
-- [x] Composite sentiment score per asset
+#### Core Strategy Categories
+- [x] **Trend Following**: Golden Cross, Breakout, Moving Average Crossover
+- [x] **Mean Reversion**: Bollinger Bands, RSI Reversion, Statistical Arbitrage
+- [x] **Momentum**: RSI Momentum, MACD Strategy, Price Rate of Change
+- [ ] **Volatility-Based**: ATR-based strategies, Volatility breakout
+- [ ] **Sentiment-Based**: Fear & Greed integration, contrarian strategies
+- [ ] **Multi-Indicator**: Hybrid strategies combining multiple signals
+- [ ] **Market Microstructure**: Order flow, volume profile (if tick data available)
 
-#### Dashboard Display
-- [x] Sentiment API endpoints (`/api/sentiment/*`)
-- [x] Sentiment gauge widget with gradient bar
-- [x] Historical sentiment chart with zone shading
-- [x] Zone distribution bars (Fear/Neutral/Greed)
-- [x] Statistics panel (avg, min, max, SMA, momentum)
-- [x] Asset sentiment in backtest response
+#### Strategy Documentation
+- [ ] Each strategy requires: Hypothesis, Logic, Expected Market Regimes, Risk Profile
+- [ ] Historical performance database (strategy results over time)
+- [ ] Strategy comparison metrics (side-by-side quantitative analysis)
+- [ ] Failure mode documentation (when and why strategies fail)
 
 ---
 
-### Phase 14: Automated Trading Bots
+### Phase 13: Advanced Validation Techniques
+
+> Target: Q2 2026 | Priority: **Critical**
+
+#### Statistical Significance
+- [ ] Bootstrap validation (resampling trade results for confidence intervals)
+- [ ] Permutation testing (shuffling returns to test for randomness)
+- [ ] Stationarity testing (ADF test on strategy returns)
+- [ ] Statistical significance of Sharpe/Sortino ratios
+- [ ] Correlation analysis between strategies (portfolio construction)
+
+#### Regime Testing
+- [ ] Automatic market regime detection (bull/bear/sideways/volatile)
+- [ ] Regime-specific backtesting (performance in each regime)
+- [ ] Regime transition testing (how strategies adapt to regime changes)
+- [ ] Stress testing by regime (worst-case historical regimes)
+- [ ] Regime prediction models (ML-based regime forecasting)
+
+#### Temporal Validation
+- [ ] Expanding window backtesting (test on increasingly longer periods)
+- [ ] Rolling stability testing (performance consistency over time)
+- [ ] Period decomposition testing (performance by year, quarter, month)
+- [ ] Market cycle testing (performance across complete market cycles)
+- [ ] Forward-looking validation (paper trading → live comparison)
+
+#### Robustness Enhancements
+- [ ] Complexity penalty (fewer parameters = higher robustness score)
+- [ ] Data perturbation testing (adding noise to test sensitivity)
+- [ ] Multiple timeframes testing (strategy performance across timeframes)
+- [ ] Cross-asset validation (test on correlated/uncorrelated assets)
+- [ ] Outlier impact analysis (how individual trades affect overall results)
+
+---
+
+### Phase 14: ML-Assisted Strategy Research
 
 > Target: Q2 2026 | Priority: **High**
 
-#### DCA Bot
-- [ ] Scheduled recurring buys
-- [ ] Fixed amount or % of available balance
-- [ ] Configurable frequency (daily, weekly, monthly)
-- [ ] Stop if price exceeds threshold
+#### Feature Engineering & Discovery
+- [x] Automated feature extraction from OHLCV data
+- [x] Technical indicator feature library (50+ indicators)
+- [ ] Feature importance ranking for strategies
+- [ ] Automated feature selection (remove redundant features)
+- [ ] Custom feature builder (composite indicator creation)
+- [ ] Feature stability analysis (which features remain predictive over time)
 
-#### Grid Bot
-- [ ] Upper/lower price range
-- [ ] Number of grid levels
-- [ ] Auto buy low / sell high within range
-- [ ] Profit tracking per grid
+#### ML for Parameter Optimization
+- [x] Grid search (already complete)
+- [ ] Bayesian optimization (smart parameter exploration)
+- [ ] Genetic algorithms (evolutionary parameter search)
+- [ ] Reinforcement learning for parameter tuning
+- [ ] Multi-objective optimization (balance profit vs risk metrics)
 
-#### Trailing Orders
-- [ ] Trailing stop-loss (% or fixed distance)
-- [ ] Trailing take-profit
-- [ ] Activation price triggers
+#### ML for Signal Generation
+- [x] Classification models (price direction prediction)
+- [x] Regression models (price magnitude prediction)
+- [ ] Ensemble methods (combine multiple ML models)
+- [ ] Online learning (models that adapt to new data)
+- [ ] Feature interaction discovery (non-linear relationships)
 
----
-
-### Phase 15: Advanced Order Management
-
-> Target: Q2 2026 | Priority: **Medium**
-
-#### Order Types
-- [ ] OCO (One-Cancels-Other)
-- [ ] Bracket orders (entry + SL + TP)
-- [ ] Iceberg orders (split large orders)
-- [ ] Limit chase (adjust limit if not filled)
-
-#### Position Management
-- [ ] Scale in/out of positions
-- [ ] Partial take-profit levels
-- [ ] Break-even stop adjustment
-
-#### Order Queue
-- [ ] Pending orders dashboard
-- [ ] Order modification UI
-- [ ] Bulk cancel
+#### ML Validation
+- [ ] Time-series cross-validation (prevents lookahead bias)
+- [ ] Feature importance stability over time
+- [ ] Model drift detection (when model degrades)
+- [ ] Adversarial testing (test against worst-case scenarios)
+- [ ] Explainability (why ML makes specific predictions)
 
 ---
 
-### Phase 16: Enhanced Reporting
+### Phase 15: Multi-Strategy Portfolio Testing
+
+> Target: Q3 2026 | Priority: **High**
+
+#### Portfolio Construction
+- [ ] Correlation matrix visualization (strategy interdependencies)
+- [ ] Portfolio optimization algorithms (Mean-Variance, Risk Parity)
+- [ ] Dynamic weighting based on regime
+- [ ] Position sizing optimization (Kelly Criterion, etc.)
+- [ ] Sector/asset allocation strategies
+
+#### Portfolio Validation
+- [ ] Portfolio-level walk-forward analysis
+- [ ] Portfolio Monte Carlo simulation
+- [ ] Portfolio sensitivity analysis (parameter impact)
+- [ ] Stress testing (correlation breakdown scenarios)
+- [ ] Diversification benefits quantification
+
+#### Multi-Asset Testing
+- [ ] Cross-asset correlation analysis
+- [ ] Portfolio backtesting across asset classes
+- [ ] Currency risk assessment
+- [ ] Liquidity impact testing
+- [ ] Slippage modeling at portfolio scale
+
+---
+
+### Phase 16: Research Workflow Automation
 
 > Target: Q3 2026 | Priority: **Medium**
 
-#### Trade Journal
-- [ ] Auto-logged trade history
-- [ ] Notes/tags per trade
-- [ ] Screenshot capture of chart state
+#### Automated Research Pipeline
+- [ ] Batch backtesting (test multiple strategies/assets in parallel)
+- [ ] Automated report generation (PDF/HTML with all metrics)
+- [ ] Strategy ranking system (multi-criteria scoring)
+- [ ] Alert system (notify when strategies degrade or improve)
+- [ ] Version control for strategies (track hypothesis evolution)
 
-#### Performance Reports
-- [ ] Daily/weekly/monthly P&L summaries
-- [ ] Strategy performance breakdown
-- [ ] Drawdown analysis with charts
-- [ ] PDF export
+#### Comparative Analysis
+- [ ] Strategy vs strategy head-to-head comparison
+- [ ] Strategy performance leaderboard
+- [ ] Win rate by asset/timeframe/regime analysis
+- [ ] Statistical significance testing between strategies
+- [ ] Strategy clustering (group similar strategies)
 
-#### Tax Reporting
-- [ ] Cost basis tracking (FIFO, LIFO)
-- [ ] Realized gains/losses by year
-- [ ] CSV export for tax software
-
----
-
-### Phase 17: Mobile Monitoring
-
-> Target: Q4 2026 | Priority: **Low**
-
-#### Progressive Web App (PWA)
-- [ ] Responsive dashboard for mobile
-- [ ] Portfolio balance view
-- [ ] Active positions
-- [ ] Push notifications for critical events
-
-#### Quick Actions
-- [ ] Emergency close all positions
-- [ ] Pause/resume bots
-- [ ] View recent trades
+#### Research Tools
+- [ ] Strategy sandbox (test hypothesis quickly)
+- [ ] What-if analysis (modify parameters in real-time)
+- [ ] Strategy combination builder (drag-and-drop strategy composition)
+- [ ] Research journal (document experiments and findings)
+- [ ] Collaborative research features (share findings)
 
 ---
 
-### Phase 18: Machine Learning Trading Models
+### Phase 17: Advanced Research Features
 
-> Target: Q1 2027 | Priority: **High** | Status: **In Progress**
+> Target: Q4 2026 | Priority: **Medium**
 
-#### Data Pipeline - ✅ COMPLETE
-- [x] Feature engineering from market data (OHLCV, volume profiles)
-- [x] Technical indicator features (SMA, RSI, volatility)
-- [x] Train/validation/test split utilities (time-based, no lookahead)
-- [x] Data normalization and scaling (StandardScaler, MinMaxScaler)
+#### Alternative Data Integration
+- [ ] On-chain metrics (whale alerts, exchange flows, DeFi metrics)
+- [ ] Social sentiment data (Twitter, Reddit, Telegram)
+- [ ] News sentiment analysis (headline sentiment, event impact)
+- [ ] Funding rates & futures data
+- [ ] Options market data (if applicable to spot strategies)
 
-#### Model Training - ✅ COMPLETE
-- [x] Price direction classification (LogisticRegression)
-- [x] Price magnitude regression (LinearRegression)
-- [x] Ensemble methods (Random Forest, Decision Trees)
-- [ ] Deep learning models (LSTM, Transformer - deferred)
+#### Market Microstructure
+- [ ] Order book analysis (if tick data available)
+- [ ] Volume profile analysis
+- [ ] Support/resistance level detection
+- [ ] Liquidity regime detection
+- [ ] Market impact modeling
 
-#### Model Storage & Versioning - ✅ COMPLETE
-- [x] Trained model persistence (JSON serialization)
-- [x] Model metadata (training date, features, performance)
-- [x] Model comparison and selection
-
-#### Inference & Strategy Integration - ✅ COMPLETE
-- [x] ML-based strategy wrapper (MLStrategy)
-- [x] Confidence thresholds for trade execution
-- [x] Take profit / stop loss integration
-- [ ] Hybrid strategies (ML + traditional indicators - partial)
-
-#### Walk-Forward Validation - ✅ COMPLETE
-- [x] Train on period A, backtest on unseen period B
-- [x] Rolling window retraining
-- [x] Out-of-sample performance metrics
-- [x] Overfitting detection (train vs test gap)
-- [x] Stability scoring
-
-#### Dashboard Integration - ✅ COMPLETE
-- [x] `/api/ml/train` endpoint for model training
-- [x] `/api/ml/models` endpoint for listing models
-- [x] `/api/ml/validate` endpoint for walk-forward validation
-- [ ] Frontend UI for ML training (pending)
-- [ ] Prediction visualization on charts (pending)
-- [ ] Model training UI (select features, params, train)
-- [ ] Training progress and metrics display
-- [ ] Prediction visualization on charts
-- [ ] Model performance comparison view
+#### Advanced Analytics
+- [ ] Strategy decay detection (performance degradation over time)
+- [ ] Regime prediction models (forecast upcoming market conditions)
+- [ ] Strategy ensemble methods (combine multiple strategies intelligently)
+- [ ] Adaptive strategy switching (change strategy based on regime)
+- [ ] Real-time strategy performance monitoring
 
 ---
 
-### Phase 19: Advanced Backtesting Techniques ✅
+### Phase 18: Advanced Risk & Position Sizing
 
-> Target: Q1 2027 | Priority: **High** | Status: **Complete**
-> Reference: [4 Backtesting Techniques for Winning Strategies](https://www.youtube.com/watch?v=W722Ca8tS7g)
+> Target: Q4 2026 | Priority: **High**
 
-#### 1. Walk Forward Analysis (WFA) ✅
-- [x] Rolling window optimization (in-sample → out-of-sample)
-- [x] Configurable in-sample/out-of-sample periods
-- [x] Automatic parameter re-optimization on each window
-- [x] Walk forward stability metrics
-- [x] Out-of-sample performance tracking per window
-- [x] Visual timeline of training windows and test periods
-- [ ] Walk forward efficiency ratio (WFE) calculation - *future*
-- [ ] Anchor vs rolling walk forward modes - *future*
+#### Advanced Position Sizing
+- [ ] Kelly Criterion implementation (optimal position sizing)
+- [ ] Volatility-adjusted position sizing (scale positions by ATR)
+- [ ] Correlation-aware sizing (reduce exposure to correlated positions)
+- [ ] Portfolio-level risk limits (VaR, CVaR calculations)
+- [ ] Drawdown-based sizing (reduce size during drawdowns)
 
-#### 2. Monte Carlo Simulation ✅
-- [x] Trade sequence randomization
-- [x] Confidence interval calculation
-- [x] Best/worst/median scenario identification
-- [x] Drawdown distribution analysis
-- [ ] Simulated missed trades (random % drop-out) - *future*
-- [ ] Slippage/fill variation simulation - *future*
-- [ ] Ruin probability estimation - *future*
+#### Risk Analysis
+- [ ] Strategy-specific risk profile (max drawdown, volatility, tail risk)
+- [ ] Regime-dependent risk (risk in bull vs bear markets)
+- [ ] Tail risk analysis (5% worst-case scenarios)
+- [ ] Correlation breakdown risk (what happens when correlations flip)
+- [ ] Leverage impact analysis (even for spot, test different position sizes)
 
-#### 3. Sensitivity Analysis ✅
-- [x] Parameter sweep testing (grid search)
-- [x] 3D heatmap visualization of parameter combinations
-- [x] Identify "parameter cliffs" (fragile zones)
-- [x] Optimal parameter range detection
-- [x] Multi-parameter correlation analysis
-- [x] Robustness score (performance stability across params)
-- [x] Parameter dispersion statistics (CV, ranges, positive %)
-
-#### 4. Realistic Backtesting Conditions ✅
-- [x] Slippage modeling (fixed and percentage-based)
-- [x] Commission/fee integration
-- [x] Latency impact modeling
-- [ ] Variable slippage by volume/volatility - *future*
-- [ ] Partial fill simulation - *future*
-- [ ] Spread widening during high volatility - *future*
-- [ ] Market impact for larger positions - *future*
-
-#### 5. Overfitting Detection & Prevention ✅
-- [x] In-sample vs out-of-sample performance gap alerts
-- [x] Parameter dispersion analysis (low CV = robust)
-- [x] Walk-forward validation with stability scoring
-- [x] Robustness score combining multiple validation signals
-- [x] Multi-symbol asset category training
-- [ ] Complexity penalty (fewer parameters = better) - *future*
-- [ ] Bootstrap validation - *future*
-- [ ] Cross-validation folds for strategy testing - *future*
-- [ ] Strategy degradation tracking over time - *future*
-
-#### 6. Comprehensive Optimization Workflow ✅
-- [x] **Unified 6-phase pipeline**:
-  1. Grid search optimization on in-sample data
-  2. Parameter dispersion statistics calculation
-  3. Walk-forward validation across rolling windows
-  4. 3D sensitivity heatmap generation
-  5. In-sample performance metrics
-  6. Robustness score (weighted validation signals)
-- [x] **Multi-symbol training**: Asset category baskets (Market, Large/Mid/Small Cap, DeFi)
-- [x] **Automatic parameter application**: Optimized params auto-applied to backtest
-- [x] **Overfitting detection**: CV thresholds, parameter stability, walk-forward gaps
-
-#### Dashboard Integration ✅
-- [x] **Restructured workflow**: Build → Optimize → Backtest → Deploy
-- [x] **Asset category selection** in Build tab
-- [x] **Auto-Optimize button** with comprehensive results on one page
-- [x] **Parameter sweep scatter plot** visualization
-- [x] **3D sensitivity heatmap** using Plotly
-- [x] **Walk-forward windows chart** showing OOS performance
-- [x] **Robustness score badges** with color coding (green >70, orange 50-70, red <50)
-- [x] **Parameter dispersion metrics** inline display
-- [x] **Symbol-specific backtesting** from optimized category
-- [x] Overfitting risk indicators (high CV, low positive %, unstable walk-forward)
+#### Risk Management Research
+- [ ] Stop-loss optimization (optimal SL placement)
+- [ ] Take-profit optimization (optimal TP placement)
+- [ ] Trailing stop analysis (when to trail vs hold)
+- [ ] Risk/reward optimization (find optimal R:R ratios)
+- [ ] Dynamic risk adjustment (adapt risk based on strategy confidence)
 
 ---
 
-## 📈 Progress Summary
+### Phase 19: Strategy Deployment & Monitoring
 
-| Phase | Description | Status | Priority |
-|-------|-------------|--------|----------|
-| 1-11 | V1 Core Platform | ✅ Complete | - |
-| 12 | Interactive Charting | ✅ Complete | High |
-| 13 | Sentiment Analysis | ✅ Complete | High |
-| 14 | Automated Bots | 🎯 Planned | High |
-| 15 | Advanced Orders | 🎯 Planned | Medium |
-| 16 | Enhanced Reporting | 🎯 Planned | Medium |
-| 17 | Mobile Monitoring | 🎯 Planned | Low |
-| 18 | ML Trading Models | 🎯 Planned | High |
-| 19 | Advanced Backtesting | ✅ Complete | High |
+> Target: Q1 2027 | Priority: **Low**
 
----
+#### Paper Trading Integration
+- [ ] Real-time paper trading simulation
+- [ ] Paper vs backtest comparison (identify model drift)
+- [ ] Live performance monitoring
+- [ ] Strategy degradation alerts
+- [ ] Automated strategy shutdown (if underperforms baseline)
 
-## 🎯 Recommended Implementation Order
+#### Live Trading (Minimal Focus)
+- [ ] Basic order execution (already available)
+- [ ] Position monitoring (already available)
+- [ ] Performance tracking (already available)
+- [ ] Risk limit enforcement (already available)
+- [ ] Emergency shutdown (already available)
 
-1. **Phase 19** (Advanced Backtesting) - Robust strategy validation ✅
-2. **Phase 13** (Sentiment) - Additional alpha source ✅
-3. **Phase 12** (Charting) - Visual feedback on trades ✅
-4. **Phase 14** (Bots) - Hands-off automation
-5. **Phase 18** (ML Models) - Data-driven predictions
-6. **Phase 15** (Advanced Orders) - Better execution
-7. **Phase 16** (Reporting) - Track & optimize
-8. **Phase 17** (Mobile) - Nice to have
+#### Post-Trade Analysis
+- [ ] Live vs backtest comparison reports
+- [ ] Trade-level analysis (compare expected vs actual fills)
+- [ ] Market regime during live trading
+- [ ] Lessons learned database
+- [ ] Strategy refinement cycle
 
 ---
 
-## 📝 Notes
+## 📈 Research Priorities
 
-- All features for **single-user personal use**
-- No multi-user / authentication needed
-- Focus on reliability and automation
-- Sentiment data can be stored for backtesting historical strategies
-- ML models should always be validated on out-of-sample data to prevent overfitting
-- **Optimization-first workflow enforced**: All strategies must be optimized before backtesting
-- **Multi-symbol training**: Asset categories prevent overfitting to single symbols
-- **Robustness validation**: Walk-forward, parameter dispersion, and sensitivity analysis required
-- **Overfitting detection**: CV thresholds, parameter stability metrics, and robustness scoring
+### Critical Path (Must Complete)
+1. **Phase 12**: Strategy Library Expansion - More strategies to test
+2. **Phase 13**: Advanced Validation - More rigorous testing
+3. **Phase 14**: ML-Assisted Research - Better parameter/feature discovery
+4. **Phase 15**: Multi-Strategy Portfolio - Combine strategies intelligently
+
+### High Priority (Should Complete)
+5. **Phase 16**: Research Workflow Automation - Speed up research cycle
+6. **Phase 18**: Advanced Risk & Position Sizing - Improve risk-adjusted returns
+
+### Medium Priority (Nice to Have)
+7. **Phase 17**: Advanced Research Features - Expand data sources and analytics
+8. **Phase 19**: Strategy Deployment & Monitoring - Validate in live market
+
+---
+
+## 🛑 Research Principles
+
+### 1. Hypothesis-First Approach
+- Every strategy starts with a written hypothesis
+- Hypothesis must be falsifiable (we can prove it wrong)
+- Test hypothesis before optimizing parameters
+
+### 2. Statistical Significance
+- All claims must be statistically validated
+- Use appropriate statistical tests for the claim
+- Report confidence intervals, not just point estimates
+
+### 3. Rigorous Validation
+- Walk-forward analysis required for all strategies
+- Monte Carlo simulation to test robustness to luck
+- Out-of-sample testing to prevent overfitting
+
+### 4. Robustness Over Profit
+- Prioritize consistent returns over maximum profit
+- Low Sharpe/Sortino ratios are red flags
+- High parameter sensitivity = fragility
+
+### 5. Survivorship Bias Prevention
+- Test on assets that have failed (delisted tokens)
+- Include bear markets and crashes in testing
+- Avoid cherry-picking test periods
+
+### 6. Regime Awareness
+- Strategies must perform across market regimes
+- Know when a strategy works and when it doesn't
+- Don't force strategies in inappropriate regimes
+
+### 7. Risk Management First
+- All strategies must have defined risk limits
+- Position sizing must be mathematically justified
+- Never increase risk to chase returns
+
+---
+
+## 📝 Research Success Metrics
+
+### Quantitative Metrics
+- **Strategy Diversity**: 50+ strategies in library
+- **Validation Rigor**: All strategies pass walk-forward + Monte Carlo
+- **Statistical Significance**: 95%+ confidence on all claims
+- **Robustness**: 70%+ robustness score on deployed strategies
+- **Risk-Adjusted Returns**: Sharpe > 1.5, Sortino > 2.0
+
+### Qualitative Metrics
+- **Research Velocity**: Hypothesis to validated results in < 1 week
+- **Documentation Quality**: Every strategy has complete hypothesis documentation
+- **Reproducibility**: All results can be reproduced from scratch
+- **Learning Rate**: Continuous improvement in strategy quality
 
 ---
 
