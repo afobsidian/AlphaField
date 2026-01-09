@@ -28,6 +28,12 @@ cd scripts && run_migrations.bat
 
 # Run migrations for Docker database
 cd scripts && run_migrations.bat --docker
+
+# Check migration status (local)
+cd scripts && python run_migrations.py --status
+
+# Check migration status (Docker)
+cd scripts && python run_migrations.py --docker --status
 ```
 
 ## How It Works

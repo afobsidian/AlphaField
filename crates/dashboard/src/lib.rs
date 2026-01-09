@@ -15,6 +15,7 @@ pub mod reports_api;
 pub mod sentiment_api;
 pub mod server;
 pub mod services;
+pub mod strategies_api;
 pub mod websocket;
 
 pub use analysis_api::*;
@@ -27,4 +28,5 @@ pub use quality_api::*;
 pub use reports_api::*;
 pub use sentiment_api::*;
 pub use server::*;
+pub use strategies_api::*;
 pub use websocket::*;

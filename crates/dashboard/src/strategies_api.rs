@@ -14,8 +14,8 @@ use std::sync::Arc;
 
 // Import strategy framework types
 use alphafield_strategy::{
-    StrategyCategory, StrategyMetadata, StrategyRegistry, MarketRegime,
-    StrategyWithMetadata, HoldBaseline, MarketAverageBaseline,
+    HoldBaseline, MarketAverageBaseline, MarketRegime, StrategyCategory, StrategyMetadata,
+    StrategyRegistry, StrategyWithMetadata,
 };
 
 // Re-use AppState from api.rs
@@ -76,10 +76,10 @@ pub struct ApiErrorResponse {
 
 /// Application error type for strategy API
 #[derive(Debug)]
-pub enum AppError {
-    NotFound(String),
-    BadRequest(String),
-    Internal(String),
+pub struct AppError {
+    pub error: String,
+    pub code: String,
+    pub details: Option<String>,
 }
 
 impl AppError {
@@ -95,7 +95,11 @@ impl AppError {
         Self {
             error: format!("Invalid {} value: {}", filter, value),
             code: "INVALID_FILTER".to_string(),
-            details: Some(format!("Valid values for {}: {}", filter, Self::get_valid_values(filter))),
+            details: Some(format!(
+                "Valid values for {}: {}",
+                filter,
+                Self::get_valid_values(filter)
+            )),
         }
     }
 
@@ -144,7 +148,7 @@ impl axum::response::IntoResponse for AppError {
 // Registry Initialization
 // ============================================================================
 
-/// Initialize the global strategy registry with baseline strategies
+/// Initialize the global strategy registry with all available strategies
 /// This function should be called during application startup to populate
 /// the registry with initial strategies.
 pub fn initialize_registry() -> Arc<StrategyRegistry> {
@@ -158,10 +162,45 @@ pub fn initialize_registry() -> Arc<StrategyRegistry> {
 
     // Register Market Average baseline strategy
     let symbols = vec!["BTC".to_string(), "ETH".to_string(), "SOL".to_string()];
-    let market_avg = Arc::new(MarketAverageBaseline::equal_weighted(symbols))
-        as Arc<dyn StrategyWithMetadata>;
+    let market_avg =
+        Arc::new(MarketAverageBaseline::equal_weighted(symbols)) as Arc<dyn StrategyWithMetadata>;
     if let Err(e) = registry.register(market_avg) {
         eprintln!("Failed to register Market Average baseline: {}", e);
+    }
+
+    // Register Golden Cross strategy
+    let golden_cross = Arc::new(alphafield_strategy::strategies::GoldenCrossStrategy::new(
+        10, 30,
+    )) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(golden_cross) {
+        eprintln!("Failed to register Golden Cross strategy: {}", e);
+    }
+
+    // Register Momentum strategy
+    let momentum = Arc::new(alphafield_strategy::strategies::MomentumStrategy::new(
+        50, 12, 26, 9,
+    )) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(momentum) {
+        eprintln!("Failed to register Momentum strategy: {}", e);
+    }
+
+    // Register RSI Mean Reversion strategy
+    let rsi = Arc::new(alphafield_strategy::strategies::RsiStrategy::new(
+        14, 30.0, 70.0,
+    )) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(rsi) {
+        eprintln!("Failed to register RSI Mean Reversion strategy: {}", e);
+    }
+
+    // Register Bollinger Bands Mean Reversion strategy
+    let mean_reversion = Arc::new(alphafield_strategy::strategies::MeanReversionStrategy::new(
+        20, 2.0,
+    )) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(mean_reversion) {
+        eprintln!(
+            "Failed to register Bollinger Bands Mean Reversion strategy: {}",
+            e
+        );
     }
 
     registry
@@ -177,7 +216,9 @@ fn parse_strategy_category(s: &str) -> Result<StrategyCategory, AppError> {
         "trendfollowing" | "trend" | "trend-following" => Ok(StrategyCategory::TrendFollowing),
         "meanreversion" | "mean" | "mean-reversion" => Ok(StrategyCategory::MeanReversion),
         "momentum" => Ok(StrategyCategory::Momentum),
-        "volatilitybased" | "volatility" | "volatility-based" => Ok(StrategyCategory::VolatilityBased),
+        "volatilitybased" | "volatility" | "volatility-based" => {
+            Ok(StrategyCategory::VolatilityBased)
+        }
         "sentimentbased" | "sentiment" | "sentiment-based" => Ok(StrategyCategory::SentimentBased),
         "multiindicator" | "multi" | "multi-indicator" => Ok(StrategyCategory::MultiIndicator),
         "baseline" => Ok(StrategyCategory::Baseline),
@@ -194,7 +235,6 @@ fn parse_market_regime(s: &str) -> Result<MarketRegime, AppError> {
         "highvolatility" | "highvol" | "high" => Ok(MarketRegime::HighVolatility),
         "lowvolatility" | "lowvol" | "low" => Ok(MarketRegime::LowVolatility),
         "trending" => Ok(MarketRegime::Trending),
-        "ranging" => Ok(MarketRegime::Ranging),
         _ => Err(AppError::invalid_filter("regime", s)),
     }
 }
@@ -245,9 +285,10 @@ fn metadata_to_summary(metadata: &StrategyMetadata) -> StrategySummary {
 /// curl http://localhost:8080/api/strategies?regime=Bull
 /// ```
 pub async fn list_strategies(
-    State(registry): State<Arc<StrategyRegistry>>,
+    State(state): State<Arc<AppState>>,
     Query(query): Query<StrategyQuery>,
 ) -> Result<Json<Vec<StrategySummary>>, AppError> {
+    let registry = state.registry.clone();
     let strategy_names = if let Some(category_str) = query.category {
         let category = parse_strategy_category(&category_str)?;
         registry.list_by_category(category)
@@ -282,12 +323,13 @@ pub async fn list_strategies(
 /// curl http://localhost:8080/api/strategies/GoldenCross
 /// ```
 pub async fn get_strategy_details(
-    State(registry): State<Arc<StrategyRegistry>>,
+    State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<Json<StrategyDetails>, AppError> {
+    let registry = state.registry.clone();
     let metadata = registry
         .get_metadata(&name)
-        .ok_or_else(|| AppError::NotFound(format!("Strategy '{}' not found", name)))?;
+        .ok_or_else(|| AppError::not_found(&name))?;
 
     Ok(Json(StrategyDetails {
         metadata,
@@ -347,8 +389,9 @@ pub async fn list_regimes() -> Json<Vec<String>> {
 /// curl http://localhost:8080/api/strategies/summary
 /// ```
 pub async fn get_strategy_summary(
-    State(registry): State<Arc<StrategyRegistry>>,
+    State(state): State<Arc<AppState>>,
 ) -> Json<StrategyCountSummary> {
+    let registry = state.registry.clone();
     let total = registry.count();
     let mut by_category = std::collections::HashMap::new();
 
@@ -360,10 +403,7 @@ pub async fn get_strategy_summary(
         }
     }
 
-    Json(StrategyCountSummary {
-        total,
-        by_category,
-    })
+    Json(StrategyCountSummary { total, by_category })
 }
 
 // ============================================================================
@@ -371,7 +411,7 @@ pub async fn get_strategy_summary(
 // ============================================================================
 
 /// Create router for strategy API endpoints
-pub fn create_strategy_router() -> Router {
+pub fn create_strategy_router() -> Router<Arc<AppState>> {
     Router::new()
         // List all strategies (with optional filters)
         .route("/api/strategies", get(list_strategies))
@@ -429,7 +469,7 @@ mod tests {
             StrategyCategory::Baseline
         ));
 
-        // Test case insensitivity
+        // Test case insensitivity / separator handling
         assert!(matches!(
             parse_strategy_category("TREND").unwrap(),
             StrategyCategory::TrendFollowing
@@ -438,9 +478,23 @@ mod tests {
             parse_strategy_category("Trend_Following").unwrap(),
             StrategyCategory::TrendFollowing
         ));
+        assert!(matches!(
+            parse_strategy_category("trend-following").unwrap(),
+            StrategyCategory::TrendFollowing
+        ));
+        assert!(matches!(
+            parse_strategy_category("mean_reversion").unwrap(),
+            StrategyCategory::MeanReversion
+        ));
 
-        // Test invalid category
-        assert!(parse_strategy_category("invalid").is_err());
+        // Test invalid category includes proper error code/details
+        let err = parse_strategy_category("invalid").unwrap_err();
+        assert_eq!(err.code, "INVALID_FILTER");
+        assert_eq!(err.error, "Invalid category value: invalid");
+        assert!(err
+            .details
+            .unwrap_or_default()
+            .contains("Valid values for category"));
     }
 
     #[test]
@@ -451,7 +505,15 @@ mod tests {
             MarketRegime::Bull
         ));
         assert!(matches!(
+            parse_market_regime("bullish").unwrap(),
+            MarketRegime::Bull
+        ));
+        assert!(matches!(
             parse_market_regime("bear").unwrap(),
+            MarketRegime::Bear
+        ));
+        assert!(matches!(
+            parse_market_regime("bearish").unwrap(),
             MarketRegime::Bear
         ));
         assert!(matches!(
@@ -459,11 +521,27 @@ mod tests {
             MarketRegime::Sideways
         ));
         assert!(matches!(
+            parse_market_regime("ranging").unwrap(),
+            MarketRegime::Sideways
+        ));
+        assert!(matches!(
+            parse_market_regime("range").unwrap(),
+            MarketRegime::Sideways
+        ));
+        assert!(matches!(
             parse_market_regime("high").unwrap(),
             MarketRegime::HighVolatility
         ));
         assert!(matches!(
+            parse_market_regime("high-volatility").unwrap(),
+            MarketRegime::HighVolatility
+        ));
+        assert!(matches!(
             parse_market_regime("low").unwrap(),
+            MarketRegime::LowVolatility
+        ));
+        assert!(matches!(
+            parse_market_regime("low-volatility").unwrap(),
             MarketRegime::LowVolatility
         ));
         assert!(matches!(
@@ -476,4 +554,18 @@ mod tests {
             parse_market_regime("BULL").unwrap(),
             MarketRegime::Bull
         ));
-        assert!(
+        assert!(matches!(
+            parse_market_regime("BEAR").unwrap(),
+            MarketRegime::Bear
+        ));
+
+        // Test invalid regime includes proper error code/details
+        let err = parse_market_regime("invalid").unwrap_err();
+        assert_eq!(err.code, "INVALID_FILTER");
+        assert_eq!(err.error, "Invalid regime value: invalid");
+        assert!(err
+            .details
+            .unwrap_or_default()
+            .contains("Valid values for regime"));
+    }
+}

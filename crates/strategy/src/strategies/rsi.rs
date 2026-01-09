@@ -4,6 +4,10 @@
 //! to identify oversold and overbought conditions.
 
 use crate::config::{RsiConfig, StrategyConfig};
+use crate::framework::{
+    CorrelationSensitivity, MarketRegime, MetadataStrategy, RiskProfile, StrategyCategory,
+    StrategyMetadata, VolatilityLevel,
+};
 use crate::indicators::{Indicator, Rsi};
 use alphafield_core::{Bar, Signal, SignalType, Strategy};
 
@@ -61,6 +65,35 @@ impl RsiStrategy {
     /// Returns the current configuration
     pub fn config(&self) -> &RsiConfig {
         &self.config
+    }
+}
+
+impl MetadataStrategy for RsiStrategy {
+    fn metadata(&self) -> StrategyMetadata {
+        StrategyMetadata {
+            name: self.config.strategy_name().to_string(),
+            category: StrategyCategory::MeanReversion,
+            sub_type: Some("rsi_based".to_string()),
+            description: format!(
+                "RSI Mean Reversion strategy using {} period RSI with bounds [{:.0}, {:.0}] and {:.1}% TP, {:.1}% SL. 
+                Buys on RSI crossover below lower bound (oversold), sells on crossover above upper bound (overbought).",
+                self.config.period, self.config.lower_bound, self.config.upper_bound,
+                self.config.take_profit, self.config.stop_loss
+            ),
+            hypothesis_path: "hypotheses/mean_reversion/rsi.md".to_string(),
+            required_indicators: vec!["RSI".to_string(), "Price".to_string()],
+            expected_regimes: vec![MarketRegime::Sideways, MarketRegime::LowVolatility, MarketRegime::Ranging],
+            risk_profile: RiskProfile {
+                max_drawdown_expected: 0.20,
+                volatility_level: VolatilityLevel::Medium,
+                correlation_sensitivity: CorrelationSensitivity::Low,
+                leverage_requirement: 1.0,
+            },
+        }
+    }
+
+    fn category(&self) -> StrategyCategory {
+        StrategyCategory::MeanReversion
     }
 }
 

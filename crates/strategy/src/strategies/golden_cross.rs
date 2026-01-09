@@ -5,6 +5,10 @@
 //! and sell signals when the fast MA crosses below the slow MA (death cross).
 
 use crate::config::{GoldenCrossConfig, StrategyConfig};
+use crate::framework::{
+    CorrelationSensitivity, MarketRegime, MetadataStrategy, RiskProfile, StrategyCategory,
+    StrategyMetadata, VolatilityLevel,
+};
 use crate::indicators::{Indicator, Sma};
 use alphafield_core::{Bar, Signal, SignalType, Strategy};
 
@@ -63,6 +67,34 @@ impl GoldenCrossStrategy {
     /// Returns the current configuration
     pub fn config(&self) -> &GoldenCrossConfig {
         &self.config
+    }
+}
+
+impl MetadataStrategy for GoldenCrossStrategy {
+    fn metadata(&self) -> StrategyMetadata {
+        StrategyMetadata {
+            name: self.config.strategy_name().to_string(),
+            category: StrategyCategory::TrendFollowing,
+            sub_type: Some("moving_average_crossover".to_string()),
+            description: format!(
+                "Golden Cross strategy using {} and {} period SMAs with {:.1}% TP and {:.1}% SL. 
+                Generates buy signals on golden cross (fast MA crosses above slow MA) and sell signals on death cross.",
+                self.config.fast_period, self.config.slow_period, self.config.take_profit, self.config.stop_loss
+            ),
+            hypothesis_path: "hypotheses/trend_following/golden_cross.md".to_string(),
+            required_indicators: vec!["SMA".to_string(), "Price".to_string()],
+            expected_regimes: vec![MarketRegime::Bull, MarketRegime::Trending],
+            risk_profile: RiskProfile {
+                max_drawdown_expected: 0.25,
+                volatility_level: VolatilityLevel::Medium,
+                correlation_sensitivity: CorrelationSensitivity::Medium,
+                leverage_requirement: 1.0,
+            },
+        }
+    }
+
+    fn category(&self) -> StrategyCategory {
+        StrategyCategory::TrendFollowing
     }
 }
 

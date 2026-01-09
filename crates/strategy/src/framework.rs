@@ -475,6 +475,27 @@ impl Default for StrategyRegistry {
     }
 }
 
+impl Default for BacktestResults {
+    fn default() -> Self {
+        BacktestResults {
+            total_return: 0.0,
+            sharpe_ratio: 0.0,
+            max_drawdown: 0.0,
+            win_rate: 0.0,
+            total_trades: 0,
+            avg_win: 0.0,
+            avg_loss: 0.0,
+            avg_trade_duration_hours: 0.0,
+            test_period_days: 1.0,
+            market_correlation: 0.0,
+            regime_bull_return: 0.0,
+            regime_bear_return: 0.0,
+            regime_high_vol_return: 0.0,
+            regime_low_vol_return: 0.0,
+        }
+    }
+}
+
 // ============ Module Tests ============
 
 #[cfg(test)]
@@ -667,26 +688,5 @@ mod tests {
             StrategyClassifier::estimate_signal_frequency(&results),
             SignalFrequency::Low
         );
-    }
-}
-
-impl Default for BacktestResults {
-    fn default() -> Self {
-        BacktestResults {
-            total_return: 0.0,
-            sharpe_ratio: 0.0,
-            max_drawdown: 0.0,
-            win_rate: 0.0,
-            total_trades: 0,
-            avg_win: 0.0,
-            avg_loss: 0.0,
-            avg_trade_duration_hours: 0.0,
-            test_period_days: 1.0,
-            market_correlation: 0.0,
-            regime_bull_return: 0.0,
-            regime_bear_return: 0.0,
-            regime_high_vol_return: 0.0,
-            regime_low_vol_return: 0.0,
-        }
     }
 }

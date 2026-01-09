@@ -3,6 +3,10 @@
 //! This strategy uses Bollinger Bands to identify price extremes
 //! and trade the reversion to the mean.
 
+use crate::framework::{
+    CorrelationSensitivity, MarketRegime, MetadataStrategy, RiskProfile, StrategyCategory,
+    StrategyMetadata, VolatilityLevel,
+};
 use crate::indicators::BollingerBands;
 use alphafield_core::{Bar, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
@@ -133,6 +137,34 @@ impl MeanReversionStrategy {
 
     pub fn config(&self) -> &MeanReversionConfig {
         &self.config
+    }
+}
+
+impl MetadataStrategy for MeanReversionStrategy {
+    fn metadata(&self) -> StrategyMetadata {
+        StrategyMetadata {
+            name: "Bollinger Bands Mean Reversion".to_string(),
+            category: StrategyCategory::MeanReversion,
+            sub_type: Some("bollinger_bands".to_string()),
+            description: format!(
+                "Mean Reversion strategy using Bollinger Bands with period {} and {:.1} standard deviations. 
+                Uses {:.1}% TP and {:.1}% SL. Buys when price crosses below lower band, sells on middle band crossover.",
+                self.config.period, self.config.num_std_dev, self.config.take_profit, self.config.stop_loss
+            ),
+            hypothesis_path: "hypotheses/mean_reversion/bollinger_bands.md".to_string(),
+            required_indicators: vec!["BollingerBands".to_string(), "Price".to_string()],
+            expected_regimes: vec![MarketRegime::Sideways, MarketRegime::LowVolatility, MarketRegime::Ranging],
+            risk_profile: RiskProfile {
+                max_drawdown_expected: 0.25,
+                volatility_level: VolatilityLevel::Medium,
+                correlation_sensitivity: CorrelationSensitivity::Low,
+                leverage_requirement: 1.0,
+            },
+        }
+    }
+
+    fn category(&self) -> StrategyCategory {
+        StrategyCategory::MeanReversion
     }
 }
 
