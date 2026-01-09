@@ -35,15 +35,20 @@ COMMENT ON COLUMN strategy_failures.severity IS 'Severity level (low, medium, hi
 COMMENT ON COLUMN strategy_failures.documented_at IS 'When this failure mode was documented';
 
 -- Create enum type for failure categories if not exists
-CREATE TYPE IF NOT EXISTS failure_category AS ENUM (
-    'signal_generation',
-    'market_regime',
-    'volatility',
-    'liquidity',
-    'technical',
-    'external',
-    'other'
-);
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'failure_category') THEN
+        CREATE TYPE failure_category AS ENUM (
+            'signal_generation',
+            'market_regime',
+            'volatility',
+            'liquidity',
+            'technical',
+            'external',
+            'other'
+        );
+    END IF;
+END $$;
 
 -- Add failure_category column for better organization
 ALTER TABLE strategy_failures

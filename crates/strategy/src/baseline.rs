@@ -247,7 +247,10 @@ mod tests {
     /// Helper to create test bars
     fn create_test_bar(timestamp: i64, price: f64) -> Bar {
         Bar {
-            timestamp: Utc.timestamp(timestamp, 0),
+            timestamp: Utc
+                .timestamp_opt(timestamp, 0)
+                .single()
+                .expect("valid timestamp for test bar"),
             open: price,
             high: price,
             low: price,
