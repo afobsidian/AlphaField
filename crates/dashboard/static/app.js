@@ -3162,7 +3162,7 @@ function updateBacktestSummary() {
 }
 
 // ===========================
-// Interactive Chart Functions (Phase 12)
+// Interactive Chart Functions
 // ===========================
 
 let chartData = null;
