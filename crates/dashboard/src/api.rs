@@ -22,6 +22,7 @@ use crate::reports_api::{
     add_journal_entry, calculate_tax, delete_journal_entry, export_report_csv, export_tax_csv,
     generate_summary, get_strategy_breakdown, list_journal, update_journal_entry,
 };
+use crate::strategies_api::create_strategy_router;
 use crate::websocket::DashboardHub;
 use alphafield_core::Order;
 use alphafield_data::DatabaseClient;
@@ -31,31 +32,38 @@ use alphafield_data::DatabaseClient;
 pub struct AppState {
     pub db: Option<DatabaseClient>,
     pub hub: Arc<DashboardHub>,
-}
-
-impl Default for AppState {
-    fn default() -> Self {
-        Self::new()
-    }
+    pub registry: Arc<alphafield_strategy::StrategyRegistry>,
 }
 
 impl AppState {
     pub fn new() -> Self {
         Self {
             db: None,
-            hub: Arc::new(DashboardHub::default()),
+            hub: Arc::new(DashboardHub::new(100)),
+            registry: crate::strategies_api::initialize_registry(),
         }
     }
 
     pub async fn with_database() -> Self {
-        let hub = Arc::new(DashboardHub::default());
-        match DatabaseClient::new_from_env().await {
-            Ok(db) => Self { db: Some(db), hub },
+        let db = match DatabaseClient::new_from_env().await {
+            Ok(db) => Some(db),
             Err(e) => {
-                eprintln!("Warning: Could not connect to database: {}", e);
-                Self { db: None, hub }
+                eprintln!("Failed to connect to database: {}", e);
+                None
             }
+        };
+
+        Self {
+            db,
+            hub: Arc::new(DashboardHub::new(100)),
+            registry: crate::strategies_api::initialize_registry(),
         }
+    }
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -121,6 +129,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
         // Health
         .route("/api/health", get(health))
+        // Strategy Management
+        .merge(create_strategy_router())
         // WebSocket for real-time updates
         .route(
             "/api/ws",

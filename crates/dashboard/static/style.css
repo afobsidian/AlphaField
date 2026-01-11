@@ -28,7 +28,11 @@
 
     /* Gradients */
     --gradient-brand: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-    --gradient-glass: linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%);
+    --gradient-glass: linear-gradient(
+        145deg,
+        rgba(255, 255, 255, 0.05) 0%,
+        rgba(255, 255, 255, 0.01) 100%
+    );
 
     /* Spacing & Layout */
     --nav-height: 70px;
@@ -42,8 +46,8 @@
     --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.36);
     --blur-amt: 12px;
 
-    --font-heading: 'Outfit', sans-serif;
-    --font-body: 'Inter', sans-serif;
+    --font-heading: "Outfit", sans-serif;
+    --font-body: "Inter", sans-serif;
 }
 
 * {
@@ -113,7 +117,6 @@ body {
 }
 
 @keyframes blob-bounce {
-
     0%,
     100% {
         transform: translate(0, 0) scale(1);
@@ -365,7 +368,9 @@ body {
     padding: 24px;
     box-shadow: var(--glass-shadow);
     backdrop-filter: blur(var(--blur-amt));
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    transition:
+        transform 0.3s ease,
+        box-shadow 0.3s ease;
 }
 
 .card:hover {
@@ -699,7 +704,7 @@ body {
 }
 
 .stat-card::before {
-    content: '';
+    content: "";
     position: absolute;
     top: 0;
     left: 0;
@@ -760,7 +765,7 @@ body {
     background: rgba(0, 0, 0, 0.3);
     border-radius: var(--radius-md);
     padding: 12px;
-    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-family: "JetBrains Mono", "Fira Code", monospace;
     font-size: 12px;
 }
 
@@ -861,7 +866,7 @@ body {
 }
 
 .custom-select-trigger:after {
-    content: '▼';
+    content: "▼";
     font-size: 10px;
     color: var(--text-muted);
     transition: transform 0.3s;
@@ -971,7 +976,6 @@ body {
     font-weight: 600;
 }
 
-
 /* ===========================
    Component: Sentiment Dashboard
    =========================== */
@@ -1069,7 +1073,6 @@ body {
     color: var(--text-secondary);
     margin-bottom: 8px;
 }
-
 
 /* ===========================
    Component: Positions Table (Fix Overflow)
@@ -1180,7 +1183,7 @@ body {
 }
 
 /* ===========================
-   Phase 12: Interactive Charting Styles
+   Interactive Charting Styles
    =========================== */
 
 .chart-type-selector {

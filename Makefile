@@ -65,6 +65,32 @@ run-backtest:
 run-dashboard:
 	cargo run --bin dashboard_server --release
 
+# --- Database ---
+
+## Run database migrations (local)
+migrate:
+	cd scripts && run_migrations.bat
+
+## Run database migrations (Docker)
+migrate-docker:
+	cd scripts && run_migrations.bat --docker
+
+## Check migration status (local)
+migrate-status:
+	cd scripts && python run_migrations.py --status
+
+## Check migration status (Docker)
+migrate-status-docker:
+	cd scripts && python run_migrations.py --docker --status
+
+## Reset database and run migrations
+reset-db:
+	cd scripts && cargo clean && run_migrations.bat
+
+## Reset database and run migrations (Docker)
+reset-db-docker:
+	cd scripts && cargo clean && run_migrations.bat --docker
+
 # --- Maintenance ---
 
 ## Clean build artifacts
@@ -91,6 +117,14 @@ help:
 	@echo "  run-demo       - Run the data demo"
 	@echo "  run-backtest   - Run the Golden Cross backtest"
 	@echo "  run-dashboard  - Run the dashboard server"
+	@echo ""
+	@echo "Database:"
+	@echo "  migrate            - Run database migrations (local)"
+	@echo "  migrate-docker     - Run database migrations (Docker)"
+	@echo "  migrate-status     - Check migration status (local)"
+	@echo "  migrate-status-docker - Check migration status (Docker)"
+	@echo "  reset-db           - Reset database and run migrations"
+	@echo "  reset-db-docker    - Reset database and run migrations (Docker)"
 	@echo ""
 	@echo "Docker:"
 	@echo "  docker-build   - Build Docker image"

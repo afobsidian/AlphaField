@@ -5,6 +5,7 @@
 
 use crate::engine::BacktestEngine;
 use crate::exchange::SlippageModel;
+use alphafield_strategy::framework::canonicalize_strategy_name;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::{debug, info};
@@ -294,13 +295,63 @@ impl ParameterOptimizer {
 
 /// Get default parameter bounds for a strategy
 pub fn get_strategy_bounds(strategy_name: &str) -> Vec<ParamBounds> {
-    match strategy_name {
+    // Canonicalize strategy identifiers so optimization accepts display names from the registry/UI.
+    // Uses the shared canonicalization function from alphafield_strategy::framework.
+    let strategy_name = canonicalize_strategy_name(strategy_name);
+
+    match strategy_name.as_str() {
         "GoldenCross" => vec![
             ParamBounds::new("fast_period", 5.0, 30.0, 5.0),
             ParamBounds::new("slow_period", 30.0, 100.0, 10.0),
             ParamBounds::new("take_profit", 2.0, 10.0, 2.0),
             ParamBounds::new("stop_loss", 2.0, 10.0, 2.0),
         ],
+
+        // --------------------------------------------------------------------
+        // Phase 12.2: Trend Following Strategies
+        // --------------------------------------------------------------------
+        "Breakout" => vec![
+            ParamBounds::new("lookback", 10.0, 100.0, 10.0),
+            ParamBounds::new("take_profit", 2.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 2.0, 10.0, 2.0),
+        ],
+        "MACrossover" => vec![
+            ParamBounds::new("fast_period", 5.0, 30.0, 5.0),
+            ParamBounds::new("slow_period", 20.0, 120.0, 10.0),
+            ParamBounds::new("take_profit", 2.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 2.0, 10.0, 2.0),
+        ],
+        "AdaptiveMA" => vec![
+            ParamBounds::new("fast_period", 2.0, 20.0, 2.0),
+            ParamBounds::new("slow_period", 10.0, 80.0, 10.0),
+            ParamBounds::new("price_period", 2.0, 30.0, 2.0),
+            ParamBounds::new("take_profit", 2.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 2.0, 10.0, 2.0),
+        ],
+        "TripleMA" => vec![
+            ParamBounds::new("fast_period", 3.0, 20.0, 2.0),
+            ParamBounds::new("medium_period", 10.0, 60.0, 10.0),
+            ParamBounds::new("slow_period", 20.0, 120.0, 20.0),
+            ParamBounds::new("take_profit", 2.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 2.0, 10.0, 2.0),
+        ],
+        "MacdTrend" => vec![
+            ParamBounds::new("fast_period", 8.0, 15.0, 1.0),
+            ParamBounds::new("slow_period", 20.0, 35.0, 3.0),
+            ParamBounds::new("signal_period", 5.0, 15.0, 2.0),
+            ParamBounds::new("take_profit", 2.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 2.0, 10.0, 2.0),
+        ],
+        "ParabolicSAR" => vec![
+            ParamBounds::new("af_step", 0.01, 0.05, 0.01),
+            ParamBounds::new("af_max", 0.1, 0.3, 0.05),
+            ParamBounds::new("take_profit", 2.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 2.0, 10.0, 2.0),
+        ],
+
+        // --------------------------------------------------------------------
+        // Existing strategies
+        // --------------------------------------------------------------------
         "Rsi" => vec![
             ParamBounds::new("period", 7.0, 21.0, 7.0),
             ParamBounds::new("lower_bound", 20.0, 35.0, 5.0),
@@ -370,5 +421,68 @@ mod tests {
     fn test_unknown_strategy_bounds() {
         let bounds = get_strategy_bounds("UnknownStrategy");
         assert!(bounds.is_empty());
+    }
+
+    // Tests for canonicalize_strategy_name integration
+    #[test]
+    fn test_canonicalize_golden_cross_display_name() {
+        let bounds = get_strategy_bounds("Golden Cross");
+        assert!(!bounds.is_empty());
+        assert!(bounds.iter().any(|b| b.name == "fast_period"));
+        assert!(bounds.iter().any(|b| b.name == "slow_period"));
+    }
+
+    #[test]
+    fn test_canonicalize_parabolic_sar_display_name() {
+        let bounds = get_strategy_bounds("Parabolic SAR");
+        assert!(!bounds.is_empty());
+        assert!(bounds.iter().any(|b| b.name == "af_step"));
+        assert!(bounds.iter().any(|b| b.name == "af_max"));
+    }
+
+    #[test]
+    fn test_canonicalize_adaptive_ma_display_name() {
+        let bounds = get_strategy_bounds("Adaptive MA");
+        assert!(!bounds.is_empty());
+        assert!(bounds.iter().any(|b| b.name == "fast_period"));
+        assert!(bounds.iter().any(|b| b.name == "price_period"));
+    }
+
+    #[test]
+    fn test_canonicalize_ma_crossover_display_name() {
+        let bounds = get_strategy_bounds("MA Crossover");
+        assert!(!bounds.is_empty());
+        assert!(bounds.iter().any(|b| b.name == "fast_period"));
+        assert!(bounds.iter().any(|b| b.name == "slow_period"));
+    }
+
+    #[test]
+    fn test_canonicalize_macd_trend_display_name() {
+        let bounds = get_strategy_bounds("MACD Trend");
+        assert!(!bounds.is_empty());
+        assert!(bounds.iter().any(|b| b.name == "fast_period"));
+        assert!(bounds.iter().any(|b| b.name == "signal_period"));
+    }
+
+    #[test]
+    fn test_canonicalize_already_canonical_names() {
+        // Verify that internal keys still work
+        let bounds1 = get_strategy_bounds("GoldenCross");
+        let bounds2 = get_strategy_bounds("Golden Cross");
+
+        assert_eq!(bounds1.len(), bounds2.len());
+
+        // Verify same parameters are present
+        let names1: Vec<_> = bounds1.iter().map(|b| b.name.clone()).collect();
+        let names2: Vec<_> = bounds2.iter().map(|b| b.name.clone()).collect();
+        assert_eq!(names1, names2);
+    }
+
+    #[test]
+    fn test_canonicalize_whitespace_handling() {
+        // Test with extra whitespace
+        let bounds = get_strategy_bounds("  Golden Cross  ");
+        assert!(!bounds.is_empty());
+        assert!(bounds.iter().any(|b| b.name == "fast_period"));
     }
 }

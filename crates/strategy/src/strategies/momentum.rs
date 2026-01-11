@@ -2,6 +2,10 @@
 //!
 //! This strategy combines multiple indicators to identify strong momentum trends.
 
+use crate::framework::{
+    CorrelationSensitivity, MarketRegime, MetadataStrategy, RiskProfile, StrategyCategory,
+    StrategyMetadata, VolatilityLevel,
+};
 use crate::indicators::{Ema, Indicator, Macd};
 use alphafield_core::{Bar, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
@@ -150,6 +154,35 @@ impl MomentumStrategy {
 
     pub fn config(&self) -> &MomentumConfig {
         &self.config
+    }
+}
+
+impl MetadataStrategy for MomentumStrategy {
+    fn metadata(&self) -> StrategyMetadata {
+        StrategyMetadata {
+            name: "EMA-MACD Momentum".to_string(),
+            category: StrategyCategory::Momentum,
+            sub_type: Some("indicator_combination".to_string()),
+            description: format!(
+                "Momentum strategy combining EMA({}) with MACD({}/{}/{}) for trend confirmation. 
+                Uses {:.1}% TP and {:.1}% SL. Generates buy signals when price > EMA and MACD crosses above signal line.",
+                self.config.ema_period, self.config.macd_fast, self.config.macd_slow, self.config.macd_signal,
+                self.config.take_profit, self.config.stop_loss
+            ),
+            hypothesis_path: "hypotheses/momentum/ema_macd.md".to_string(),
+            required_indicators: vec!["EMA".to_string(), "MACD".to_string(), "Price".to_string()],
+            expected_regimes: vec![MarketRegime::Bull, MarketRegime::Trending, MarketRegime::HighVolatility],
+            risk_profile: RiskProfile {
+                max_drawdown_expected: 0.30,
+                volatility_level: VolatilityLevel::High,
+                correlation_sensitivity: CorrelationSensitivity::Medium,
+                leverage_requirement: 1.0,
+            },
+        }
+    }
+
+    fn category(&self) -> StrategyCategory {
+        StrategyCategory::Momentum
     }
 }
 

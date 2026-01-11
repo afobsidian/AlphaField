@@ -16,6 +16,17 @@
         <link rel="stylesheet" href="style.css" />
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
+        <!-- Dynamically render strategy list from /api/strategies -->
+        <script>
+            document.addEventListener("DOMContentLoaded", () => {
+                // Replace the hardcoded strategy list with a container that gets filled by app.js
+                const options = document.querySelector(".strategy-options");
+                if (options) {
+                    options.setAttribute("id", "strategy-options");
+                }
+            });
+        </script>
     </head>
 
     <body>
@@ -136,69 +147,13 @@
                         <!-- Strategy Selection Card -->
                         <div class="card strategy-card">
                             <h3>Select Trading Strategy</h3>
-                            <div class="strategy-options">
-                                <label class="strategy-option">
-                                    <input
-                                        type="radio"
-                                        name="strategy"
-                                        value="GoldenCross"
-                                        checked
-                                    />
-                                    <div class="strategy-info">
-                                        <span class="strategy-name"
-                                            >Golden Cross</span
-                                        >
-                                        <span class="strategy-desc"
-                                            >SMA crossover trend following</span
-                                        >
-                                    </div>
-                                </label>
-                                <label class="strategy-option">
-                                    <input
-                                        type="radio"
-                                        name="strategy"
-                                        value="Rsi"
-                                    />
-                                    <div class="strategy-info">
-                                        <span class="strategy-name"
-                                            >RSI Reversal</span
-                                        >
-                                        <span class="strategy-desc"
-                                            >Overbought/oversold mean
-                                            reversion</span
-                                        >
-                                    </div>
-                                </label>
-                                <label class="strategy-option">
-                                    <input
-                                        type="radio"
-                                        name="strategy"
-                                        value="MeanReversion"
-                                    />
-                                    <div class="strategy-info">
-                                        <span class="strategy-name"
-                                            >Mean Reversion</span
-                                        >
-                                        <span class="strategy-desc"
-                                            >Bollinger Bands contrarian</span
-                                        >
-                                    </div>
-                                </label>
-                                <label class="strategy-option">
-                                    <input
-                                        type="radio"
-                                        name="strategy"
-                                        value="Momentum"
-                                    />
-                                    <div class="strategy-info">
-                                        <span class="strategy-name"
-                                            >Momentum</span
-                                        >
-                                        <span class="strategy-desc"
-                                            >MACD + EMA trend strength</span
-                                        >
-                                    </div>
-                                </label>
+                            <div class="strategy-options" id="strategy-options">
+                                <div class="strategy-loading">
+                                    Loading strategies…
+                                </div>
+                                <noscript>
+                                    JavaScript is required to load strategies.
+                                </noscript>
                             </div>
                         </div>
 
