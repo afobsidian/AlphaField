@@ -35,7 +35,7 @@ impl MomentumConfig {
             macd_fast,
             macd_slow,
             macd_signal,
-            take_profit: 5.0, // Default to 5% if not specified via constructor (though we update constructor below)
+            take_profit: 5.0,
             stop_loss: 5.0,
         }
     }
@@ -169,7 +169,7 @@ impl MetadataStrategy for MomentumStrategy {
                 self.config.ema_period, self.config.macd_fast, self.config.macd_slow, self.config.macd_signal,
                 self.config.take_profit, self.config.stop_loss
             ),
-            hypothesis_path: "hypotheses/momentum/ema_macd.md".to_string(),
+            hypothesis_path: "hypotheses/momentum/macd_strategy.md".to_string(),
             required_indicators: vec!["EMA".to_string(), "MACD".to_string(), "Price".to_string()],
             expected_regimes: vec![MarketRegime::Bull, MarketRegime::Trending, MarketRegime::HighVolatility],
             risk_profile: RiskProfile {

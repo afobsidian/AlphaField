@@ -184,9 +184,7 @@ impl MetadataStrategy for VolumeMomentumStrategy {
             category: StrategyCategory::Momentum,
             sub_type: Some("volume_weighted".to_string()),
             description: format!(
-                "Volume-confirmed momentum strategy. Uses {}-period EMA for price trend and requires 
-                volume >= {:.1}x the {}-period average for entry. Only enters when both price momentum 
-                and volume momentum align. Uses {:.1}% TP and {:.1}% SL.",
+                "Volume-confirmed momentum strategy. Uses {}-period EMA for price trend and requires volume >= {:.1}x the {}-period average for entry. Only enters when both price momentum and volume momentum align. Uses {:.1}% TP and {:.1}% SL.",
                 self.config.price_ema_period,
                 self.config.volume_multiplier,
                 self.config.volume_period,
@@ -331,13 +329,13 @@ impl Strategy for VolumeMomentumStrategy {
                             signal_type: SignalType::Buy,
                             strength,
                             metadata: Some(format!(
-                                "Volume Momentum Entry: Price {:.2} > EMA {:.2}, Vol {:.0} = {:.1}x avg {:.0}{}",
+                                "Volume Momentum Entry: Price {:.2} > EMA {:.2}, Vol {:.0} ({:.1}x avg {:.0}){}",
                                 price,
                                 ema_val,
                                 volume,
                                 volume / avg_vol,
                                 avg_vol,
-                                if volume_inc { " (increasing)" } else { "" }
+                                if volume_inc { " increasing" } else { "" }
                             )),
                         }]);
                     }
