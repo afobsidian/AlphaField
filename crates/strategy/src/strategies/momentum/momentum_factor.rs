@@ -99,13 +99,6 @@ impl fmt::Display for MomentumFactorConfig {
 ///
 /// - **Buy Signal**: At least min_factors out of 3 are positive
 /// - **Sell Signal**: Less than min_factors are positive OR TP/SL
-///
-/// # Example
-/// ```
-/// use alphafield_strategy::strategies::momentum::MomentumFactorStrategy;
-///
-/// let strategy = MomentumFactorStrategy::new(20, 14, 2, 5.0, 3.0);
-/// ```
 pub struct MomentumFactorStrategy {
     config: MomentumFactorConfig,
     rsi: Rsi,
@@ -196,7 +189,7 @@ impl MetadataStrategy for MomentumFactorStrategy {
             category: StrategyCategory::Momentum,
             sub_type: Some("multi_factor".to_string()),
             description: format!(
-                "Multi-factor momentum strategy combining price momentum ({}p), volume momentum, and RSI({}). 
+                "Multi-factor momentum strategy combining price momentum ({}p), volume momentum, and RSI({}). \
                 Requires at least {}/{} factors to be positive for entry. Uses {:.1}% TP and {:.1}% SL.",
                 self.config.lookback_period,
                 self.config.rsi_period,
@@ -211,10 +204,7 @@ impl MetadataStrategy for MomentumFactorStrategy {
                 "Volume_Momentum".to_string(),
                 "RSI".to_string(),
             ],
-            expected_regimes: vec![
-                MarketRegime::Bull,
-                MarketRegime::Trending,
-            ],
+            expected_regimes: vec![MarketRegime::Bull, MarketRegime::Trending],
             risk_profile: RiskProfile {
                 max_drawdown_expected: 0.20,
                 volatility_level: VolatilityLevel::Medium,
@@ -306,28 +296,26 @@ impl Strategy for MomentumFactorStrategy {
         }
 
         // ENTRY LOGIC - Enough factors are positive
-        if self.last_position != SignalType::Buy {
-            if positive_count >= self.config.min_factors {
-                // Calculate signal strength based on number of positive factors
-                let strength = positive_count as f64 / 3.0;
+        if self.last_position != SignalType::Buy && positive_count >= self.config.min_factors {
+            // Calculate signal strength based on number of positive factors
+            let strength = positive_count as f64 / 3.0;
 
-                self.last_position = SignalType::Buy;
-                self.entry_price = Some(price);
-                return Some(vec![Signal {
-                    timestamp: bar.timestamp,
-                    symbol: "UNKNOWN".to_string(),
-                    signal_type: SignalType::Buy,
-                    strength,
-                    metadata: Some(format!(
-                        "Multi-Factor Entry: {}/{} factors positive (Price:{}, Vol:{}, RSI:{})",
-                        positive_count,
-                        3,
-                        if factors.0 { "✓" } else { "✗" },
-                        if factors.1 { "✓" } else { "✗" },
-                        if factors.2 { "✓" } else { "✗" }
-                    )),
-                }]);
-            }
+            self.last_position = SignalType::Buy;
+            self.entry_price = Some(price);
+            return Some(vec![Signal {
+                timestamp: bar.timestamp,
+                symbol: "UNKNOWN".to_string(),
+                signal_type: SignalType::Buy,
+                strength,
+                metadata: Some(format!(
+                    "Multi-Factor Entry: {}/{} factors positive (Price:{}, Vol:{}, RSI:{})",
+                    positive_count,
+                    3,
+                    if factors.0 { "✓" } else { "✗" },
+                    if factors.1 { "✓" } else { "✗" },
+                    if factors.2 { "✓" } else { "✗" }
+                )),
+            }]);
         }
 
         None
@@ -337,18 +325,6 @@ impl Strategy for MomentumFactorStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
-
-    fn create_test_bar(price: f64, volume: f64) -> Bar {
-        Bar {
-            timestamp: Utc::now(),
-            open: price,
-            high: price,
-            low: price,
-            close: price,
-            volume,
-        }
-    }
 
     #[test]
     fn test_momentum_factor_creation() {

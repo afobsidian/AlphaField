@@ -1,8 +1,8 @@
 use alphafield_backtest::{strategy::Strategy as BacktestStrategy, StrategyAdapter};
 use alphafield_core::Strategy;
 use alphafield_strategy::{
-    framework::canonicalize_strategy_name, BollingerBandsStrategy, GoldenCrossStrategy,
-    MomentumStrategy, RsiStrategy,
+    framework::canonicalize_strategy_name, macd_strategy::MomentumConfig, BollingerBandsStrategy,
+    GoldenCrossStrategy, MACDStrategy, RsiStrategy,
 };
 use std::collections::HashMap;
 use tracing::debug;
@@ -200,16 +200,15 @@ impl StrategyFactory {
                     return None;
                 }
 
-                let config =
-                    alphafield_strategy::strategies::momentum::MomentumConfig::new_with_exits(
-                        ema_period,
-                        macd_fast,
-                        macd_slow,
-                        macd_signal,
-                        tp,
-                        sl,
-                    );
-                Some(Box::new(MomentumStrategy::from_config(config)))
+                let config = MomentumConfig::new_with_exits(
+                    ema_period,
+                    macd_fast,
+                    macd_slow,
+                    macd_signal,
+                    tp,
+                    sl,
+                );
+                Some(Box::new(MACDStrategy::from_config(config)))
             }
             _ => None,
         }
@@ -387,16 +386,15 @@ impl StrategyFactory {
                 if macd_fast >= macd_slow || ema_period == 0 || macd_signal == 0 {
                     return None;
                 }
-                let config =
-                    alphafield_strategy::strategies::momentum::MomentumConfig::new_with_exits(
-                        ema_period,
-                        macd_fast,
-                        macd_slow,
-                        macd_signal,
-                        tp,
-                        sl,
-                    );
-                let strat = MomentumStrategy::from_config(config);
+                let config = MomentumConfig::new_with_exits(
+                    ema_period,
+                    macd_fast,
+                    macd_slow,
+                    macd_signal,
+                    tp,
+                    sl,
+                );
+                let strat = MACDStrategy::from_config(config);
                 Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
             }
             _ => None,

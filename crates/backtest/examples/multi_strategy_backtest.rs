@@ -3,9 +3,7 @@
 //! Runs multiple strategies on the same data and compares their performance.
 
 use alphafield_backtest::{BacktestEngine, SlippageModel, StrategyAdapter};
-use alphafield_strategy::{
-    BollingerBandsStrategy, GoldenCrossStrategy, MomentumStrategy, RsiStrategy,
-};
+use alphafield_strategy::{BollingerBandsStrategy, GoldenCrossStrategy, MACDStrategy, RsiStrategy};
 
 #[tokio::main]
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
@@ -94,7 +92,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         ),
         (
             "Momentum (50, 12/26/9)",
-            Box::new(|| Box::new(MomentumStrategy::new(50, 12, 26, 9))),
+            Box::new(|| Box::new(MACDStrategy::new(50, 12, 26, 9))),
         ),
     ];
 

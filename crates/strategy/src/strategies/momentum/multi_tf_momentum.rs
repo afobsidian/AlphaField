@@ -138,6 +138,8 @@ impl MultiTfMomentumStrategy {
     }
 
     /// Check if all timeframes are aligned for bullish momentum
+    /// This helper is test-only and not needed in non-test builds.
+    #[cfg(test)]
     fn is_aligned_bullish(&self, price: f64, fast_ema: f64, slow_ema: f64) -> bool {
         price > fast_ema && fast_ema > slow_ema
     }
@@ -150,9 +152,9 @@ impl MetadataStrategy for MultiTfMomentumStrategy {
             category: StrategyCategory::Momentum,
             sub_type: Some("multi_timeframe".to_string()),
             description: format!(
-                "Multi-timeframe momentum strategy requiring alignment across timeframes. 
-                Uses {}-period EMA (short-term) and {}-period EMA (long-term). 
-                Enters when Price > Fast EMA > Slow EMA (all aligned). 
+                "Multi-timeframe momentum strategy requiring alignment across timeframes.
+                Uses {}-period EMA (short-term) and {}-period EMA (long-term).
+                Enters when Price > Fast EMA > Slow EMA (all aligned).
                 Exits when alignment breaks or on TP/SL. Uses {:.1}% TP and {:.1}% SL.",
                 self.config.fast_ema_period,
                 self.config.slow_ema_period,
@@ -279,7 +281,7 @@ impl Strategy for MultiTfMomentumStrategy {
                 if !was_above_fast && price_above_fast && fast_above_slow {
                     // Calculate signal strength based on separation between EMAs
                     let ema_separation = (fast_ema_val - slow_ema_val) / slow_ema_val;
-                    let strength = (ema_separation * 100.0).min(1.0).max(0.6);
+                    let strength = (ema_separation * 100.0).clamp(0.6, 1.0);
 
                     self.last_position = SignalType::Buy;
                     self.entry_price = Some(price);

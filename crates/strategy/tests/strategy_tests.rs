@@ -1,7 +1,6 @@
 use alphafield_core::{Bar, SignalType, Strategy};
 use alphafield_strategy::strategies::{
-    BollingerBandsStrategy, GoldenCrossStrategy, MeanReversionStrategy, MomentumStrategy,
-    RsiStrategy,
+    BollingerBandsStrategy, GoldenCrossStrategy, MACDStrategy, MeanReversionStrategy, RsiStrategy,
 };
 use chrono::Utc;
 
@@ -107,7 +106,7 @@ fn test_bollinger_bands_signals() {
 
 #[test]
 fn test_momentum_signals() {
-    let mut strategy = MomentumStrategy::new(10, 3, 6, 3);
+    let mut strategy = MACDStrategy::new(10, 3, 6, 3);
 
     // Strong uptrend
     let prices: Vec<f64> = (0..20).map(|i| 100.0 + (i as f64) * 2.0).collect();

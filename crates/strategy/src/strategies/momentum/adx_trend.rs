@@ -171,8 +171,8 @@ impl MetadataStrategy for AdxTrendStrategy {
             category: StrategyCategory::Momentum,
             sub_type: Some("adx_trend".to_string()),
             description: format!(
-                "ADX-based trend strength strategy using {} period ADX. Only enters when ADX > {} 
-                (strong trend detected). Exits when ADX falls below {} (trend weakening) or on TP/SL. 
+                "ADX-based trend strength strategy using {} period ADX. Only enters when ADX > {}
+                (strong trend detected). Exits when ADX falls below {} (trend weakening) or on TP/SL.
                 Uses {:.1}% TP and {:.1}% SL.",
                 self.config.adx_period,
                 self.config.strong_trend_threshold,
@@ -299,8 +299,7 @@ impl Strategy for AdxTrendStrategy {
                         if direction == 1 {
                             // Calculate signal strength based on ADX magnitude
                             let strength = ((adx_val - self.config.strong_trend_threshold) / 20.0)
-                                .min(1.0)
-                                .max(0.6);
+                                .clamp(0.6, 1.0);
 
                             self.last_position = SignalType::Buy;
                             self.entry_price = Some(price);

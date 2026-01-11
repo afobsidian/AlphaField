@@ -164,8 +164,8 @@ impl MetadataStrategy for RocStrategy {
             category: StrategyCategory::Momentum,
             sub_type: Some("rate_of_change".to_string()),
             description: format!(
-                "Rate of Change momentum strategy using {} period ROC. Enters when ROC crosses above {:.1}% 
-                (positive momentum), exits when ROC crosses below {:.1}% (negative momentum). 
+                "Rate of Change momentum strategy using {} period ROC. Enters when ROC crosses above {:.1}%
+                (positive momentum), exits when ROC crosses below {:.1}% (negative momentum).
                 Uses {:.1}% TP and {:.1}% SL.",
                 self.config.roc_period,
                 self.config.entry_threshold,
@@ -270,9 +270,7 @@ impl Strategy for RocStrategy {
             if let Some(prev) = prev_roc {
                 if prev <= self.config.entry_threshold && roc_val > self.config.entry_threshold {
                     // Calculate signal strength based on ROC magnitude
-                    let strength = (roc_val / (self.config.entry_threshold * 2.0))
-                        .min(1.0)
-                        .max(0.5);
+                    let strength = (roc_val / (self.config.entry_threshold * 2.0)).clamp(0.5, 1.0);
 
                     self.last_position = SignalType::Buy;
                     self.entry_price = Some(price);

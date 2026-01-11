@@ -350,18 +350,6 @@ impl Strategy for VolumeMomentumStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
-
-    fn create_test_bar(price: f64, volume: f64) -> Bar {
-        Bar {
-            timestamp: Utc::now(),
-            open: price,
-            high: price,
-            low: price,
-            close: price,
-            volume,
-        }
-    }
 
     #[test]
     fn test_volume_momentum_creation() {

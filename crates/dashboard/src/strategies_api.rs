@@ -233,7 +233,7 @@ pub fn initialize_registry() -> Arc<StrategyRegistry> {
     // ------------------------------------------------------------------------
 
     // Register Momentum strategy
-    let momentum = Arc::new(alphafield_strategy::strategies::MomentumStrategy::new(
+    let momentum = Arc::new(alphafield_strategy::strategies::MACDStrategy::new(
         50, 12, 26, 9,
     )) as Arc<dyn StrategyWithMetadata>;
     if let Err(e) = registry.register(momentum) {

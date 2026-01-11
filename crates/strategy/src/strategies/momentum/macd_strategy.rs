@@ -112,9 +112,9 @@ impl fmt::Display for MomentumConfig {
 ///
 /// # Example
 /// ```
-/// use alphafield_strategy::strategies::MomentumStrategy;
+/// use alphafield_strategy::strategies::MACDStrategy;
 ///
-/// let strategy = MomentumStrategy::new(50, 12, 26, 9);
+/// let strategy = MACDStrategy::new(50, 12, 26, 9);
 /// ```
 pub struct MomentumStrategy {
     config: MomentumConfig,
@@ -164,7 +164,7 @@ impl MetadataStrategy for MomentumStrategy {
             category: StrategyCategory::Momentum,
             sub_type: Some("indicator_combination".to_string()),
             description: format!(
-                "Momentum strategy combining EMA({}) with MACD({}/{}/{}) for trend confirmation. 
+                "Momentum strategy combining EMA({}) with MACD({}/{}/{}) for trend confirmation.
                 Uses {:.1}% TP and {:.1}% SL. Generates buy signals when price > EMA and MACD crosses above signal line.",
                 self.config.ema_period, self.config.macd_fast, self.config.macd_slow, self.config.macd_signal,
                 self.config.take_profit, self.config.stop_loss
