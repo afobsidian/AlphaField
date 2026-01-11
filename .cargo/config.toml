@@ -1,11 +1,7 @@
 [build]
 # Use all available CPU cores for parallel compilation
 # This significantly speeds up builds on multi-core machines
-jobs = 0  # 0 means use all available cores
-
-[target.x86_64-pc-windows-msvc]
-# Windows-specific optimizations
-rustflags = ["-C", "target-cpu=native"]
+# Note: Removed jobs setting to avoid compatibility issues across Cargo versions
 
 [target.aarch64-apple-darwin]
 # Apple Silicon (M1/M2/M3) optimizations
