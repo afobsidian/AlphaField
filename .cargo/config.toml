@@ -1,0 +1,155 @@
+[build]
+# Use all available CPU cores for parallel compilation
+# This significantly speeds up builds on multi-core machines
+jobs = 0  # 0 means use all available cores
+
+[target.x86_64-pc-windows-msvc]
+# Windows-specific optimizations
+rustflags = ["-C", "target-cpu=native"]
+
+[target.aarch64-apple-darwin]
+# Apple Silicon (M1/M2/M3) optimizations
+rustflags = ["-C", "target-cpu=native"]
+
+[target.x86_64-apple-darwin]
+# Intel Mac optimizations
+rustflags = ["-C", "target-cpu=native"]
+
+[profile.dev]
+# Debug build optimizations for faster compile times
+opt-level = 0           # No optimization (fastest compile)
+debug = true            # Keep debug symbols
+split-debuginfo = "unpacked"  # Faster linking on some systems
+incremental = true      # Enable incremental compilation (default)
+
+[profile.dev.package."*"]
+# Optimize dependencies in debug mode
+# This makes dependency crates faster without slowing down your code recompilation
+opt-level = 2           # Moderate optimization for dependencies
+debug = false           # No debug symbols for dependencies
+
+[profile.test]
+# Test build optimizations
+opt-level = 1           # Light optimization for faster test execution
+debug = true            # Keep debug symbols for test debugging
+incremental = true
+
+[profile.release]
+# Release build optimizations (complements workspace Cargo.toml)
+# Your workspace already has: opt-level = 3, lto = "fat", codegen-units = 1, strip = true
+panic = "abort"         # Eliminates unwinding code, reduces binary size ~10-15%
+overflow-checks = false # Removes runtime integer overflow checks (minor speedup)
+incremental = false     # Disable incremental for release builds (faster final compile)
+debug-assertions = false # Disable debug assertions in release builds
+
+[profile.release.package."*"]
+# Optimize dependencies even more aggressively
+opt-level = 3
+codegen-units = 1
+
+[profile.release-dev]
+# Faster release builds for development/testing (still optimized, but compiles faster)
+# Use with: cargo build --profile release-dev
+inherits = "release"
+lto = "thin"            # Thin LTO is much faster than "fat", still good performance
+codegen-units = 16      # More codegen units = faster compilation (slightly slower runtime)
+panic = "abort"
+incremental = true      # Enable incremental for dev-release
+
+[profile.max-perf]
+# Maximum performance profile for production deployments
+# Use with: cargo build --profile max-perf
+inherits = "release"
+panic = "abort"
+overflow-checks = false
+lto = "fat"
+codegen-units = 1
+strip = "symbols"       # Strip all symbols (even more than workspace setting)
+
+# ============================================================================
+# PROFILE-GUIDED OPTIMIZATION (PGO) INSTRUCTIONS
+# ============================================================================
+# PGO can provide an additional 10-30% performance boost by optimizing
+# based on actual runtime profiling data. This is especially beneficial for:
+# - Hot code paths in trading strategies
+# - Database query patterns
+# - API request/response handling
+#
+# HOW TO USE PGO:
+# 1. Build instrumented binary (gathers profiling data):
+#    cargo build --profile pgo-instr
+#
+# 2. Run representative workload to generate profiling data:
+#    # Run your typical trading simulation or data processing tasks
+#    cargo run --profile pgo-instr --bin dashboard_server
+#    # Or run backtests with typical parameters
+#    cargo run --example golden_cross_backtest -p alphafield-backtest --profile pgo-instr
+#    # Run for 5-10 minutes or through typical usage scenarios
+#
+# 3. Merge profiling data (if multiple runs):
+#    # Profiling data is in target/pgo-instr/*.profraw
+#    llvm-profdata merge -o merged.profdata target/pgo-instr/*.profraw
+#
+# 4. Build optimized binary using profiling data:
+#    cargo build --profile pgo-optimized
+#
+# RESULT: A highly optimized binary tuned to your actual usage patterns!
+# ============================================================================
+
+[profile.pgo-instr]
+# Instrumented build for PGO data collection
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = false          # Keep symbols for profiling
+debug = false          # No debug symbols needed
+overflow-checks = false
+panic = "abort"
+
+[profile.pgo-optimized]
+# Final optimized build using PGO data
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+overflow-checks = false
+panic = "abort"
+
+[target.x86_64-unknown-linux-gnu]
+# Linux-specific optimizations
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "link-arg=-Wl,--as-needed",          # Only link libraries that are actually used
+    "-C", "link-arg=-Wl,-z,now",              # Resolve all symbols at load time
+]
+
+[target.x86_64-pc-windows-msvc]
+# Windows-specific optimizations
+rustflags = [
+    "-C", "target-cpu=native",
+    "-C", "link-args=/SUBSYSTEM:CONSOLE",     # Explicit console subsystem
+    "-C", "link-args=/DYNAMICBASE:NO",        # Disable ASLR for slight performance gain (optional)
+]
+
+[alias]
+# Convenient aliases for common build scenarios
+b = "build"
+br = "build --release"
+t = "test"
+tr = "test --release"
+c = "check"
+cr = "check --release"
+r = "run"
+rr = "run --release"
+# New profile aliases
+brd = "build --profile release-dev"      # Faster release for dev/testing
+bmp = "build --profile max-perf"         # Maximum performance for production
+rrd = "run --profile release-dev"        # Run with dev-release profile
+rmp = "run --profile max-perf"           # Run with max-perf profile
+# PGO aliases
+bpi = "build --profile pgo-instr"        # Build instrumented binary for PGO
+bpo = "build --profile pgo-optimized"    # Build PGO-optimized binary
+rpi = "run --profile pgo-instr"          # Run instrumented binary
+rpo = "run --profile pgo-optimized"      # Run PGO-optimized binary
