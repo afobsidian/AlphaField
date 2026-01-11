@@ -11,7 +11,6 @@ pub mod trend_following;
 
 // Re-export strategies for convenience
 pub use golden_cross::GoldenCrossStrategy;
-pub use momentum::MomentumStrategy;
 pub use rsi::RsiStrategy;
 
 // Re-export trend following strategies
@@ -19,3 +18,6 @@ pub use trend_following::*;
 
 // Re-export mean reversion strategies
 pub use mean_reversion::*;
+
+// Re-export momentum strategies
+pub use momentum::*;

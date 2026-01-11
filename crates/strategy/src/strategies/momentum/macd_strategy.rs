@@ -35,7 +35,7 @@ impl MomentumConfig {
             macd_fast,
             macd_slow,
             macd_signal,
-            take_profit: 5.0, // Default to 5% if not specified via constructor (though we update constructor below)
+            take_profit: 5.0,
             stop_loss: 5.0,
         }
     }
@@ -112,9 +112,9 @@ impl fmt::Display for MomentumConfig {
 ///
 /// # Example
 /// ```
-/// use alphafield_strategy::strategies::MomentumStrategy;
+/// use alphafield_strategy::strategies::MACDStrategy;
 ///
-/// let strategy = MomentumStrategy::new(50, 12, 26, 9);
+/// let strategy = MACDStrategy::new(50, 12, 26, 9);
 /// ```
 pub struct MomentumStrategy {
     config: MomentumConfig,
@@ -164,12 +164,12 @@ impl MetadataStrategy for MomentumStrategy {
             category: StrategyCategory::Momentum,
             sub_type: Some("indicator_combination".to_string()),
             description: format!(
-                "Momentum strategy combining EMA({}) with MACD({}/{}/{}) for trend confirmation. 
+                "Momentum strategy combining EMA({}) with MACD({}/{}/{}) for trend confirmation.
                 Uses {:.1}% TP and {:.1}% SL. Generates buy signals when price > EMA and MACD crosses above signal line.",
                 self.config.ema_period, self.config.macd_fast, self.config.macd_slow, self.config.macd_signal,
                 self.config.take_profit, self.config.stop_loss
             ),
-            hypothesis_path: "hypotheses/momentum/ema_macd.md".to_string(),
+            hypothesis_path: "hypotheses/momentum/macd_strategy.md".to_string(),
             required_indicators: vec!["EMA".to_string(), "MACD".to_string(), "Price".to_string()],
             expected_regimes: vec![MarketRegime::Bull, MarketRegime::Trending, MarketRegime::HighVolatility],
             risk_profile: RiskProfile {

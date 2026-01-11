@@ -53,9 +53,9 @@ AlphaField is a **research-first trading platform** focused on:
 - [ ] Regime-aware strategy library (bull market, bear market, sideways)
 
 #### Core Strategy Categories
-- [x] **Trend Following**: Golden Cross, Breakout, Moving Average Crossover
+- [x] **Trend Following**: Golden Cross, Breakout, Moving Average Crossover, Adaptive MA, Triple MA, MACD Trend, Parabolic SAR
 - [x] **Mean Reversion**: Bollinger Bands (with RSI), RSI Reversion, Statistical Arbitrage, Stochastic Reversion, Keltner Channel, Price Channel, Z-Score Reversion
-- [x] **Momentum**: RSI Momentum, MACD Strategy, Price Rate of Change
+- [x] **Momentum**: RSI Momentum, MACD Strategy, ROC, ADX Trend, Momentum Factor, Volume Momentum, Multi-TF Momentum
 - [ ] **Volatility-Based**: ATR-based strategies, Volatility breakout
 - [ ] **Sentiment-Based**: Fear & Greed integration, contrarian strategies
 - [ ] **Multi-Indicator**: Hybrid strategies combining multiple signals
