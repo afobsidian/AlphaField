@@ -512,8 +512,206 @@ body {
 }
 
 .strategy-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+/* Strategy Search Box */
+.strategy-search-container {
+    margin-bottom: 16px;
+}
+
+.strategy-search-input {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 13px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--card-bg);
+    color: var(--text-color);
+    transition: all 0.2s ease;
+}
+
+.strategy-search-input:focus {
+    outline: none;
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.strategy-search-input::placeholder {
+    color: var(--text-muted);
+}
+
+/* Category Accordion */
+.strategy-category {
+    margin-bottom: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--card-bg);
+    transition: all 0.2s ease;
+}
+
+.strategy-category-header {
+    padding: 12px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(99, 102, 241, 0.05);
+    border-bottom: 1px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+
+.strategy-category-header:hover {
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.strategy-category-header.active {
+    background: rgba(99, 102, 241, 0.15);
+}
+
+.strategy-category-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-color);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.strategy-category-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: rgba(99, 102, 241, 0.2);
+    padding: 2px 8px;
+    border-radius: 12px;
+}
+
+.strategy-category-icon {
+    font-size: 16px;
+}
+
+.strategy-category-chevron {
     font-size: 12px;
     color: var(--text-muted);
+    transition: transform 0.2s ease;
+}
+
+.strategy-category-header.active .strategy-category-chevron {
+    transform: rotate(180deg);
+}
+
+.strategy-category-content {
+    display: none;
+    padding: 8px;
+}
+
+.strategy-category.open .strategy-category-content {
+    display: block;
+}
+
+.strategy-category-strategies {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* Category-specific icons and colors */
+.strategy-category[data-category="TrendFollowing"] .strategy-category-icon {
+    filter: hue-rotate(0deg);
+}
+
+.strategy-category[data-category="MeanReversion"] .strategy-category-icon {
+    filter: hue-rotate(45deg);
+}
+
+.strategy-category[data-category="Momentum"] .strategy-category-icon {
+    filter: hue-rotate(90deg);
+}
+
+.strategy-category[data-category="VolatilityBased"] .strategy-category-icon {
+    filter: hue-rotate(135deg);
+}
+
+.strategy-category[data-category="SentimentBased"] .strategy-category-icon {
+    filter: hue-rotate(180deg);
+}
+
+.strategy-category[data-category="MultiIndicator"] .strategy-category-icon {
+    filter: hue-rotate(225deg);
+}
+
+.strategy-category[data-category="Baseline"] .strategy-category-icon {
+    filter: hue-rotate(270deg);
+}
+
+/* Compact strategy items within categories */
+.strategy-compact-item {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+.strategy-compact-item:hover {
+    background: rgba(99, 102, 241, 0.08);
+    border-color: rgba(99, 102, 241, 0.2);
+}
+
+.strategy-compact-item.selected {
+    background: rgba(99, 102, 241, 0.15);
+    border-color: var(--primary);
+}
+
+.strategy-compact-item input[type="radio"] {
+    display: none;
+}
+
+.strategy-compact-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.strategy-compact-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-color);
+}
+
+.strategy-compact-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.strategy-compact-selected-icon {
+    font-size: 14px;
+    color: var(--primary);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.strategy-compact-item.selected .strategy-compact-selected-icon {
+    opacity: 1;
+}
+
+/* No results message */
+.strategy-no-results {
+    text-align: center;
+    padding: 24px;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.strategy-no-results-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+    opacity: 0.5;
 }
 
 /* Buttons */

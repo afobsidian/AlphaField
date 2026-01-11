@@ -48,24 +48,33 @@ AlphaField is a **research-first trading platform** focused on:
 - [x] Hypothesis registration system (written hypothesis → code)
 - [x] Strategy classification framework (trend, mean-reversion, momentum, arbitrage)
 - [x] Performance benchmarking against baseline strategies
+- [x] **Dashboard integration system** (automatic strategy discovery and selection)
 - [ ] Automated strategy discovery (pattern recognition in historical data)
 - [ ] Strategy mutation testing (systematic variation of strategy logic)
 - [ ] Regime-aware strategy library (bull market, bear market, sideways)
 
 #### Core Strategy Categories
-- [x] **Trend Following**: Golden Cross, Breakout, Moving Average Crossover, Adaptive MA, Triple MA, MACD Trend, Parabolic SAR
-- [x] **Mean Reversion**: Bollinger Bands (with RSI), RSI Reversion, Statistical Arbitrage, Stochastic Reversion, Keltner Channel, Price Channel, Z-Score Reversion
-- [x] **Momentum**: RSI Momentum, MACD Strategy, ROC, ADX Trend, Momentum Factor, Volume Momentum, Multi-TF Momentum
+- [x] **Trend Following**: Golden Cross, Breakout, Moving Average Crossover, Adaptive MA, Triple MA, MACD Trend, Parabolic SAR (7 strategies, dashboard-integrated)
+- [x] **Mean Reversion**: Bollinger Bands (with RSI), RSI Reversion, Statistical Arbitrage, Stochastic Reversion, Keltner Channel, Price Channel, Z-Score Reversion (7 strategies, dashboard-integrated)
+- [x] **Momentum**: RSI Momentum, MACD Strategy, ROC, ADX Trend, Momentum Factor, Volume Momentum, Multi-TF Momentum (7 strategies, dashboard-integrated)
 - [ ] **Volatility-Based**: ATR-based strategies, Volatility breakout
 - [ ] **Sentiment-Based**: Fear & Greed integration, contrarian strategies
 - [ ] **Multi-Indicator**: Hybrid strategies combining multiple signals
 - [ ] **Market Microstructure**: Order flow, volume profile (if tick data available)
 
+**Note**: All strategies in Trend Following, Mean Reversion, and Momentum categories are fully integrated into the dashboard with:
+- Automatic registration in `crates/dashboard/src/strategies_api.rs`
+- UI overrides for user-friendly names in `crates/dashboard/static/app.js`
+- Parameter schemas where applicable
+- Category-based organization with search functionality
+
 #### Strategy Documentation
-- [ ] Each strategy requires: Hypothesis, Logic, Expected Market Regimes, Risk Profile
+- [x] Each strategy requires: Hypothesis, Logic, Expected Market Regimes, Risk Profile
 - [ ] Historical performance database (strategy results over time)
 - [ ] Strategy comparison metrics (side-by-side quantitative analysis)
 - [ ] Failure mode documentation (when and why strategies fail)
+- [x] **Dashboard integration guide** (see `doc/ui/strategy_selection.md`)
+- [x] **Integration checklist** (all strategies must pass: traits, registration, UI, testing)
 
 ---
 

@@ -147,7 +147,16 @@
                         <!-- Strategy Selection Card -->
                         <div class="card strategy-card">
                             <h3>Select Trading Strategy</h3>
-                            <div class="strategy-options" id="strategy-options">
+                            <div class="strategy-search-container">
+                                <input
+                                    type="text"
+                                    id="strategy-search"
+                                    placeholder="🔍 Search strategies..."
+                                    class="form-input"
+                                    oninput="filterStrategies(this.value)"
+                                />
+                            </div>
+                            <div class="strategy-categories" id="strategy-categories">
                                 <div class="strategy-loading">
                                     Loading strategies…
                                 </div>

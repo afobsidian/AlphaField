@@ -59,6 +59,14 @@ Define a Rust Trait that requires on_candle, on_tick, and risk_check methods.
 Trend Following: Breakout with ATR trailing stop.
 Mean Reversion: Bollinger Band deviations on lower timeframes.
 Bias: Long-only on BTC > 200DMA, Cash otherwise.
+3.3 Dashboard Integration Requirement:
+All strategies must be immediately selectable in dashboard without manual UI updates.
+- Implement `Strategy` trait with unique name identifier
+- Implement `MetadataStrategy` trait with complete metadata
+- Register in `crates/dashboard/src/strategies_api.rs::initialize_registry()`
+- Add UI override in `crates/dashboard/static/app.js` (optional but recommended)
+- Provide parameter schema if strategy has configurable parameters
+- See `doc/ui/strategy_selection.md` for complete integration checklist.
 Phase 4: Live Execution Engine (The "Black Box")
 Goal: Safe, autonomous execution.
 4.1 Signal-Executor Separation:
@@ -81,10 +89,17 @@ Console: Live scrolling log of Rust tracing events (Info/Warn/Error).
 Month 1: Foundation: Setup TimescaleDB, write Ingestion Engine, download History.
 Month 2: The Lab: Build Backtester, implement standard metrics (Sharpe, Sortino), write first Strategy.
 Month 3: Validation: Perform Walk-Forward and Monte Carlo tests. Refine strategy parameters (avoiding overfitting).
-Month 4: Paper Trading: Run Live Engine connected to Binance Testnet. Compare Paper results vs Backtest model.
-Month 5: Live Alpha: Deploy with minimal capital ($500-$1000). Monitor "Drift."
-Month 6: Full Scale: Increase capital to target allocation.
+Month 4: Dashboard Integration: Build strategy selection system with automatic discovery, category organization, and search functionality.
+Month 5: Paper Trading: Run Live Engine connected to Binance Testnet. Compare Paper results vs Backtest model.
+Month 6: Live Alpha: Deploy with minimal capital ($500-$1000). Monitor "Drift."
+Month 7: Full Scale: Increase capital to target allocation.
 6. Risk Management (The Unbiased Way)
 Capital Allocation: Never risk more than 1-2% of account equity on a single trade setup.
 Correlation Checks: If running multiple strategies, ensure they are not all Long BTC at the same time (use correlation matrices in ndarray).
 Volatility Scaling: Reduce position size when ATR (Volatility) increases.
+7. Dashboard Integration Policy
+Automatic Discovery: All strategies must automatically appear in dashboard when registered.
+Category Organization: Strategies must be categorized (Trend, Mean Reversion, Momentum, etc.).
+Searchable UI: Dashboard must support search and filtering of strategies.
+Selection System: Strategies must be selectable with one-click interface.
+Documentation: All integration steps must be documented in `doc/ui/strategy_selection.md`.

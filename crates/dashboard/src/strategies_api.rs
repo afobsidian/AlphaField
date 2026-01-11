@@ -259,6 +259,128 @@ pub fn initialize_registry() -> Arc<StrategyRegistry> {
         );
     }
 
+    // ------------------------------------------------------------------------
+    // Mean Reversion Strategies (Phase 12.3)
+    // ------------------------------------------------------------------------
+
+    // Register RSI Reversion strategy
+    let rsi_reversion = Arc::new(
+        alphafield_strategy::strategies::mean_reversion::RSIReversionStrategy::new(14, 30.0, 70.0),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(rsi_reversion) {
+        eprintln!("Failed to register RSI Reversion strategy: {}", e);
+    }
+
+    // Register Stochastic Reversion strategy
+    let stoch_reversion = Arc::new(
+        alphafield_strategy::strategies::mean_reversion::StochReversionStrategy::new(14, 3),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(stoch_reversion) {
+        eprintln!("Failed to register Stochastic Reversion strategy: {}", e);
+    }
+
+    // Register Z-Score Reversion strategy
+    let zscore_reversion =
+        Arc::new(alphafield_strategy::strategies::mean_reversion::ZScoreReversionStrategy::new(20))
+            as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(zscore_reversion) {
+        eprintln!("Failed to register Z-Score Reversion strategy: {}", e);
+    }
+
+    // Register Price Channel (Donchian) Reversion strategy
+    let price_channel =
+        Arc::new(alphafield_strategy::strategies::mean_reversion::PriceChannelStrategy::new(20))
+            as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(price_channel) {
+        eprintln!("Failed to register Price Channel Reversion strategy: {}", e);
+    }
+
+    // Register Keltner Channel Reversion strategy
+    let keltner_reversion = Arc::new(
+        alphafield_strategy::strategies::mean_reversion::KeltnerReversionStrategy::new(20, 10, 2.0),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(keltner_reversion) {
+        eprintln!(
+            "Failed to register Keltner Channel Reversion strategy: {}",
+            e
+        );
+    }
+
+    // Register Statistical Arbitrage strategy
+    let stat_arb =
+        Arc::new(alphafield_strategy::strategies::mean_reversion::StatArbStrategy::new(30))
+            as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(stat_arb) {
+        eprintln!("Failed to register Statistical Arbitrage strategy: {}", e);
+    }
+
+    // ------------------------------------------------------------------------
+    // Momentum Strategies (Phase 12.4)
+    // ------------------------------------------------------------------------
+
+    // Register RSI Momentum strategy
+    let rsi_momentum = Arc::new(
+        alphafield_strategy::strategies::momentum::RsiMomentumStrategy::new(
+            14, 50.0, 60.0, 5.0, 3.0,
+        ),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(rsi_momentum) {
+        eprintln!("Failed to register RSI Momentum strategy: {}", e);
+    }
+
+    // Register MACD Momentum strategy
+    let macd_momentum =
+        Arc::new(alphafield_strategy::strategies::momentum::MACDStrategy::new(50, 12, 26, 9))
+            as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(macd_momentum) {
+        eprintln!("Failed to register MACD Momentum strategy: {}", e);
+    }
+
+    // Register ROC (Rate of Change) strategy
+    let roc = Arc::new(alphafield_strategy::strategies::momentum::RocStrategy::new(
+        10, 2.0, -1.0, 5.0, 3.0,
+    )) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(roc) {
+        eprintln!("Failed to register ROC strategy: {}", e);
+    }
+
+    // Register ADX Trend strategy
+    let adx_trend = Arc::new(
+        alphafield_strategy::strategies::momentum::AdxTrendStrategy::new(14, 25.0, 20.0, 5.0, 3.0),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(adx_trend) {
+        eprintln!("Failed to register ADX Trend strategy: {}", e);
+    }
+
+    // Register Momentum Factor strategy
+    let momentum_factor = Arc::new(
+        alphafield_strategy::strategies::momentum::MomentumFactorStrategy::new(20, 14, 2, 5.0, 3.0),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(momentum_factor) {
+        eprintln!("Failed to register Momentum Factor strategy: {}", e);
+    }
+
+    // Register Volume Momentum strategy
+    let volume_momentum = Arc::new(
+        alphafield_strategy::strategies::momentum::VolumeMomentumStrategy::new(
+            20, 20, 1.5, 5.0, 3.0,
+        ),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(volume_momentum) {
+        eprintln!("Failed to register Volume Momentum strategy: {}", e);
+    }
+
+    // Register Multi-Timeframe Momentum strategy
+    let multi_tf_momentum = Arc::new(
+        alphafield_strategy::strategies::momentum::MultiTfMomentumStrategy::new(20, 50, 5.0, 3.0),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(multi_tf_momentum) {
+        eprintln!(
+            "Failed to register Multi-Timeframe Momentum strategy: {}",
+            e
+        );
+    }
+
     registry
 }
 

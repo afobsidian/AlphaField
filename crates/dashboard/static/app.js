@@ -42,17 +42,28 @@ let STRATEGY_PARAMS = {};
 // IMPORTANT: The optimization/backtest APIs expect the backend strategy key (e.g. "GoldenCross"),
 // so we keep the radio `value` as the backend key and only change the displayed label/description.
 const STRATEGY_UI_OVERRIDES = {
+  // Baseline Strategies
+  HODL_Baseline: {
+    displayName: "HODL Baseline",
+    description: "Buy and hold benchmark",
+  },
+  Market_Average_Baseline: {
+    displayName: "Market Average",
+    description: "Equal-weighted BTC/ETH/SOL basket",
+  },
+
+  // Trend Following Strategies
   GoldenCross: {
     displayName: "Golden Cross",
-    description: "SMA crossover trend following",
+    description: "SMA 50/200 crossover trend following",
   },
   Breakout: {
-    displayName: "Breakout",
-    description: "Price breakout trend following",
+    displayName: "Price Breakout",
+    description: "20-period Donchian channel breakout",
   },
   MACrossover: {
     displayName: "MA Crossover",
-    description: "Moving average crossover trend following",
+    description: "Fast/Slow SMA crossover trend following",
   },
   AdaptiveMA: {
     displayName: "Adaptive MA (KAMA)",
@@ -64,23 +75,71 @@ const STRATEGY_UI_OVERRIDES = {
   },
   MacdTrend: {
     displayName: "MACD Trend",
-    description: "MACD trend-following crossover",
+    description: "MACD trend-following crossover strategy",
   },
   ParabolicSAR: {
     displayName: "Parabolic SAR",
     description: "Parabolic SAR trend + trailing stop",
   },
-  Rsi: {
-    displayName: "RSI Reversal",
-    description: "Overbought/oversold mean reversion",
+
+  // Mean Reversion Strategies (Phase 12.3)
+  BollingerBands: {
+    displayName: "Bollinger Bands",
+    description: "BB reversion with RSI confirmation",
   },
-  MeanReversion: {
-    displayName: "Mean Reversion",
-    description: "Bollinger Bands contrarian",
+  RSIReversion: {
+    displayName: "RSI Reversion",
+    description: "RSI oversold/overbought mean reversion",
   },
-  Momentum: {
-    displayName: "Momentum",
-    description: "MACD + EMA trend strength",
+  StochReversion: {
+    displayName: "Stochastic Reversion",
+    description: "Stochastic oscillator mean reversion",
+  },
+  ZScoreReversion: {
+    displayName: "Z-Score Reversion",
+    description: "Statistical z-score mean reversion",
+  },
+  PriceChannel: {
+    displayName: "Price Channel (Donchian)",
+    description: "Donchian channel mean reversion",
+  },
+  KeltnerReversion: {
+    displayName: "Keltner Channel",
+    description: "Keltner channel reversion with volume",
+  },
+  StatArb: {
+    displayName: "Statistical Arbitrage",
+    description: "Z-score based statistical arbitrage",
+  },
+
+  // Momentum Strategies (Phase 12.4)
+  RsiMomentumStrategy: {
+    displayName: "RSI Momentum",
+    description: "RSI > 50 momentum following strategy",
+  },
+  MACDStrategy: {
+    displayName: "MACD Momentum",
+    description: "MACD crossover with trend filter",
+  },
+  RocStrategy: {
+    displayName: "Rate of Change (ROC)",
+    description: "Price momentum rate of change",
+  },
+  AdxTrendStrategy: {
+    displayName: "ADX Trend",
+    description: "ADX strength-based trend following",
+  },
+  MomentumFactorStrategy: {
+    displayName: "Momentum Factor",
+    description: "Multi-factor momentum combination",
+  },
+  VolumeMomentumStrategy: {
+    displayName: "Volume Momentum",
+    description: "Volume-confirmed price momentum",
+  },
+  MultiTfMomentumStrategy: {
+    displayName: "Multi-Timeframe Momentum",
+    description: "Multi-EMA alignment momentum",
   },
 };
 
@@ -479,13 +538,564 @@ function buildDefaultParamSchema(strategyKey) {
           step: 0.5,
         },
       ];
+    case "RSIReversionStrategy":
+      return [
+        {
+          name: "rsi_period",
+          label: "RSI Period",
+          default: 14,
+          min: 5,
+          max: 30,
+          step: 1,
+        },
+        {
+          name: "oversold_threshold",
+          label: "Oversold Threshold",
+          default: 30.0,
+          min: 10.0,
+          max: 40.0,
+          step: 5.0,
+        },
+        {
+          name: "overbought_threshold",
+          label: "Overbought Threshold",
+          default: 70.0,
+          min: 60.0,
+          max: 90.0,
+          step: 5.0,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "StochReversionStrategy":
+      return [
+        {
+          name: "k_period",
+          label: "%K Period",
+          default: 14,
+          min: 5,
+          max: 30,
+          step: 1,
+        },
+        {
+          name: "d_period",
+          label: "%D Period",
+          default: 3,
+          min: 1,
+          max: 10,
+          step: 1,
+        },
+        {
+          name: "oversold",
+          label: "Oversold Threshold",
+          default: 20.0,
+          min: 10.0,
+          max: 30.0,
+          step: 5.0,
+        },
+        {
+          name: "overbought",
+          label: "Overbought Threshold",
+          default: 80.0,
+          min: 70.0,
+          max: 90.0,
+          step: 5.0,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "ZScoreReversionStrategy":
+      return [
+        {
+          name: "lookback_period",
+          label: "Lookback Period",
+          default: 20,
+          min: 5,
+          max: 100,
+          step: 5,
+        },
+        {
+          name: "entry_zscore",
+          label: "Entry Z-Score",
+          default: -2.0,
+          min: -4.0,
+          max: -1.0,
+          step: 0.5,
+        },
+        {
+          name: "exit_zscore",
+          label: "Exit Z-Score",
+          default: 0.0,
+          min: 0.0,
+          max: 2.0,
+          step: 0.5,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "PriceChannelStrategy":
+      return [
+        {
+          name: "lookback_period",
+          label: "Lookback Period",
+          default: 20,
+          min: 5,
+          max: 200,
+          step: 5,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "KeltnerReversionStrategy":
+      return [
+        {
+          name: "ema_period",
+          label: "EMA Period",
+          default: 20,
+          min: 5,
+          max: 50,
+          step: 5,
+        },
+        {
+          name: "atr_period",
+          label: "ATR Period",
+          default: 10,
+          min: 5,
+          max: 30,
+          step: 5,
+        },
+        {
+          name: "atr_multiplier",
+          label: "ATR Multiplier",
+          default: 2.0,
+          min: 1.0,
+          max: 3.0,
+          step: 0.5,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "StatArbStrategy":
+      return [
+        {
+          name: "lookback_period",
+          label: "Lookback Period",
+          default: 30,
+          min: 10,
+          max: 100,
+          step: 5,
+        },
+        {
+          name: "entry_zscore",
+          label: "Entry Z-Score",
+          default: -2.0,
+          min: -4.0,
+          max: -1.0,
+          step: 0.5,
+        },
+        {
+          name: "exit_zscore",
+          label: "Exit Z-Score",
+          default: 0.0,
+          min: 0.0,
+          max: 2.0,
+          step: 0.5,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "RsiMomentumStrategy":
+      return [
+        {
+          name: "rsi_period",
+          label: "RSI Period",
+          default: 14,
+          min: 5,
+          max: 30,
+          step: 1,
+        },
+        {
+          name: "momentum_threshold",
+          label: "Momentum Threshold",
+          default: 50.0,
+          min: 40.0,
+          max: 60.0,
+          step: 5.0,
+        },
+        {
+          name: "strength_threshold",
+          label: "Strength Threshold",
+          default: 60.0,
+          min: 50.0,
+          max: 80.0,
+          step: 5.0,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 3.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "MACDStrategy":
+      return [
+        {
+          name: "ema_period",
+          label: "Trend EMA Period",
+          default: 50,
+          min: 20,
+          max: 100,
+          step: 10,
+        },
+        {
+          name: "macd_fast",
+          label: "MACD Fast",
+          default: 12,
+          min: 5,
+          max: 20,
+          step: 1,
+        },
+        {
+          name: "macd_slow",
+          label: "MACD Slow",
+          default: 26,
+          min: 20,
+          max: 40,
+          step: 1,
+        },
+        {
+          name: "macd_signal",
+          label: "MACD Signal",
+          default: 9,
+          min: 5,
+          max: 15,
+          step: 1,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "RocStrategy":
+      return [
+        {
+          name: "roc_period",
+          label: "ROC Period",
+          default: 10,
+          min: 5,
+          max: 30,
+          step: 1,
+        },
+        {
+          name: "entry_threshold",
+          label: "Entry Threshold (%)",
+          default: 2.0,
+          min: 1.0,
+          max: 5.0,
+          step: 0.5,
+        },
+        {
+          name: "exit_threshold",
+          label: "Exit Threshold (%)",
+          default: -1.0,
+          min: -3.0,
+          max: 0.0,
+          step: 0.5,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 3.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "AdxTrendStrategy":
+      return [
+        {
+          name: "adx_period",
+          label: "ADX Period",
+          default: 14,
+          min: 5,
+          max: 30,
+          step: 1,
+        },
+        {
+          name: "strong_trend_threshold",
+          label: "Strong Trend Threshold",
+          default: 25.0,
+          min: 20.0,
+          max: 40.0,
+          step: 5.0,
+        },
+        {
+          name: "weak_trend_threshold",
+          label: "Weak Trend Threshold",
+          default: 20.0,
+          min: 15.0,
+          max: 25.0,
+          step: 5.0,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 3.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "MomentumFactorStrategy":
+      return [
+        {
+          name: "lookback_period",
+          label: "Lookback Period",
+          default: 20,
+          min: 5,
+          max: 50,
+          step: 5,
+        },
+        {
+          name: "rsi_period",
+          label: "RSI Period",
+          default: 14,
+          min: 5,
+          max: 30,
+          step: 1,
+        },
+        {
+          name: "min_factors",
+          label: "Min Positive Factors",
+          default: 2,
+          min: 1,
+          max: 3,
+          step: 1,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 3.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "VolumeMomentumStrategy":
+      return [
+        {
+          name: "price_ema_period",
+          label: "Price EMA Period",
+          default: 20,
+          min: 5,
+          max: 50,
+          step: 5,
+        },
+        {
+          name: "volume_period",
+          label: "Volume EMA Period",
+          default: 20,
+          min: 5,
+          max: 50,
+          step: 5,
+        },
+        {
+          name: "volume_multiplier",
+          label: "Volume Multiplier",
+          default: 1.5,
+          min: 1.0,
+          max: 3.0,
+          step: 0.1,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 3.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "MultiTfMomentumStrategy":
+      return [
+        {
+          name: "fast_ema_period",
+          label: "Fast EMA Period",
+          default: 20,
+          min: 5,
+          max: 50,
+          step: 5,
+        },
+        {
+          name: "slow_ema_period",
+          label: "Slow EMA Period",
+          default: 50,
+          min: 20,
+          max: 200,
+          step: 10,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 3.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
     default:
       return [];
   }
 }
 
 async function loadStrategies() {
-  const container = document.getElementById("strategy-options");
+  const container = document.getElementById("strategy-categories");
   if (container) {
     container.innerHTML = `<div class="strategy-loading">Loading strategies…</div>`;
   }
@@ -530,74 +1140,279 @@ async function loadStrategies() {
   } catch (err) {
     console.error(err);
     if (container) {
-      container.innerHTML = `<div class="strategy-loading">Failed to load strategies. Ensure the backend is running and /api/strategies is reachable.</div>`;
+      container.innerHTML = `<div class="strategy-no-results">
+        <div class="strategy-no-results-icon">⚠️</div>
+        <div>Failed to load strategies. Ensure the backend is running and /api/strategies is reachable.</div>
+        <div style="font-size: 11px; margin-top: 4px; opacity: 0.7;">${err.message}</div>
+      </div>`;
     }
   }
 }
 
+// Category display names and icons
+const CATEGORY_CONFIG = {
+  TrendFollowing: { name: "Trend Following", icon: "📈" },
+  MeanReversion: { name: "Mean Reversion", icon: "🔄" },
+  Momentum: { name: "Momentum", icon: "⚡" },
+  VolatilityBased: { name: "Volatility Based", icon: "🌊" },
+  SentimentBased: { name: "Sentiment Based", icon: "💭" },
+  MultiIndicator: { name: "Multi Indicator", icon: "🎯" },
+  Baseline: { name: "Baseline", icon: "📊" },
+};
+
+function getCategoryDisplayName(category) {
+  return CATEGORY_CONFIG[category]?.name || category;
+}
+
+function getCategoryIcon(category) {
+  return CATEGORY_CONFIG[category]?.icon || "📋";
+}
+
+// Group strategies by category
+function groupStrategiesByCategory(strategies) {
+  const grouped = {};
+  strategies.forEach((s) => {
+    const category = s.category || "Baseline";
+    if (!grouped[category]) {
+      grouped[category] = [];
+    }
+    grouped[category].push(s);
+  });
+  return grouped;
+}
+
+// Filter strategies based on search query
+function filterStrategies(query) {
+  const container = document.getElementById("strategy-categories");
+  if (!container) return;
+
+  const lowercaseQuery = query.toLowerCase().trim();
+
+  if (!lowercaseQuery) {
+    // Show all categories and strategies
+    document.querySelectorAll(".strategy-category").forEach((cat) => {
+      cat.classList.remove("hidden");
+      cat.classList.remove("open");
+      cat.querySelectorAll(".strategy-compact-item").forEach((item) => {
+        item.classList.remove("hidden");
+      });
+    });
+    return;
+  }
+
+  // Filter strategies and toggle categories
+  document.querySelectorAll(".strategy-category").forEach((cat) => {
+    const categoryName = cat.dataset.category;
+    const catConfig = CATEGORY_CONFIG[categoryName];
+    const catMatches =
+      catConfig && catConfig.name.toLowerCase().includes(lowercaseQuery);
+
+    let hasVisibleStrategies = false;
+    let strategies = cat.querySelectorAll(".strategy-compact-item");
+
+    strategies.forEach((item) => {
+      const name = item.dataset.name?.toLowerCase() || "";
+      const desc = item.dataset.description?.toLowerCase() || "";
+      const matches =
+        name.includes(lowercaseQuery) || desc.includes(lowercaseQuery);
+
+      if (catMatches || matches) {
+        item.classList.remove("hidden");
+        hasVisibleStrategies = true;
+      } else {
+        item.classList.add("hidden");
+      }
+    });
+
+    if (hasVisibleStrategies) {
+      cat.classList.remove("hidden");
+      cat.classList.add("open"); // Auto-expand matching categories
+    } else {
+      cat.classList.add("hidden");
+      cat.classList.remove("open");
+    }
+  });
+
+  // Show/hide no results message
+  const anyVisible =
+    document.querySelectorAll(".strategy-category:not(.hidden)").length > 0;
+  let noResults = document.getElementById("strategy-no-results");
+  if (!anyVisible) {
+    if (!noResults) {
+      noResults = document.createElement("div");
+      noResults.id = "strategy-no-results";
+      noResults.className = "strategy-no-results";
+      noResults.innerHTML = `
+        <div class="strategy-no-results-icon">🔍</div>
+        <div>No strategies found matching "${query}"</div>
+      `;
+      container.appendChild(noResults);
+    }
+    noResults.style.display = "block";
+  } else if (noResults) {
+    noResults.style.display = "none";
+  }
+}
+
 function renderStrategyOptions(strategies) {
-  const container = document.getElementById("strategy-options");
+  const container = document.getElementById("strategy-categories");
   if (!container) return;
 
   container.innerHTML = "";
 
-  strategies.forEach((s, idx) => {
-    const key = s && s.name ? s.name : null;
-    if (!key) return;
+  // Group strategies by category
+  const grouped = groupStrategiesByCategory(strategies);
+  const categories = Object.keys(grouped).sort((a, b) => {
+    // Sort categories: put TrendFollowing and MeanReversion first
+    const priority = { TrendFollowing: 0, MeanReversion: 1 };
+    const prioA = priority[a] !== undefined ? priority[a] : 100;
+    const prioB = priority[b] !== undefined ? priority[b] : 100;
+    return prioA - prioB;
+  });
 
-    const overrides = STRATEGY_UI_OVERRIDES[key] || {};
-    // Keep `input.value` as the backend key, but show a friendly label for humans.
-    const displayName = overrides.displayName || s.name || key;
-    const description = overrides.description || s.description || "";
+  // Render each category
+  categories.forEach((category, catIdx) => {
+    const categoryStrategies = grouped[category];
+    const config = CATEGORY_CONFIG[category] || { name: category, icon: "📋" };
 
-    const label = document.createElement("label");
-    label.className = "strategy-option";
+    // Create category accordion
+    const categoryDiv = document.createElement("div");
+    categoryDiv.className = "strategy-category";
+    categoryDiv.dataset.category = category;
 
-    const input = document.createElement("input");
-    input.type = "radio";
-    input.name = "strategy";
-    input.value = key;
-    input.checked = idx === 0 && AppState.strategy === "GoldenCross"; // temporary; fixed below
+    // Category header
+    const header = document.createElement("div");
+    header.className = "strategy-category-header";
+    header.innerHTML = `
+      <span class="strategy-category-name">
+        <span class="strategy-category-icon">${config.icon}</span>
+        ${config.name}
+        <span class="strategy-category-count">${categoryStrategies.length}</span>
+      </span>
+      <span class="strategy-category-chevron">▼</span>
+    `;
 
-    input.addEventListener("change", (e) => {
-      AppState.strategy = e.target.value;
-      initParamsForStrategy(AppState.strategy);
-      updateParamsUI();
-      updateContextBar();
+    header.addEventListener("click", () => {
+      const isOpen = categoryDiv.classList.contains("open");
+      // Close all categories
+      document.querySelectorAll(".strategy-category").forEach((cat) => {
+        cat.classList.remove("open");
+        cat
+          .querySelector(".strategy-category-header")
+          ?.classList.remove("active");
+      });
+      // Open this category if it wasn't open
+      if (!isOpen) {
+        categoryDiv.classList.add("open");
+        header.classList.add("active");
+      }
     });
 
-    const info = document.createElement("div");
-    info.className = "strategy-info";
+    // Category content
+    const content = document.createElement("div");
+    content.className = "strategy-category-content";
 
-    const nameSpan = document.createElement("span");
-    nameSpan.className = "strategy-name";
-    nameSpan.textContent = displayName;
+    const strategiesList = document.createElement("div");
+    strategiesList.className = "strategy-category-strategies";
 
-    const descSpan = document.createElement("span");
-    descSpan.className = "strategy-desc";
-    descSpan.textContent = description;
+    // Render strategies in this category
+    categoryStrategies.forEach((s) => {
+      const key = s && s.name ? s.name : null;
+      if (!key) return;
 
-    info.appendChild(nameSpan);
-    info.appendChild(descSpan);
+      const overrides = STRATEGY_UI_OVERRIDES[key] || {};
+      const displayName = overrides.displayName || s.name || key;
+      const description = overrides.description || s.description || "";
 
-    label.appendChild(input);
-    label.appendChild(info);
+      const item = document.createElement("label");
+      item.className = "strategy-compact-item";
+      item.dataset.name = displayName;
+      item.dataset.description = description;
 
-    container.appendChild(label);
-  });
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "strategy";
+      input.value = key;
 
-  // Now apply correct checked state (after DOM is built)
-  const radios = container.querySelectorAll('input[name="strategy"]');
-  let matched = false;
-  radios.forEach((r) => {
-    if (r.value === AppState.strategy) {
-      r.checked = true;
-      matched = true;
+      input.addEventListener("change", (e) => {
+        AppState.strategy = e.target.value;
+        initParamsForStrategy(AppState.strategy);
+        updateParamsUI();
+        updateContextBar();
+
+        // Update selection visuals
+        document.querySelectorAll(".strategy-compact-item").forEach((i) => {
+          i.classList.remove("selected");
+        });
+        item.classList.add("selected");
+      });
+
+      const info = document.createElement("div");
+      info.className = "strategy-compact-info";
+
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "strategy-compact-name";
+      nameSpan.textContent = displayName;
+
+      const descSpan = document.createElement("span");
+      descSpan.className = "strategy-compact-desc";
+      descSpan.textContent = description;
+
+      info.appendChild(nameSpan);
+      info.appendChild(descSpan);
+
+      const checkIcon = document.createElement("span");
+      checkIcon.className = "strategy-compact-selected-icon";
+      checkIcon.textContent = "✓";
+
+      item.appendChild(input);
+      item.appendChild(info);
+      item.appendChild(checkIcon);
+
+      strategiesList.appendChild(item);
+    });
+
+    content.appendChild(strategiesList);
+    categoryDiv.appendChild(header);
+    categoryDiv.appendChild(content);
+    container.appendChild(categoryDiv);
+
+    // Open first category by default
+    if (catIdx === 0) {
+      categoryDiv.classList.add("open");
+      header.classList.add("active");
     }
   });
-  if (!matched && radios.length > 0) {
-    radios[0].checked = true;
-    AppState.strategy = radios[0].value;
+
+  // Set initial selection state
+  let selectedExists = false;
+  document
+    .querySelectorAll('.strategy-compact-item input[name="strategy"]')
+    .forEach((r) => {
+      if (r.value === AppState.strategy) {
+        r.checked = true;
+        r.closest(".strategy-compact-item").classList.add("selected");
+        // Open the category containing the selected strategy
+        const category = r.closest(".strategy-category");
+        if (category) {
+          category.classList.add("open");
+          category
+            .querySelector(".strategy-category-header")
+            ?.classList.add("active");
+        }
+        selectedExists = true;
+      }
+    });
+
+  if (!selectedExists) {
+    const firstInput = document.querySelector(
+      '.strategy-compact-item input[name="strategy"]',
+    );
+    if (firstInput) {
+      firstInput.checked = true;
+      AppState.strategy = firstInput.value;
+      firstInput.closest(".strategy-compact-item").classList.add("selected");
+    }
   }
 }
 
