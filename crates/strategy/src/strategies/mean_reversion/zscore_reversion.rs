@@ -121,9 +121,12 @@ impl ZScoreReversionStrategy {
         if self.prices.len() < 2 {
             return None;
         }
-        let variance: f64 = self.prices.iter()
+        let variance: f64 = self
+            .prices
+            .iter()
             .map(|&price| (price - mean).powi(2))
-            .sum::<f64>() / (self.prices.len() - 1) as f64;
+            .sum::<f64>()
+            / (self.prices.len() - 1) as f64;
         Some(variance.sqrt())
     }
 
@@ -255,19 +258,24 @@ impl Strategy for ZScoreReversionStrategy {
         }
 
         // ENTRY LOGIC - Z-score extreme negative and sufficient price movement
-        if self.last_position != SignalType::Buy 
-            && zscore <= self.config.entry_zscore 
-            && has_movement {
+        if self.last_position != SignalType::Buy
+            && zscore <= self.config.entry_zscore
+            && has_movement
+        {
             self.last_position = SignalType::Buy;
             self.entry_price = Some(price);
-            let strength = (zscore.abs() - self.config.entry_zscore.abs()) / self.config.entry_zscore.abs();
-            
+            let strength =
+                (zscore.abs() - self.config.entry_zscore.abs()) / self.config.entry_zscore.abs();
+
             return Some(vec![Signal {
                 timestamp: bar.timestamp,
                 symbol: "UNKNOWN".to_string(),
                 signal_type: SignalType::Buy,
                 strength: strength.min(1.0).max(0.3),
-                metadata: Some(format!("Z-Score Extreme Entry: z={:.2} (< {:.1})", zscore, self.config.entry_zscore)),
+                metadata: Some(format!(
+                    "Z-Score Extreme Entry: z={:.2} (< {:.1})",
+                    zscore, self.config.entry_zscore
+                )),
             }]);
         }
 
@@ -315,7 +323,7 @@ mod tests {
         strategy.prices.push_back(10.0);
         strategy.prices.push_back(20.0);
         strategy.prices.push_back(30.0);
-        
+
         assert_eq!(strategy.calculate_mean(), Some(20.0));
     }
 
@@ -325,7 +333,7 @@ mod tests {
         strategy.prices.push_back(10.0);
         strategy.prices.push_back(20.0);
         strategy.prices.push_back(30.0);
-        
+
         // Mean = 20, Price = 10, StdDev = 10, Z = (10-20)/10 = -1.0
         let zscore = strategy.calculate_zscore(10.0);
         assert!(zscore.is_some());

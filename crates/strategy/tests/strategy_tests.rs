@@ -1,6 +1,6 @@
 use alphafield_core::{Bar, SignalType, Strategy};
 use alphafield_strategy::strategies::{
-    GoldenCrossStrategy, BollingerBandsStrategy, MomentumStrategy, RsiStrategy,
+    BollingerBandsStrategy, GoldenCrossStrategy, MomentumStrategy, RsiStrategy,
 };
 use chrono::Utc;
 

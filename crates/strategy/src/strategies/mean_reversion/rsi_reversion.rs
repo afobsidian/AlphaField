@@ -7,7 +7,7 @@ use crate::framework::{
     CorrelationSensitivity, MarketRegime, MetadataStrategy, RiskProfile, StrategyCategory,
     StrategyMetadata, VolatilityLevel,
 };
-use crate::indicators::{Rsi, Sma, Indicator};
+use crate::indicators::{Indicator, Rsi, Sma};
 use alphafield_core::{Bar, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -66,7 +66,9 @@ impl RSIReversionConfig {
         if self.overbought_threshold <= 0.0 || self.overbought_threshold >= 100.0 {
             return Err("Overbought threshold must be between 0 and 100".to_string());
         }
-        if self.exit_threshold <= self.oversold_threshold || self.exit_threshold >= self.overbought_threshold {
+        if self.exit_threshold <= self.oversold_threshold
+            || self.exit_threshold >= self.overbought_threshold
+        {
             return Err("Exit threshold must be between oversold and overbought".to_string());
         }
         if self.trend_period == 0 {
@@ -224,10 +226,14 @@ impl Strategy for RSIReversionStrategy {
         }
 
         // ENTRY LOGIC - RSI oversold and trend filter passed
-        if self.last_position != SignalType::Buy && rsi_value <= self.config.oversold_threshold && trend_allowed {
+        if self.last_position != SignalType::Buy
+            && rsi_value <= self.config.oversold_threshold
+            && trend_allowed
+        {
             self.last_position = SignalType::Buy;
             self.entry_price = Some(price);
-            let strength = (self.config.oversold_threshold - rsi_value) / self.config.oversold_threshold;
+            let strength =
+                (self.config.oversold_threshold - rsi_value) / self.config.oversold_threshold;
             return Some(vec![Signal {
                 timestamp: bar.timestamp,
                 symbol: "UNKNOWN".to_string(),

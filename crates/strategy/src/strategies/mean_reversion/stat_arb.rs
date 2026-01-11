@@ -126,9 +126,12 @@ impl StatArbStrategy {
         if self.prices.len() < 2 {
             return None;
         }
-        let variance: f64 = self.prices.iter()
+        let variance: f64 = self
+            .prices
+            .iter()
             .map(|&price| (price - mean).powi(2))
-            .sum::<f64>() / (self.prices.len() - 1) as f64;
+            .sum::<f64>()
+            / (self.prices.len() - 1) as f64;
         Some(variance.sqrt())
     }
 
@@ -315,7 +318,7 @@ mod tests {
         strategy.prices.push_back(30.0);
 
         assert_eq!(strategy.calculate_mean(), Some(20.0));
-        
+
         let std_dev = strategy.calculate_std_dev(20.0);
         assert!(std_dev.is_some());
         assert!((std_dev.unwrap() - 10.0).abs() < 0.01);

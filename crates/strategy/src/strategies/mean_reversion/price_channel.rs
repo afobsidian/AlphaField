@@ -100,9 +100,10 @@ impl PriceChannelStrategy {
         if self.highs.is_empty() {
             return None;
         }
-        self.highs.iter().copied().fold(None, |max, val| {
-            Some(max.map_or(val, |m: f64| m.max(val)))
-        })
+        self.highs
+            .iter()
+            .copied()
+            .fold(None, |max, val| Some(max.map_or(val, |m: f64| m.max(val))))
     }
 
     /// Calculate the lowest low over the lookback period
@@ -110,9 +111,10 @@ impl PriceChannelStrategy {
         if self.lows.is_empty() {
             return None;
         }
-        self.lows.iter().copied().fold(None, |min, val| {
-            Some(min.map_or(val, |m: f64| m.min(val)))
-        })
+        self.lows
+            .iter()
+            .copied()
+            .fold(None, |min, val| Some(min.map_or(val, |m: f64| m.min(val))))
     }
 
     /// Calculate exit level based on exit_percent

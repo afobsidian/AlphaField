@@ -740,9 +740,11 @@ impl Stochastic {
         // Smooth %K if smooth_period > 1
         let k_value = if self.smooth_period > 1 && self.closes.len() >= self.smooth_period {
             // Average of recent %K values
-            let sum: f64 = self.closes.iter().map(|&close| {
-                ((close - lowest_low) / range) * 100.0
-            }).sum();
+            let sum: f64 = self
+                .closes
+                .iter()
+                .map(|&close| ((close - lowest_low) / range) * 100.0)
+                .sum();
             sum / self.smooth_period as f64
         } else {
             raw_k

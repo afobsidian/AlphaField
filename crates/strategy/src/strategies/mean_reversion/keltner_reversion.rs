@@ -244,7 +244,10 @@ impl Strategy for KeltnerReversionStrategy {
                 strength,
                 metadata: Some(format!(
                     "Keltner Lower Entry: Price {:.2} <= Lower {:.2}, Volume {:.0} ({:.1}x avg)",
-                    price, lower_band, bar.volume, bar.volume / avg_volume
+                    price,
+                    lower_band,
+                    bar.volume,
+                    bar.volume / avg_volume
                 )),
             }]);
         }

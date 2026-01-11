@@ -15,18 +15,18 @@
 //! - **Z-Score Reversion**: Statistical z-score reversion
 
 pub mod bollinger_bands;
+pub mod keltner_reversion;
+pub mod price_channel;
 pub mod rsi_reversion;
 pub mod stat_arb;
 pub mod stoch_reversion;
-pub mod keltner_reversion;
-pub mod price_channel;
 pub mod zscore_reversion;
 
 // Re-export strategies for convenience
 pub use bollinger_bands::BollingerBandsStrategy;
+pub use keltner_reversion::KeltnerReversionStrategy;
+pub use price_channel::PriceChannelStrategy;
 pub use rsi_reversion::RSIReversionStrategy;
 pub use stat_arb::StatArbStrategy;
 pub use stoch_reversion::StochReversionStrategy;
-pub use keltner_reversion::KeltnerReversionStrategy;
-pub use price_channel::PriceChannelStrategy;
 pub use zscore_reversion::ZScoreReversionStrategy;

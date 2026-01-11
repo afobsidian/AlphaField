@@ -229,8 +229,12 @@ impl Strategy for StochReversionStrategy {
                 self.last_position = SignalType::Buy;
                 self.entry_price = Some(price);
                 let strength = (self.config.oversold - k_value) / self.config.oversold;
-                let signal_strength = if crossover_confirmed { 1.0 } else { strength.min(0.9).max(0.3) };
-                
+                let signal_strength = if crossover_confirmed {
+                    1.0
+                } else {
+                    strength.min(0.9).max(0.3)
+                };
+
                 return Some(vec![Signal {
                     timestamp: bar.timestamp,
                     symbol: "UNKNOWN".to_string(),

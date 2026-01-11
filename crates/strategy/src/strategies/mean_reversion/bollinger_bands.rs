@@ -7,7 +7,7 @@ use crate::framework::{
     CorrelationSensitivity, MarketRegime, MetadataStrategy, RiskProfile, StrategyCategory,
     StrategyMetadata, VolatilityLevel,
 };
-use crate::indicators::{BollingerBands, Rsi, Indicator};
+use crate::indicators::{BollingerBands, Indicator, Rsi};
 use alphafield_core::{Bar, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::fmt;
