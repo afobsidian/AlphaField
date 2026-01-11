@@ -168,13 +168,69 @@ pub fn initialize_registry() -> Arc<StrategyRegistry> {
         eprintln!("Failed to register Market Average baseline: {}", e);
     }
 
-    // Register Golden Cross strategy
+    // ------------------------------------------------------------------------
+    // Trend Following Strategies (Phase 12.2)
+    // ------------------------------------------------------------------------
+
+    // Register Golden Cross strategy (trend following)
     let golden_cross = Arc::new(alphafield_strategy::strategies::GoldenCrossStrategy::new(
         10, 30,
     )) as Arc<dyn StrategyWithMetadata>;
     if let Err(e) = registry.register(golden_cross) {
         eprintln!("Failed to register Golden Cross strategy: {}", e);
     }
+
+    // Register Breakout strategy (trend following)
+    let breakout =
+        Arc::new(alphafield_strategy::strategies::trend_following::BreakoutStrategy::new(20))
+            as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(breakout) {
+        eprintln!("Failed to register Breakout strategy: {}", e);
+    }
+
+    // Register MA Crossover strategy (trend following)
+    let ma_crossover = Arc::new(
+        alphafield_strategy::strategies::trend_following::MACrossoverStrategy::new(10, 30),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(ma_crossover) {
+        eprintln!("Failed to register MA Crossover strategy: {}", e);
+    }
+
+    // Register Adaptive MA KAMA strategy (trend following)
+    let adaptive_ma = Arc::new(
+        alphafield_strategy::strategies::trend_following::AdaptiveMAStrategy::new(10, 30, 10),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(adaptive_ma) {
+        eprintln!("Failed to register Adaptive MA strategy: {}", e);
+    }
+
+    // Register Triple MA strategy (trend following)
+    let triple_ma = Arc::new(
+        alphafield_strategy::strategies::trend_following::TripleMAStrategy::new(5, 15, 30),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(triple_ma) {
+        eprintln!("Failed to register Triple MA strategy: {}", e);
+    }
+
+    // Register MACD Trend strategy (trend following)
+    let macd_trend = Arc::new(
+        alphafield_strategy::strategies::trend_following::MacdTrendStrategy::new(12, 26, 9),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(macd_trend) {
+        eprintln!("Failed to register MACD Trend strategy: {}", e);
+    }
+
+    // Register Parabolic SAR strategy (trend following)
+    let parabolic_sar = Arc::new(
+        alphafield_strategy::strategies::trend_following::ParabolicSARStrategy::new(0.02, 0.2),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(parabolic_sar) {
+        eprintln!("Failed to register Parabolic SAR strategy: {}", e);
+    }
+
+    // ------------------------------------------------------------------------
+    // Other Strategy Families
+    // ------------------------------------------------------------------------
 
     // Register Momentum strategy
     let momentum = Arc::new(alphafield_strategy::strategies::MomentumStrategy::new(

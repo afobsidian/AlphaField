@@ -9,7 +9,35 @@ use tracing::debug;
 pub struct StrategyFactory;
 
 impl StrategyFactory {
+    /// Canonicalize strategy identifiers so the dashboard APIs can accept either:
+    /// - internal keys used by the backtest/optimizer (e.g. "GoldenCross", "ParabolicSAR")
+    /// - human-friendly display names returned by `/api/strategies` (e.g. "Golden Cross", "Parabolic SAR")
+    ///
+    /// This keeps the end-to-end workflow (build → optimize → backtest → deploy) stable even when
+    /// the UI uses display labels.
+    fn canonicalize_strategy_name(name: &str) -> &str {
+        match name.trim() {
+            // Existing “core” strategies (display name → key)
+            "Golden Cross" => "GoldenCross",
+            "RSI Mean Reversion" => "Rsi",
+            "Bollinger Bands Mean Reversion" => "MeanReversion",
+            "EMA-MACD Momentum" => "Momentum",
+
+            // Phase 12.2 trend-following strategies (display name → key)
+            "Adaptive MA" => "AdaptiveMA",
+            "MA Crossover" => "MACrossover",
+            "MACD Trend" => "MacdTrend",
+            "Parabolic SAR" => "ParabolicSAR",
+
+            // Already canonical / fallback
+            other => other,
+        }
+    }
+}
+
+impl StrategyFactory {
     pub fn create(name: &str, params: &HashMap<String, f64>) -> Option<Box<dyn Strategy>> {
+        let name = Self::canonicalize_strategy_name(name);
         debug!(strategy = name, ?params, "Creating strategy");
         match name {
             "GoldenCross" => {
@@ -26,6 +54,110 @@ impl StrategyFactory {
                 let config =
                     alphafield_strategy::config::GoldenCrossConfig::new(fast, slow, tp, sl);
                 Some(Box::new(GoldenCrossStrategy::from_config(config)))
+            }
+            "Breakout" => {
+                let lookback = params.get("lookback").copied().unwrap_or(20.0) as usize;
+                let _tp = params.get("take_profit").copied().unwrap_or(5.0);
+                let _sl = params.get("stop_loss").copied().unwrap_or(5.0);
+
+                if lookback == 0 {
+                    return None;
+                }
+
+                // BreakoutStrategy::new only takes lookback; exits are handled by higher layers / defaults.
+                Some(Box::new(
+                    alphafield_strategy::strategies::trend_following::BreakoutStrategy::new(
+                        lookback,
+                    ),
+                ))
+            }
+            "MACrossover" => {
+                let fast = params.get("fast_period").copied().unwrap_or(10.0) as usize;
+                let slow = params.get("slow_period").copied().unwrap_or(30.0) as usize;
+                let _tp = params.get("take_profit").copied().unwrap_or(5.0);
+                let _sl = params.get("stop_loss").copied().unwrap_or(5.0);
+
+                if fast == 0 || slow == 0 || fast >= slow {
+                    return None;
+                }
+
+                Some(Box::new(
+                    alphafield_strategy::strategies::trend_following::MACrossoverStrategy::new(
+                        fast, slow,
+                    ),
+                ))
+            }
+            "AdaptiveMA" => {
+                let fast = params.get("fast_period").copied().unwrap_or(10.0) as usize;
+                let slow = params.get("slow_period").copied().unwrap_or(30.0) as usize;
+                let price_period = params.get("price_period").copied().unwrap_or(10.0) as usize;
+                let _tp = params.get("take_profit").copied().unwrap_or(5.0);
+                let _sl = params.get("stop_loss").copied().unwrap_or(5.0);
+
+                if fast == 0 || slow == 0 || price_period == 0 {
+                    return None;
+                }
+
+                Some(Box::new(
+                    alphafield_strategy::strategies::trend_following::AdaptiveMAStrategy::new(
+                        fast,
+                        slow,
+                        price_period,
+                    ),
+                ))
+            }
+            "TripleMA" => {
+                let fast = params.get("fast_period").copied().unwrap_or(5.0) as usize;
+                let medium = params.get("medium_period").copied().unwrap_or(15.0) as usize;
+                let slow = params.get("slow_period").copied().unwrap_or(30.0) as usize;
+                let _tp = params.get("take_profit").copied().unwrap_or(5.0);
+                let _sl = params.get("stop_loss").copied().unwrap_or(5.0);
+
+                if fast == 0 || medium == 0 || slow == 0 {
+                    return None;
+                }
+                if !(fast < medium && medium < slow) {
+                    return None;
+                }
+
+                Some(Box::new(
+                    alphafield_strategy::strategies::trend_following::TripleMAStrategy::new(
+                        fast, medium, slow,
+                    ),
+                ))
+            }
+            "MacdTrend" => {
+                let fast = params.get("fast_period").copied().unwrap_or(12.0) as usize;
+                let slow = params.get("slow_period").copied().unwrap_or(26.0) as usize;
+                let signal = params.get("signal_period").copied().unwrap_or(9.0) as usize;
+                let _tp = params.get("take_profit").copied().unwrap_or(5.0);
+                let _sl = params.get("stop_loss").copied().unwrap_or(5.0);
+
+                if fast == 0 || slow == 0 || signal == 0 || fast >= slow {
+                    return None;
+                }
+
+                Some(Box::new(
+                    alphafield_strategy::strategies::trend_following::MacdTrendStrategy::new(
+                        fast, slow, signal,
+                    ),
+                ))
+            }
+            "ParabolicSAR" => {
+                let af_step = params.get("af_step").copied().unwrap_or(0.02);
+                let af_max = params.get("af_max").copied().unwrap_or(0.2);
+                let _tp = params.get("take_profit").copied().unwrap_or(5.0);
+                let _sl = params.get("stop_loss").copied().unwrap_or(5.0);
+
+                if af_step <= 0.0 || af_max <= 0.0 || af_step > af_max {
+                    return None;
+                }
+
+                Some(Box::new(
+                    alphafield_strategy::strategies::trend_following::ParabolicSARStrategy::new(
+                        af_step, af_max,
+                    ),
+                ))
             }
             "Rsi" => {
                 let period = params.get("period").copied().unwrap_or(14.0) as usize;
@@ -59,41 +191,7 @@ impl StrategyFactory {
                     );
                     return None;
                 }
-                // Config might be internal or external. Assuming exposed via `new_with_exits` created earlier BUT MeanReversionConfig isn't in config:: usually?
-                // Wait, in previous steps I saw MeanReversionConfig in mean_reversion.rs.
-                // I need to use MeanReversionStrategy::new which calls new_with_exits?
-                // Actually `new` calls `new_with_exits(..., 3.0, 5.0)`.
-                // I should construct via from_config if I can access Config.
-                // `MeanReversionConfig` is public in `alphafield_strategy::strategies::mean_reversion`.
-                // Is it re-exported? Usually strategies are re-exported.
-                // Let's assume I can construct it or use a method on Strategy struct if available.
-                // In step 395 I updated `MeanReversionConfig` to have `new_with_exits`.
-                // But I didn't verify if `MeanReversionStrategy` exposes `new_with_exits`.
-                // Checking Step 395:
-                // impl MeanReversionConfig { pub fn new_with_exits ... }
-                // impl MeanReversionStrategy { pub fn new ... calls new_with_exits(..., 3.0, 5.0) }
-                // Use `from_config` method.
-                // But I need to construct `MeanReversionConfig`. It is `pub struct`.
-                // Is it accessible here? `use alphafield_strategy::{MeanReversionStrategy...}`
-                // It might not be re-exported at top level.
-                // However, I can try `MeanReversionStrategy::new`?? No that uses defaults.
-                // I should construct config.
-                // `MeanReversionConfig` might be at `alphafield_strategy::strategies::mean_reversion::MeanReversionConfig`.
-                // Or maybe `alphafield_strategy::MeanReversionConfig` if re-exported.
-                // Let's assume I can't easily access the Config struct if it's not in `config.rs`.
-                // Does `MeanReversionStrategy` have a `new_with_exits`?
-                // I will add one if needed, OR I will assume `MeanReversionConfig` is available.
-                // Actually, `config.rs` usually holds configs... wait. MeanReversionConfig IS in `mean_reversion.rs`.
-                // I will assume `alphafield_strategy::MeanReversionConfig` is available or I will add a `new_with_exits` to `MeanReversionStrategy` in a separate step if compilation fails.
-                // BETTER: I will assume `from_config` works and `MeanReversionConfig` is importable.
-                // Wait, `crates/dashboard/src/services/strategy_service.rs` has `use alphafield_strategy::{...}`.
-                // If MeanReversionConfig is not there, I can't use it.
-                // I'll check `c:\Users\adamf\Documents\Projects\AlphaField\crates\strategy\src\strategies\mean_reversion.rs` again.
-                // It is `pub struct MeanReversionConfig`.
-                // Strategy crate likely re-exports it.
 
-                // Safe bet: Use `MeanReversionConfig::new_with_exits` assuming it's imported.
-                // If not, I'll fix it.
                 let config = alphafield_strategy::strategies::mean_reversion::MeanReversionConfig::new_with_exits(period, std_dev, tp, sl);
                 Some(Box::new(MeanReversionStrategy::from_config(config)))
             }
@@ -132,6 +230,7 @@ impl StrategyFactory {
         symbol: &str,
         capital: f64,
     ) -> Option<Box<dyn BacktestStrategy>> {
+        let name = Self::canonicalize_strategy_name(name);
         debug!(strategy = name, ?params, "Creating backtest strategy");
         match name {
             "GoldenCross" => {
@@ -146,6 +245,95 @@ impl StrategyFactory {
                 let config =
                     alphafield_strategy::config::GoldenCrossConfig::new(fast, slow, tp, sl);
                 let strat = GoldenCrossStrategy::from_config(config);
+                Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
+            }
+            "Breakout" => {
+                let lookback = params.get("lookback").copied().unwrap_or(20.0) as usize;
+
+                if lookback == 0 {
+                    return None;
+                }
+
+                let strat = alphafield_strategy::strategies::trend_following::BreakoutStrategy::new(
+                    lookback,
+                );
+                Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
+            }
+            "MACrossover" => {
+                let fast = params.get("fast_period").copied().unwrap_or(10.0) as usize;
+                let slow = params.get("slow_period").copied().unwrap_or(30.0) as usize;
+
+                if fast == 0 || slow == 0 || fast >= slow {
+                    return None;
+                }
+
+                let strat =
+                    alphafield_strategy::strategies::trend_following::MACrossoverStrategy::new(
+                        fast, slow,
+                    );
+                Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
+            }
+            "AdaptiveMA" => {
+                let fast = params.get("fast_period").copied().unwrap_or(10.0) as usize;
+                let slow = params.get("slow_period").copied().unwrap_or(30.0) as usize;
+                let price_period = params.get("price_period").copied().unwrap_or(10.0) as usize;
+
+                if fast == 0 || slow == 0 || price_period == 0 {
+                    return None;
+                }
+
+                let strat =
+                    alphafield_strategy::strategies::trend_following::AdaptiveMAStrategy::new(
+                        fast,
+                        slow,
+                        price_period,
+                    );
+                Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
+            }
+            "TripleMA" => {
+                let fast = params.get("fast_period").copied().unwrap_or(5.0) as usize;
+                let medium = params.get("medium_period").copied().unwrap_or(15.0) as usize;
+                let slow = params.get("slow_period").copied().unwrap_or(30.0) as usize;
+
+                if fast == 0 || medium == 0 || slow == 0 {
+                    return None;
+                }
+                if !(fast < medium && medium < slow) {
+                    return None;
+                }
+
+                let strat = alphafield_strategy::strategies::trend_following::TripleMAStrategy::new(
+                    fast, medium, slow,
+                );
+                Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
+            }
+            "MacdTrend" => {
+                let fast = params.get("fast_period").copied().unwrap_or(12.0) as usize;
+                let slow = params.get("slow_period").copied().unwrap_or(26.0) as usize;
+                let signal = params.get("signal_period").copied().unwrap_or(9.0) as usize;
+
+                if fast == 0 || slow == 0 || signal == 0 || fast >= slow {
+                    return None;
+                }
+
+                let strat =
+                    alphafield_strategy::strategies::trend_following::MacdTrendStrategy::new(
+                        fast, slow, signal,
+                    );
+                Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
+            }
+            "ParabolicSAR" => {
+                let af_step = params.get("af_step").copied().unwrap_or(0.02);
+                let af_max = params.get("af_max").copied().unwrap_or(0.2);
+
+                if af_step <= 0.0 || af_max <= 0.0 || af_step > af_max {
+                    return None;
+                }
+
+                let strat =
+                    alphafield_strategy::strategies::trend_following::ParabolicSARStrategy::new(
+                        af_step, af_max,
+                    );
                 Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
             }
             "Rsi" => {

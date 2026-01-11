@@ -294,6 +294,26 @@ impl ParameterOptimizer {
 
 /// Get default parameter bounds for a strategy
 pub fn get_strategy_bounds(strategy_name: &str) -> Vec<ParamBounds> {
+    // Canonicalize strategy identifiers so optimization accepts display names from the registry/UI.
+    // The dashboard strategy registry exposes human-friendly names (e.g. "Golden Cross", "Parabolic SAR"),
+    // while the optimizer uses internal keys (e.g. "GoldenCross", "ParabolicSAR").
+    let strategy_name = match strategy_name.trim() {
+        // Existing “core” strategies (display name → key)
+        "Golden Cross" => "GoldenCross",
+        "RSI Mean Reversion" => "Rsi",
+        "Bollinger Bands Mean Reversion" => "MeanReversion",
+        "EMA-MACD Momentum" => "Momentum",
+
+        // Phase 12.2 trend-following strategies (display name → key)
+        "Adaptive MA" => "AdaptiveMA",
+        "MA Crossover" => "MACrossover",
+        "MACD Trend" => "MacdTrend",
+        "Parabolic SAR" => "ParabolicSAR",
+
+        // Already canonical / fallback
+        other => other,
+    };
+
     match strategy_name {
         "GoldenCross" => vec![
             ParamBounds::new("fast_period", 5.0, 30.0, 5.0),
@@ -301,6 +321,52 @@ pub fn get_strategy_bounds(strategy_name: &str) -> Vec<ParamBounds> {
             ParamBounds::new("take_profit", 2.0, 10.0, 2.0),
             ParamBounds::new("stop_loss", 2.0, 10.0, 2.0),
         ],
+
+        // --------------------------------------------------------------------
+        // Phase 12.2: Trend Following Strategies
+        // --------------------------------------------------------------------
+        "Breakout" => vec![
+            ParamBounds::new("lookback", 10.0, 100.0, 10.0),
+            ParamBounds::new("take_profit", 2.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 2.0, 10.0, 2.0),
+        ],
+        "MACrossover" => vec![
+            ParamBounds::new("fast_period", 5.0, 30.0, 5.0),
+            ParamBounds::new("slow_period", 20.0, 120.0, 10.0),
+            ParamBounds::new("take_profit", 2.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 2.0, 10.0, 2.0),
+        ],
+        "AdaptiveMA" => vec![
+            ParamBounds::new("fast_period", 2.0, 20.0, 2.0),
+            ParamBounds::new("slow_period", 10.0, 80.0, 10.0),
+            ParamBounds::new("price_period", 2.0, 30.0, 2.0),
+            ParamBounds::new("take_profit", 2.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 2.0, 10.0, 2.0),
+        ],
+        "TripleMA" => vec![
+            ParamBounds::new("fast_period", 3.0, 20.0, 2.0),
+            ParamBounds::new("medium_period", 10.0, 60.0, 10.0),
+            ParamBounds::new("slow_period", 20.0, 120.0, 20.0),
+            ParamBounds::new("take_profit", 2.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 2.0, 10.0, 2.0),
+        ],
+        "MacdTrend" => vec![
+            ParamBounds::new("fast_period", 8.0, 15.0, 1.0),
+            ParamBounds::new("slow_period", 20.0, 35.0, 3.0),
+            ParamBounds::new("signal_period", 5.0, 15.0, 2.0),
+            ParamBounds::new("take_profit", 2.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 2.0, 10.0, 2.0),
+        ],
+        "ParabolicSAR" => vec![
+            ParamBounds::new("af_step", 0.01, 0.05, 0.01),
+            ParamBounds::new("af_max", 0.1, 0.3, 0.05),
+            ParamBounds::new("take_profit", 2.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 2.0, 10.0, 2.0),
+        ],
+
+        // --------------------------------------------------------------------
+        // Existing strategies
+        // --------------------------------------------------------------------
         "Rsi" => vec![
             ParamBounds::new("period", 7.0, 21.0, 7.0),
             ParamBounds::new("lower_bound", 20.0, 35.0, 5.0),

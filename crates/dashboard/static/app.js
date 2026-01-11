@@ -27,169 +27,591 @@ const AppState = {
   mlPredictions: null,
 };
 
-// Strategy parameter definitions
-const STRATEGY_PARAMS = {
-  GoldenCross: [
-    {
-      name: "fast_period",
-      label: "Fast Period",
-      default: 10,
-      min: 5,
-      max: 50,
-      step: 5,
-    },
-    {
-      name: "slow_period",
-      label: "Slow Period",
-      default: 30,
-      min: 20,
-      max: 120,
-      step: 10,
-    },
-    {
-      name: "take_profit",
-      label: "Take Profit (%)",
-      default: 5.0,
-      min: 1.0,
-      max: 50.0,
-      step: 1.0,
-    },
-    {
-      name: "stop_loss",
-      label: "Stop Loss (%)",
-      default: 5.0,
-      min: 1.0,
-      max: 20.0,
-      step: 0.5,
-    },
-  ],
-  Rsi: [
-    {
-      name: "period",
-      label: "RSI Period",
-      default: 14,
-      min: 5,
-      max: 30,
-      step: 1,
-    },
-    {
-      name: "lower_bound",
-      label: "Oversold Level",
-      default: 30,
-      min: 10,
-      max: 40,
-      step: 5,
-    },
-    {
-      name: "upper_bound",
-      label: "Overbought Level",
-      default: 70,
-      min: 60,
-      max: 90,
-      step: 5,
-    },
-    {
-      name: "take_profit",
-      label: "Take Profit (%)",
-      default: 3.0,
-      min: 1.0,
-      max: 50.0,
-      step: 0.5,
-    },
-    {
-      name: "stop_loss",
-      label: "Stop Loss (%)",
-      default: 5.0,
-      min: 1.0,
-      max: 20.0,
-      step: 0.5,
-    },
-  ],
-  MeanReversion: [
-    {
-      name: "period",
-      label: "BB Period",
-      default: 20,
-      min: 10,
-      max: 50,
-      step: 5,
-    },
-    {
-      name: "std_dev",
-      label: "Std Deviations",
-      default: 2.0,
-      min: 1.0,
-      max: 3.0,
-      step: 0.5,
-    },
-    {
-      name: "take_profit",
-      label: "Take Profit (%)",
-      default: 3.0,
-      min: 1.0,
-      max: 50.0,
-      step: 0.5,
-    },
-    {
-      name: "stop_loss",
-      label: "Stop Loss (%)",
-      default: 5.0,
-      min: 1.0,
-      max: 20.0,
-      step: 0.5,
-    },
-  ],
-  Momentum: [
-    {
-      name: "ema_period",
-      label: "EMA Period",
-      default: 50,
-      min: 20,
-      max: 100,
-      step: 10,
-    },
-    {
-      name: "macd_fast",
-      label: "MACD Fast",
-      default: 12,
-      min: 5,
-      max: 20,
-      step: 1,
-    },
-    {
-      name: "macd_slow",
-      label: "MACD Slow",
-      default: 26,
-      min: 20,
-      max: 40,
-      step: 1,
-    },
-    {
-      name: "macd_signal",
-      label: "Signal Line",
-      default: 9,
-      min: 5,
-      max: 15,
-      step: 1,
-    },
-    {
-      name: "take_profit",
-      label: "Take Profit (%)",
-      default: 5.0,
-      min: 1.0,
-      max: 50.0,
-      step: 0.5,
-    },
-    {
-      name: "stop_loss",
-      label: "Stop Loss (%)",
-      default: 5.0,
-      min: 1.0,
-      max: 20.0,
-      step: 0.5,
-    },
-  ],
+// ===========================
+// Strategies (dynamic)
+// ===========================
+
+// Cached list of strategies returned by /api/strategies
+let AVAILABLE_STRATEGIES = [];
+
+// Param schemas keyed by backend strategy name (e.g. "GoldenCross")
+let STRATEGY_PARAMS = {};
+
+// Friendly names/descriptions for UI.
+// Friendly names/descriptions for UI.
+// IMPORTANT: The optimization/backtest APIs expect the backend strategy key (e.g. "GoldenCross"),
+// so we keep the radio `value` as the backend key and only change the displayed label/description.
+const STRATEGY_UI_OVERRIDES = {
+  GoldenCross: {
+    displayName: "Golden Cross",
+    description: "SMA crossover trend following",
+  },
+  Breakout: {
+    displayName: "Breakout",
+    description: "Price breakout trend following",
+  },
+  MACrossover: {
+    displayName: "MA Crossover",
+    description: "Moving average crossover trend following",
+  },
+  AdaptiveMA: {
+    displayName: "Adaptive MA (KAMA)",
+    description: "Kaufman adaptive moving average trend following",
+  },
+  TripleMA: {
+    displayName: "Triple MA",
+    description: "Fast/medium/slow MA alignment trend following",
+  },
+  MacdTrend: {
+    displayName: "MACD Trend",
+    description: "MACD trend-following crossover",
+  },
+  ParabolicSAR: {
+    displayName: "Parabolic SAR",
+    description: "Parabolic SAR trend + trailing stop",
+  },
+  Rsi: {
+    displayName: "RSI Reversal",
+    description: "Overbought/oversold mean reversion",
+  },
+  MeanReversion: {
+    displayName: "Mean Reversion",
+    description: "Bollinger Bands contrarian",
+  },
+  Momentum: {
+    displayName: "Momentum",
+    description: "MACD + EMA trend strength",
+  },
 };
+
+// Best-effort param schema generator based on common parameter names used by StrategyFactory on the backend.
+// For strategies that aren’t mapped here, we’ll show no params (and send an empty params object). The backend
+// should either use defaults or reject invalid/missing parameters depending on the endpoint.
+function buildDefaultParamSchema(strategyKey) {
+  switch (strategyKey) {
+    case "GoldenCross":
+      return [
+        {
+          name: "fast_period",
+          label: "Fast Period",
+          default: 10,
+          min: 5,
+          max: 50,
+          step: 5,
+        },
+        {
+          name: "slow_period",
+          label: "Slow Period",
+          default: 30,
+          min: 20,
+          max: 120,
+          step: 10,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 1.0,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "Rsi":
+      return [
+        {
+          name: "period",
+          label: "RSI Period",
+          default: 14,
+          min: 5,
+          max: 30,
+          step: 1,
+        },
+        {
+          name: "lower_bound",
+          label: "Oversold Level",
+          default: 30,
+          min: 10,
+          max: 40,
+          step: 5,
+        },
+        {
+          name: "upper_bound",
+          label: "Overbought Level",
+          default: 70,
+          min: 60,
+          max: 90,
+          step: 5,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 3.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "MeanReversion":
+      return [
+        {
+          name: "period",
+          label: "BB Period",
+          default: 20,
+          min: 10,
+          max: 50,
+          step: 5,
+        },
+        {
+          name: "std_dev",
+          label: "Std Deviations",
+          default: 2.0,
+          min: 1.0,
+          max: 3.0,
+          step: 0.5,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 3.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "Momentum":
+      return [
+        {
+          name: "ema_period",
+          label: "EMA Period",
+          default: 50,
+          min: 20,
+          max: 100,
+          step: 10,
+        },
+        {
+          name: "macd_fast",
+          label: "MACD Fast",
+          default: 12,
+          min: 5,
+          max: 20,
+          step: 1,
+        },
+        {
+          name: "macd_slow",
+          label: "MACD Slow",
+          default: 26,
+          min: 20,
+          max: 40,
+          step: 1,
+        },
+        {
+          name: "macd_signal",
+          label: "Signal Line",
+          default: 9,
+          min: 5,
+          max: 15,
+          step: 1,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "Breakout":
+      return [
+        {
+          name: "lookback",
+          label: "Lookback (bars)",
+          default: 20,
+          min: 5,
+          max: 200,
+          step: 5,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "MACrossover":
+      return [
+        {
+          name: "fast_period",
+          label: "Fast Period",
+          default: 10,
+          min: 5,
+          max: 50,
+          step: 5,
+        },
+        {
+          name: "slow_period",
+          label: "Slow Period",
+          default: 30,
+          min: 10,
+          max: 200,
+          step: 10,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "AdaptiveMA":
+      return [
+        {
+          name: "fast_period",
+          label: "Fast Period",
+          default: 10,
+          min: 2,
+          max: 50,
+          step: 1,
+        },
+        {
+          name: "slow_period",
+          label: "Slow Period",
+          default: 30,
+          min: 5,
+          max: 200,
+          step: 5,
+        },
+        {
+          name: "price_period",
+          label: "Price Period",
+          default: 10,
+          min: 2,
+          max: 100,
+          step: 1,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "TripleMA":
+      return [
+        {
+          name: "fast_period",
+          label: "Fast Period",
+          default: 5,
+          min: 2,
+          max: 50,
+          step: 1,
+        },
+        {
+          name: "medium_period",
+          label: "Medium Period",
+          default: 15,
+          min: 5,
+          max: 100,
+          step: 5,
+        },
+        {
+          name: "slow_period",
+          label: "Slow Period",
+          default: 30,
+          min: 10,
+          max: 200,
+          step: 10,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "MacdTrend":
+      return [
+        {
+          name: "fast_period",
+          label: "MACD Fast",
+          default: 12,
+          min: 2,
+          max: 30,
+          step: 1,
+        },
+        {
+          name: "slow_period",
+          label: "MACD Slow",
+          default: 26,
+          min: 5,
+          max: 60,
+          step: 1,
+        },
+        {
+          name: "signal_period",
+          label: "Signal Line",
+          default: 9,
+          min: 2,
+          max: 30,
+          step: 1,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    case "ParabolicSAR":
+      return [
+        {
+          name: "af_step",
+          label: "AF Step",
+          default: 0.02,
+          min: 0.01,
+          max: 0.2,
+          step: 0.01,
+        },
+        {
+          name: "af_max",
+          label: "AF Max",
+          default: 0.2,
+          min: 0.05,
+          max: 0.5,
+          step: 0.05,
+        },
+        {
+          name: "take_profit",
+          label: "Take Profit (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 50.0,
+          step: 0.5,
+        },
+        {
+          name: "stop_loss",
+          label: "Stop Loss (%)",
+          default: 5.0,
+          min: 1.0,
+          max: 20.0,
+          step: 0.5,
+        },
+      ];
+    default:
+      return [];
+  }
+}
+
+async function loadStrategies() {
+  const container = document.getElementById("strategy-options");
+  if (container) {
+    container.innerHTML = `<div class="strategy-loading">Loading strategies…</div>`;
+  }
+
+  try {
+    const resp = await fetch(`${API_BASE}/strategies`);
+    if (!resp.ok) {
+      throw new Error(`Failed to load strategies: HTTP ${resp.status}`);
+    }
+
+    const strategies = await resp.json();
+    if (!Array.isArray(strategies) || strategies.length === 0) {
+      throw new Error("No strategies returned from API");
+    }
+
+    AVAILABLE_STRATEGIES = strategies;
+
+    // Build param schemas
+    STRATEGY_PARAMS = {};
+    strategies.forEach((s) => {
+      const key = s && s.name ? s.name : null;
+      if (!key) return;
+      STRATEGY_PARAMS[key] = buildDefaultParamSchema(key);
+    });
+
+    renderStrategyOptions(strategies);
+
+    // Ensure selected strategy exists; otherwise default to first
+    const selectedExists = strategies.some(
+      (s) => s && s.name === AppState.strategy,
+    );
+    if (!selectedExists) {
+      AppState.strategy = strategies[0].name;
+    }
+
+    // Initialize default params for selected strategy
+    initParamsForStrategy(AppState.strategy);
+
+    // Refresh parameter UI and context
+    updateParamsUI();
+    updateContextBar();
+  } catch (err) {
+    console.error(err);
+    if (container) {
+      container.innerHTML = `<div class="strategy-loading">Failed to load strategies. Ensure the backend is running and /api/strategies is reachable.</div>`;
+    }
+  }
+}
+
+function renderStrategyOptions(strategies) {
+  const container = document.getElementById("strategy-options");
+  if (!container) return;
+
+  container.innerHTML = "";
+
+  strategies.forEach((s, idx) => {
+    const key = s && s.name ? s.name : null;
+    if (!key) return;
+
+    const overrides = STRATEGY_UI_OVERRIDES[key] || {};
+    // Keep `input.value` as the backend key, but show a friendly label for humans.
+    const displayName = overrides.displayName || s.name || key;
+    const description = overrides.description || s.description || "";
+
+    const label = document.createElement("label");
+    label.className = "strategy-option";
+
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "strategy";
+    input.value = key;
+    input.checked = idx === 0 && AppState.strategy === "GoldenCross"; // temporary; fixed below
+
+    input.addEventListener("change", (e) => {
+      AppState.strategy = e.target.value;
+      initParamsForStrategy(AppState.strategy);
+      updateParamsUI();
+      updateContextBar();
+    });
+
+    const info = document.createElement("div");
+    info.className = "strategy-info";
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "strategy-name";
+    nameSpan.textContent = displayName;
+
+    const descSpan = document.createElement("span");
+    descSpan.className = "strategy-desc";
+    descSpan.textContent = description;
+
+    info.appendChild(nameSpan);
+    info.appendChild(descSpan);
+
+    label.appendChild(input);
+    label.appendChild(info);
+
+    container.appendChild(label);
+  });
+
+  // Now apply correct checked state (after DOM is built)
+  const radios = container.querySelectorAll('input[name="strategy"]');
+  let matched = false;
+  radios.forEach((r) => {
+    if (r.value === AppState.strategy) {
+      r.checked = true;
+      matched = true;
+    }
+  });
+  if (!matched && radios.length > 0) {
+    radios[0].checked = true;
+    AppState.strategy = radios[0].value;
+  }
+}
+
+function initParamsForStrategy(strategyKey) {
+  const strategyParams = STRATEGY_PARAMS[strategyKey] || [];
+  strategyParams.forEach((param) => {
+    if (
+      AppState.params[param.name] === undefined ||
+      AppState.params[param.name] === null
+    ) {
+      AppState.params[param.name] = param.default;
+    }
+  });
+}
 
 // ===========================
 // Initialization
@@ -201,8 +623,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize tabs
   initTabNavigation();
 
-  // Initialize strategy selection
+  // Initialize strategy selection (dynamic)
+  // We still wire up change listeners, but the list itself is populated from /api/strategies
   initStrategySelection();
+  loadStrategies();
 
   // Load available symbols
   loadSymbols();
@@ -310,15 +734,24 @@ function updateOptimizeMLStatus() {
 // ===========================
 
 function initStrategySelection() {
-  document.querySelectorAll('input[name="strategy"]').forEach((radio) => {
-    radio.addEventListener("change", (e) => {
-      AppState.strategy = e.target.value;
-      updateParamsUI();
-      updateContextBar();
+  // The strategy radios are now rendered dynamically in renderStrategyOptions().
+  // This function keeps the existing initialization flow safe if the DOM has
+  // not yet been populated.
+  const container = document.getElementById("strategy-options");
+  if (!container) {
+    // Fall back to legacy behavior if container isn’t present
+    document.querySelectorAll('input[name="strategy"]').forEach((radio) => {
+      radio.addEventListener("change", (e) => {
+        AppState.strategy = e.target.value;
+        initParamsForStrategy(AppState.strategy);
+        updateParamsUI();
+        updateContextBar();
+      });
     });
-  });
+  }
 
   // Initial params setup
+  initParamsForStrategy(AppState.strategy);
   updateParamsUI();
 }
 
@@ -403,7 +836,11 @@ function getParams() {
 
 function updateContextBar() {
   // Strategy with ML indicator
-  let strategyText = AppState.strategy;
+  const backendKey = AppState.strategy;
+  const override = STRATEGY_UI_OVERRIDES[backendKey];
+  const friendly = (override && override.displayName) || backendKey;
+
+  let strategyText = `${friendly} (${backendKey})`;
   if (AppState.mlEnabled) {
     strategyText += " + 🤖ML";
   }
