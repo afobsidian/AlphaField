@@ -1,6 +1,7 @@
 use alphafield_core::{Bar, SignalType, Strategy};
 use alphafield_strategy::strategies::{
-    BollingerBandsStrategy, GoldenCrossStrategy, MomentumStrategy, RsiStrategy,
+    BollingerBandsStrategy, GoldenCrossStrategy, MeanReversionStrategy, MomentumStrategy,
+    RsiStrategy,
 };
 use chrono::Utc;
 
@@ -41,6 +42,21 @@ fn test_golden_cross_signals() {
 
     // Should eventually get a Buy signal as Fast crosses above Slow
     assert!(all_signals.iter().any(|s| s.signal_type == SignalType::Buy));
+}
+
+#[test]
+fn test_mean_reversion_backward_compatibility() {
+    // Test that MeanReversionStrategy works as a backward compatibility alias
+    let mut strategy = MeanReversionStrategy::new(10, 2.0);
+
+    // Feed enough bars to initialize indicators (BB needs 10, RSI needs 14)
+    for i in 0..30 {
+        let price = 100.0 + (i as f64);
+        let _ = strategy.on_bar(&create_bar(price));
+    }
+
+    // Verify the alias points to BollingerBandsStrategy
+    assert_eq!(strategy.name(), "Bollinger Bands Mean Reversion");
 }
 
 #[test]

@@ -24,6 +24,10 @@ pub mod zscore_reversion;
 
 // Re-export strategies for convenience
 pub use bollinger_bands::{BollingerBandsConfig, BollingerBandsStrategy};
+
+// Backward compatibility: MeanReversionStrategy is now BollingerBandsStrategy
+pub type MeanReversionStrategy = BollingerBandsStrategy;
+pub type MeanReversionConfig = BollingerBandsConfig;
 pub use keltner_reversion::{KeltnerReversionConfig, KeltnerReversionStrategy};
 pub use price_channel::{PriceChannelConfig, PriceChannelStrategy};
 pub use rsi_reversion::{RSIReversionConfig, RSIReversionStrategy};

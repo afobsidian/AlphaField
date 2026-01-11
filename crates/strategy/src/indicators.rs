@@ -676,6 +676,7 @@ pub struct Stochastic {
     lows: VecDeque<f64>,
     closes: VecDeque<f64>,
     k_values: VecDeque<f64>,
+    historical_raw_k_values: VecDeque<f64>,
     current_k: Option<f64>,
     current_d: Option<f64>,
 }
@@ -696,6 +697,7 @@ impl Stochastic {
             lows: VecDeque::with_capacity(k_period),
             closes: VecDeque::with_capacity(smooth_period),
             k_values: VecDeque::with_capacity(d_period),
+            historical_raw_k_values: VecDeque::with_capacity(smooth_period),
             current_k: None,
             current_d: None,
         }
@@ -737,18 +739,21 @@ impl Stochastic {
 
         let raw_k = ((bar.close - lowest_low) / range) * 100.0;
 
+        // Store raw %K value for smoothing
+        self.historical_raw_k_values.push_back(raw_k);
+        if self.historical_raw_k_values.len() > self.smooth_period {
+            self.historical_raw_k_values.pop_front();
+        }
+
         // Smooth %K if smooth_period > 1
-        let k_value = if self.smooth_period > 1 && self.closes.len() >= self.smooth_period {
-            // Average of recent %K values
-            let sum: f64 = self
-                .closes
-                .iter()
-                .map(|&close| ((close - lowest_low) / range) * 100.0)
-                .sum();
-            sum / self.smooth_period as f64
-        } else {
-            raw_k
-        };
+        let k_value =
+            if self.smooth_period > 1 && self.historical_raw_k_values.len() >= self.smooth_period {
+                // Average of recent raw %K values
+                let sum: f64 = self.historical_raw_k_values.iter().sum();
+                sum / self.smooth_period as f64
+            } else {
+                raw_k
+            };
 
         self.current_k = Some(k_value);
         self.k_values.push_back(k_value);
@@ -796,6 +801,7 @@ impl Stochastic {
         self.lows.clear();
         self.closes.clear();
         self.k_values.clear();
+        self.historical_raw_k_values.clear();
         self.current_k = None;
         self.current_d = None;
     }
