@@ -256,7 +256,6 @@ mod tests {
     fn create_test_bar(high: f64, low: f64, close: f64) -> Bar {
         Bar {
             timestamp: Utc::now(),
-            symbol: "BTC".to_string(),
             open: (high + low) / 2.0,
             high,
             low,

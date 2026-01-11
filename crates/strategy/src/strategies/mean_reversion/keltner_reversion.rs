@@ -7,7 +7,7 @@ use crate::framework::{
     CorrelationSensitivity, MarketRegime, MetadataStrategy, RiskProfile, StrategyCategory,
     StrategyMetadata, VolatilityLevel,
 };
-use crate::indicators::{Atr, Ema};
+use crate::indicators::{Atr, Ema, Indicator};
 use alphafield_core::{Bar, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
@@ -261,7 +261,6 @@ mod tests {
     fn create_test_bar(high: f64, low: f64, close: f64, volume: f64) -> Bar {
         Bar {
             timestamp: Utc::now(),
-            symbol: "BTC".to_string(),
             open: (high + low) / 2.0,
             high,
             low,

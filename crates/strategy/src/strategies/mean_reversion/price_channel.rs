@@ -115,13 +115,6 @@ impl PriceChannelStrategy {
         })
     }
 
-    /// Calculate the middle of the channel
-    fn channel_middle(&self) -> Option<f64> {
-        let high = self.highest_high()?;
-        let low = self.lowest_low()?;
-        Some((high + low) / 2.0)
-    }
-
     /// Calculate exit level based on exit_percent
     fn exit_level(&self) -> Option<f64> {
         let high = self.highest_high()?;
@@ -270,7 +263,6 @@ mod tests {
     fn create_test_bar(high: f64, low: f64, close: f64) -> Bar {
         Bar {
             timestamp: Utc::now(),
-            symbol: "BTC".to_string(),
             open: (high + low) / 2.0,
             high,
             low,
@@ -312,7 +304,7 @@ mod tests {
     }
 
     #[test]
-    fn test_channel_middle() {
+    fn test_exit_level() {
         let mut strategy = PriceChannelStrategy::new(3);
         strategy.highs.push_back(10.0);
         strategy.highs.push_back(20.0);
@@ -321,6 +313,7 @@ mod tests {
         strategy.lows.push_back(10.0);
         strategy.lows.push_back(5.0);
 
-        assert_eq!(strategy.channel_middle(), Some(10.0)); // (20 + 0) / 2 = 10
+        // Highest = 20, Lowest = 0, Range = 20, Exit at 50% = 0 + 20*0.5 = 10
+        assert_eq!(strategy.exit_level(), Some(10.0));
     }
 }
