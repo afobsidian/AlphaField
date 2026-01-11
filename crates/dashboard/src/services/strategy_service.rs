@@ -1,7 +1,7 @@
 use alphafield_backtest::{strategy::Strategy as BacktestStrategy, StrategyAdapter};
 use alphafield_core::Strategy;
 use alphafield_strategy::{
-    framework::canonicalize_strategy_name, GoldenCrossStrategy, MeanReversionStrategy,
+    framework::canonicalize_strategy_name, BollingerBandsStrategy, GoldenCrossStrategy,
     MomentumStrategy, RsiStrategy,
 };
 use std::collections::HashMap;
@@ -176,8 +176,17 @@ impl StrategyFactory {
                     return None;
                 }
 
-                let config = alphafield_strategy::strategies::mean_reversion::MeanReversionConfig::new_with_exits(period, std_dev, tp, sl);
-                Some(Box::new(MeanReversionStrategy::from_config(config)))
+                let config =
+                    alphafield_strategy::strategies::mean_reversion::BollingerBandsConfig {
+                        period,
+                        num_std_dev: std_dev,
+                        rsi_period: 14,
+                        rsi_oversold: 30.0,
+                        rsi_overbought: 70.0,
+                        take_profit: tp,
+                        stop_loss: sl,
+                    };
+                Some(Box::new(BollingerBandsStrategy::from_config(config)))
             }
             "Momentum" => {
                 let ema_period = params.get("ema_period").copied().unwrap_or(50.0) as usize;
@@ -354,8 +363,17 @@ impl StrategyFactory {
                 if period == 0 || std_dev <= 0.0 {
                     return None;
                 }
-                let config = alphafield_strategy::strategies::mean_reversion::MeanReversionConfig::new_with_exits(period, std_dev, tp, sl);
-                let strat = MeanReversionStrategy::from_config(config);
+                let config =
+                    alphafield_strategy::strategies::mean_reversion::BollingerBandsConfig {
+                        period,
+                        num_std_dev: std_dev,
+                        rsi_period: 14,
+                        rsi_oversold: 30.0,
+                        rsi_overbought: 70.0,
+                        take_profit: tp,
+                        stop_loss: sl,
+                    };
+                let strat = BollingerBandsStrategy::from_config(config);
                 Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
             }
             "Momentum" => {

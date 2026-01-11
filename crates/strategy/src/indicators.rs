@@ -657,6 +657,156 @@ impl Adx {
     }
 }
 
+/// Stochastic Oscillator
+///
+/// The Stochastic Oscillator is a momentum indicator that shows the location of the close
+/// relative to the high-low range over a set number of periods.
+///
+/// %K = (Current Close - Lowest Low) / (Highest High - Lowest Low) * 100
+/// %D = SMA of %K
+///
+/// Values range from 0 to 100:
+/// - Above 80: Overbought
+/// - Below 20: Oversold
+pub struct Stochastic {
+    k_period: usize,
+    d_period: usize,
+    smooth_period: usize,
+    highs: VecDeque<f64>,
+    lows: VecDeque<f64>,
+    closes: VecDeque<f64>,
+    k_values: VecDeque<f64>,
+    historical_raw_k_values: VecDeque<f64>,
+    current_k: Option<f64>,
+    current_d: Option<f64>,
+}
+
+impl Stochastic {
+    /// Creates a new Stochastic Oscillator
+    ///
+    /// # Arguments
+    /// * `k_period` - Period for %K calculation (typically 14)
+    /// * `d_period` - Period for %D (SMA of %K) calculation (typically 3)
+    /// * `smooth_period` - Period for smoothing %K (typically 3)
+    pub fn new(k_period: usize, d_period: usize, smooth_period: usize) -> Self {
+        Self {
+            k_period,
+            d_period,
+            smooth_period,
+            highs: VecDeque::with_capacity(k_period),
+            lows: VecDeque::with_capacity(k_period),
+            closes: VecDeque::with_capacity(smooth_period),
+            k_values: VecDeque::with_capacity(d_period),
+            historical_raw_k_values: VecDeque::with_capacity(smooth_period),
+            current_k: None,
+            current_d: None,
+        }
+    }
+
+    /// Update with a new bar
+    ///
+    /// # Arguments
+    /// * `bar` - A bar containing high, low, and close prices
+    ///
+    /// Returns (%K, %D) when enough data is available
+    pub fn update(&mut self, bar: &alphafield_core::Bar) -> Option<(f64, f64)> {
+        self.highs.push_back(bar.high);
+        self.lows.push_back(bar.low);
+        self.closes.push_back(bar.close);
+
+        // Maintain window size
+        if self.highs.len() > self.k_period {
+            self.highs.pop_front();
+            self.lows.pop_front();
+        }
+        if self.closes.len() > self.smooth_period {
+            self.closes.pop_front();
+        }
+
+        // Need enough data for %K calculation
+        if self.highs.len() < self.k_period {
+            return None;
+        }
+
+        // Calculate raw %K
+        let highest_high = self.highs.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        let lowest_low = self.lows.iter().copied().fold(f64::INFINITY, f64::min);
+        let range = highest_high - lowest_low;
+
+        if range == 0.0 {
+            return None;
+        }
+
+        let raw_k = ((bar.close - lowest_low) / range) * 100.0;
+
+        // Store raw %K value for smoothing
+        self.historical_raw_k_values.push_back(raw_k);
+        if self.historical_raw_k_values.len() > self.smooth_period {
+            self.historical_raw_k_values.pop_front();
+        }
+
+        // Smooth %K if smooth_period > 1
+        let k_value =
+            if self.smooth_period > 1 && self.historical_raw_k_values.len() >= self.smooth_period {
+                // Average of recent raw %K values
+                let sum: f64 = self.historical_raw_k_values.iter().sum();
+                sum / self.smooth_period as f64
+            } else {
+                raw_k
+            };
+
+        self.current_k = Some(k_value);
+        self.k_values.push_back(k_value);
+
+        // Maintain window size for %D
+        if self.k_values.len() > self.d_period {
+            self.k_values.pop_front();
+        }
+
+        // Calculate %D (SMA of %K)
+        if self.k_values.len() >= self.d_period {
+            let sum: f64 = self.k_values.iter().sum();
+            self.current_d = Some(sum / self.d_period as f64);
+        }
+
+        if let (Some(k), Some(d)) = (self.current_k, self.current_d) {
+            Some((k, d))
+        } else {
+            None
+        }
+    }
+
+    /// Get the current %K value
+    pub fn k_value(&self) -> Option<f64> {
+        self.current_k
+    }
+
+    /// Get the current %D value
+    pub fn d_value(&self) -> Option<f64> {
+        self.current_d
+    }
+
+    /// Get both %K and %D values
+    pub fn value(&self) -> Option<(f64, f64)> {
+        if let (Some(k), Some(d)) = (self.current_k, self.current_d) {
+            Some((k, d))
+        } else {
+            None
+        }
+    }
+
+    /// Reset the indicator state
+    pub fn reset(&mut self) {
+        self.highs.clear();
+        self.lows.clear();
+        self.closes.clear();
+        self.k_values.clear();
+        self.historical_raw_k_values.clear();
+        self.current_k = None;
+        self.current_d = None;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

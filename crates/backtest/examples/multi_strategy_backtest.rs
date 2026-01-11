@@ -4,7 +4,7 @@
 
 use alphafield_backtest::{BacktestEngine, SlippageModel, StrategyAdapter};
 use alphafield_strategy::{
-    GoldenCrossStrategy, MeanReversionStrategy, MomentumStrategy, RsiStrategy,
+    BollingerBandsStrategy, GoldenCrossStrategy, MomentumStrategy, RsiStrategy,
 };
 
 #[tokio::main]
@@ -85,12 +85,12 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             Box::new(|| Box::new(RsiStrategy::new(7, 25.0, 75.0))),
         ),
         (
-            "Mean Reversion (20, 2.0)",
-            Box::new(|| Box::new(MeanReversionStrategy::new(20, 2.0))),
+            "Bollinger Bands (20, 2.0)",
+            Box::new(|| Box::new(BollingerBandsStrategy::new(20, 2.0))),
         ),
         (
-            "Mean Reversion (20, 1.5)",
-            Box::new(|| Box::new(MeanReversionStrategy::new(20, 1.5))),
+            "Bollinger Bands (20, 1.5)",
+            Box::new(|| Box::new(BollingerBandsStrategy::new(20, 1.5))),
         ),
         (
             "Momentum (50, 12/26/9)",

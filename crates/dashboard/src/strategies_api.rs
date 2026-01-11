@@ -249,9 +249,9 @@ pub fn initialize_registry() -> Arc<StrategyRegistry> {
     }
 
     // Register Bollinger Bands Mean Reversion strategy
-    let mean_reversion = Arc::new(alphafield_strategy::strategies::MeanReversionStrategy::new(
-        20, 2.0,
-    )) as Arc<dyn StrategyWithMetadata>;
+    let mean_reversion =
+        Arc::new(alphafield_strategy::strategies::BollingerBandsStrategy::new(20, 2.0))
+            as Arc<dyn StrategyWithMetadata>;
     if let Err(e) = registry.register(mean_reversion) {
         eprintln!(
             "Failed to register Bollinger Bands Mean Reversion strategy: {}",

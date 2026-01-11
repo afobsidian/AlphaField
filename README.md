@@ -111,15 +111,28 @@ Technical indicators and example strategies.
 | `BollingerBands` | Mean reversion bands |
 | `Atr` | Average True Range |
 | `Adx` | Average Directional Index |
+| `Kama` | Kaufman's Adaptive Moving Average |
+| `Stochastic` | Stochastic Oscillator (%K/%D) |
 
 **Strategies:**
 | Strategy | Logic |
 |----------|-------|
 | `GoldenCross` | SMA crossover (50/200) |
 | `RsiStrategy` | RSI oversold/overbought reversal |
-| `MeanReversion` | Bollinger Band reversion |
+| `MeanReversion` | Bollinger Band reversion (legacy name) |
 | `Momentum` | MACD crossover |
 | `TrendFollowing` | EMA trend with ADX filter |
+
+**Mean Reversion Strategies (Phase 12.3):**
+| Strategy | Logic |
+|----------|-------|
+| `BollingerBandsStrategy` | BB band reversion with RSI confirmation |
+| `RSIReversionStrategy` | Pure RSI mean reversion with trend filter |
+| `StochReversionStrategy` | Stochastic oscillator reversion with crossovers |
+| `ZScoreReversionStrategy` | Statistical z-score reversion (±2σ) |
+| `PriceChannelStrategy` | Donchian channel breakout reversion |
+| `KeltnerReversionStrategy` | Keltner channel (EMA+ATR) with volume confirmation |
+| `StatArbStrategy` | Statistical arbitrage (spot-only adaptation) |
 
 ---
 
