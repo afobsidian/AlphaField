@@ -1,7 +1,8 @@
 use alphafield_backtest::{strategy::Strategy as BacktestStrategy, StrategyAdapter};
 use alphafield_core::Strategy;
 use alphafield_strategy::{
-    GoldenCrossStrategy, MeanReversionStrategy, MomentumStrategy, RsiStrategy,
+    framework::canonicalize_strategy_name, GoldenCrossStrategy, MeanReversionStrategy,
+    MomentumStrategy, RsiStrategy,
 };
 use std::collections::HashMap;
 use tracing::debug;
@@ -9,37 +10,10 @@ use tracing::debug;
 pub struct StrategyFactory;
 
 impl StrategyFactory {
-    /// Canonicalize strategy identifiers so the dashboard APIs can accept either:
-    /// - internal keys used by the backtest/optimizer (e.g. "GoldenCross", "ParabolicSAR")
-    /// - human-friendly display names returned by `/api/strategies` (e.g. "Golden Cross", "Parabolic SAR")
-    ///
-    /// This keeps the end-to-end workflow (build → optimize → backtest → deploy) stable even when
-    /// the UI uses display labels.
-    fn canonicalize_strategy_name(name: &str) -> &str {
-        match name.trim() {
-            // Existing “core” strategies (display name → key)
-            "Golden Cross" => "GoldenCross",
-            "RSI Mean Reversion" => "Rsi",
-            "Bollinger Bands Mean Reversion" => "MeanReversion",
-            "EMA-MACD Momentum" => "Momentum",
-
-            // Phase 12.2 trend-following strategies (display name → key)
-            "Adaptive MA" => "AdaptiveMA",
-            "MA Crossover" => "MACrossover",
-            "MACD Trend" => "MacdTrend",
-            "Parabolic SAR" => "ParabolicSAR",
-
-            // Already canonical / fallback
-            other => other,
-        }
-    }
-}
-
-impl StrategyFactory {
     pub fn create(name: &str, params: &HashMap<String, f64>) -> Option<Box<dyn Strategy>> {
-        let name = Self::canonicalize_strategy_name(name);
+        let name = canonicalize_strategy_name(name);
         debug!(strategy = name, ?params, "Creating strategy");
-        match name {
+        match name.as_str() {
             "GoldenCross" => {
                 let fast = params.get("fast_period").copied().unwrap_or(10.0) as usize;
                 let slow = params.get("slow_period").copied().unwrap_or(30.0) as usize;
@@ -56,6 +30,16 @@ impl StrategyFactory {
                 Some(Box::new(GoldenCrossStrategy::from_config(config)))
             }
             "Breakout" => {
+                // NOTE: Breakout strategy limitation
+                // The BreakoutStrategy supports multi-level take profits (tp1_pct, tp2_pct, tp3_pct)
+                // with configurable partial position exits. However, the dashboard API currently only
+                // exposes three parameters: lookback, take_profit, and stop_loss.
+                //
+                // The BreakoutStrategy::new() constructor uses a default config with hardcoded
+                // TP levels: 3%, 6%, and 10%, closing 30%, 40%, and 30% of position respectively.
+                //
+                // Future enhancement: Update dashboard UI and StrategyFactory to accept additional
+                // TP parameters and use BreakoutStrategy::from_config() for full customization.
                 let lookback = params.get("lookback").copied().unwrap_or(20.0) as usize;
                 let _tp = params.get("take_profit").copied().unwrap_or(5.0);
                 let _sl = params.get("stop_loss").copied().unwrap_or(5.0);
@@ -230,9 +214,9 @@ impl StrategyFactory {
         symbol: &str,
         capital: f64,
     ) -> Option<Box<dyn BacktestStrategy>> {
-        let name = Self::canonicalize_strategy_name(name);
+        let name = canonicalize_strategy_name(name);
         debug!(strategy = name, ?params, "Creating backtest strategy");
-        match name {
+        match name.as_str() {
             "GoldenCross" => {
                 let fast = params.get("fast_period").copied().unwrap_or(10.0) as usize;
                 let slow = params.get("slow_period").copied().unwrap_or(30.0) as usize;
@@ -248,6 +232,16 @@ impl StrategyFactory {
                 Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
             }
             "Breakout" => {
+                // NOTE: Breakout strategy limitation
+                // The BreakoutStrategy supports multi-level take profits (tp1_pct, tp2_pct, tp3_pct)
+                // with configurable partial position exits. However, dashboard API currently only
+                // exposes three parameters: lookback, take_profit, and stop_loss.
+                //
+                // The BreakoutStrategy::new() constructor uses a default config with hardcoded
+                // TP levels: 3%, 6%, and 10%, closing 30%, 40%, and 30% of position respectively.
+                //
+                // Future enhancement: Update dashboard UI and StrategyFactory to accept additional
+                // TP parameters and use BreakoutStrategy::from_config() for full customization.
                 let lookback = params.get("lookback").copied().unwrap_or(20.0) as usize;
 
                 if lookback == 0 {

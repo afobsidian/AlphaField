@@ -5,6 +5,25 @@
 //! - Strategy registry for registration and lookup
 //! - Strategy classifier for automatic classification
 //! - Trait extensions for metadata
+//!
+//! # Important: Symbol Handling in Strategy Signals
+//!
+//! **Current Limitation**: All strategy implementations in the trend-following module use a
+//! hardcoded "UNKNOWN" symbol in generated signals. This is intentional design because:
+//!
+//! 1. The `Strategy` trait's `on_bar` method only receives a `Bar` reference, which contains
+//!    the symbol information in `bar.symbol`, but the `Signal` struct requires an owned `String`.
+//! 2. The dashboard's `StrategyAdapter` wraps strategies during backtesting and handles the
+//!    proper symbol mapping from the `Bar` to the `Signal`.
+//! 3. This abstraction allows strategies to remain symbol-agnostic and reusable across different
+//!    assets during backtesting.
+//!
+//! **For Live Trading**: When using strategies in live execution scenarios, the execution layer
+//! (not the strategy) is responsible for ensuring the correct symbol is associated with orders.
+//!
+//! **Future Enhancement**: The `Strategy` trait could be updated to accept the symbol explicitly
+//! in the `on_bar` signature, or the `Signal` struct could reference `bar.symbol` directly.
+//! However, this would require breaking changes to the trait interface.
 
 use alphafield_core::{QuantError, Strategy};
 use serde::{Deserialize, Serialize};
@@ -469,6 +488,53 @@ impl StrategyRegistry {
     }
 }
 
+// ============ Strategy Name Canonicalization ============
+
+/// Canonicalizes strategy identifiers to internal keys used by the optimizer and StrategyFactory.
+///
+/// This function accepts both human-friendly display names from the dashboard API (e.g., "Golden Cross",
+/// "Parabolic SAR") and internal strategy keys (e.g., "GoldenCross", "ParabolicSAR"), and always
+/// returns the internal key format.
+///
+/// The canonicalization is necessary because:
+/// - The dashboard UI displays user-friendly names (with spaces, capitalization)
+/// - The optimizer and StrategyFactory expect internal keys (CamelCase)
+/// - Both endpoints in the workflow need to understand each other's naming
+///
+/// # Arguments
+/// * `name` - Strategy name in either display format or internal key format
+///
+/// # Returns
+/// The canonical internal strategy key (e.g., "GoldenCross", "Rsi")
+///
+/// # Example
+/// ```
+/// use alphafield_strategy::framework::canonicalize_strategy_name;
+///
+/// assert_eq!(canonicalize_strategy_name("Golden Cross"), "GoldenCross");
+/// assert_eq!(canonicalize_strategy_name("Parabolic SAR"), "ParabolicSAR");
+/// assert_eq!(canonicalize_strategy_name("GoldenCross"), "GoldenCross");
+/// ```
+pub fn canonicalize_strategy_name(name: &str) -> String {
+    match name.trim() {
+        // Existing "core" strategies (display name → key)
+        "Golden Cross" => "GoldenCross".to_string(),
+        "RSI Mean Reversion" => "Rsi".to_string(),
+        "Bollinger Bands Mean Reversion" => "MeanReversion".to_string(),
+        "EMA-MACD Momentum" => "Momentum".to_string(),
+
+        // Phase 12.2 trend-following strategies (display name → key)
+        "Adaptive MA" => "AdaptiveMA".to_string(),
+        "MA Crossover" => "MACrossover".to_string(),
+        "MACD Trend" => "MacdTrend".to_string(),
+        "Parabolic SAR" => "ParabolicSAR".to_string(),
+
+        // Already canonical / fallback - return as-is
+        // This handles the case where the internal key is passed directly
+        other => other.to_string(),
+    }
+}
+
 impl Default for StrategyRegistry {
     fn default() -> Self {
         Self::new()
@@ -502,6 +568,70 @@ impl Default for BacktestResults {
 mod tests {
     use super::*;
     use alphafield_core::{Bar, Signal};
+
+    #[test]
+    fn test_canonicalize_core_strategies_display_names() {
+        assert_eq!(canonicalize_strategy_name("Golden Cross"), "GoldenCross");
+        assert_eq!(canonicalize_strategy_name("RSI Mean Reversion"), "Rsi");
+        assert_eq!(
+            canonicalize_strategy_name("Bollinger Bands Mean Reversion"),
+            "MeanReversion"
+        );
+        assert_eq!(canonicalize_strategy_name("EMA-MACD Momentum"), "Momentum");
+    }
+
+    #[test]
+    fn test_canonicalize_trend_following_strategies_display_names() {
+        assert_eq!(canonicalize_strategy_name("Adaptive MA"), "AdaptiveMA");
+        assert_eq!(canonicalize_strategy_name("MA Crossover"), "MACrossover");
+        assert_eq!(canonicalize_strategy_name("MACD Trend"), "MacdTrend");
+        assert_eq!(canonicalize_strategy_name("Parabolic SAR"), "ParabolicSAR");
+    }
+
+    #[test]
+    fn test_canonicalize_already_canonical_names() {
+        assert_eq!(canonicalize_strategy_name("GoldenCross"), "GoldenCross");
+        assert_eq!(canonicalize_strategy_name("Rsi"), "Rsi");
+        assert_eq!(canonicalize_strategy_name("MeanReversion"), "MeanReversion");
+        assert_eq!(canonicalize_strategy_name("Momentum"), "Momentum");
+        assert_eq!(canonicalize_strategy_name("AdaptiveMA"), "AdaptiveMA");
+        assert_eq!(canonicalize_strategy_name("MACrossover"), "MACrossover");
+        assert_eq!(canonicalize_strategy_name("MacdTrend"), "MacdTrend");
+        assert_eq!(canonicalize_strategy_name("ParabolicSAR"), "ParabolicSAR");
+    }
+
+    #[test]
+    fn test_canonicalize_whitespace_handling() {
+        assert_eq!(
+            canonicalize_strategy_name("  Golden Cross  "),
+            "GoldenCross"
+        );
+        assert_eq!(canonicalize_strategy_name("\tAdaptive MA\n"), "AdaptiveMA");
+        assert_eq!(canonicalize_strategy_name("  GoldenCross  "), "GoldenCross");
+    }
+
+    #[test]
+    fn test_canonicalize_unknown_names() {
+        assert_eq!(
+            canonicalize_strategy_name("UnknownStrategy"),
+            "UnknownStrategy"
+        );
+        assert_eq!(
+            canonicalize_strategy_name("Custom Strategy"),
+            "Custom Strategy"
+        );
+        assert_eq!(canonicalize_strategy_name("SomeOtherName"), "SomeOtherName");
+    }
+
+    #[test]
+    fn test_canonicalize_case_sensitivity() {
+        // The function is case-sensitive for display names
+        assert_eq!(canonicalize_strategy_name("golden cross"), "golden cross");
+        assert_eq!(canonicalize_strategy_name("GOLDEN CROSS"), "GOLDEN CROSS");
+        // Internal keys are case-sensitive
+        assert_eq!(canonicalize_strategy_name("goldencross"), "goldencross");
+        assert_eq!(canonicalize_strategy_name("GOLDENCROSS"), "GOLDENCROSS");
+    }
 
     // Mock strategy for testing
     struct MockStrategy {

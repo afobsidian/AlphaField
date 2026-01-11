@@ -5,6 +5,7 @@
 
 use crate::engine::BacktestEngine;
 use crate::exchange::SlippageModel;
+use alphafield_strategy::framework::canonicalize_strategy_name;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::{debug, info};
@@ -295,26 +296,10 @@ impl ParameterOptimizer {
 /// Get default parameter bounds for a strategy
 pub fn get_strategy_bounds(strategy_name: &str) -> Vec<ParamBounds> {
     // Canonicalize strategy identifiers so optimization accepts display names from the registry/UI.
-    // The dashboard strategy registry exposes human-friendly names (e.g. "Golden Cross", "Parabolic SAR"),
-    // while the optimizer uses internal keys (e.g. "GoldenCross", "ParabolicSAR").
-    let strategy_name = match strategy_name.trim() {
-        // Existing “core” strategies (display name → key)
-        "Golden Cross" => "GoldenCross",
-        "RSI Mean Reversion" => "Rsi",
-        "Bollinger Bands Mean Reversion" => "MeanReversion",
-        "EMA-MACD Momentum" => "Momentum",
+    // Uses the shared canonicalization function from alphafield_strategy::framework.
+    let strategy_name = canonicalize_strategy_name(strategy_name);
 
-        // Phase 12.2 trend-following strategies (display name → key)
-        "Adaptive MA" => "AdaptiveMA",
-        "MA Crossover" => "MACrossover",
-        "MACD Trend" => "MacdTrend",
-        "Parabolic SAR" => "ParabolicSAR",
-
-        // Already canonical / fallback
-        other => other,
-    };
-
-    match strategy_name {
+    match strategy_name.as_str() {
         "GoldenCross" => vec![
             ParamBounds::new("fast_period", 5.0, 30.0, 5.0),
             ParamBounds::new("slow_period", 30.0, 100.0, 10.0),
@@ -436,5 +421,68 @@ mod tests {
     fn test_unknown_strategy_bounds() {
         let bounds = get_strategy_bounds("UnknownStrategy");
         assert!(bounds.is_empty());
+    }
+
+    // Tests for canonicalize_strategy_name integration
+    #[test]
+    fn test_canonicalize_golden_cross_display_name() {
+        let bounds = get_strategy_bounds("Golden Cross");
+        assert!(!bounds.is_empty());
+        assert!(bounds.iter().any(|b| b.name == "fast_period"));
+        assert!(bounds.iter().any(|b| b.name == "slow_period"));
+    }
+
+    #[test]
+    fn test_canonicalize_parabolic_sar_display_name() {
+        let bounds = get_strategy_bounds("Parabolic SAR");
+        assert!(!bounds.is_empty());
+        assert!(bounds.iter().any(|b| b.name == "af_step"));
+        assert!(bounds.iter().any(|b| b.name == "af_max"));
+    }
+
+    #[test]
+    fn test_canonicalize_adaptive_ma_display_name() {
+        let bounds = get_strategy_bounds("Adaptive MA");
+        assert!(!bounds.is_empty());
+        assert!(bounds.iter().any(|b| b.name == "fast_period"));
+        assert!(bounds.iter().any(|b| b.name == "price_period"));
+    }
+
+    #[test]
+    fn test_canonicalize_ma_crossover_display_name() {
+        let bounds = get_strategy_bounds("MA Crossover");
+        assert!(!bounds.is_empty());
+        assert!(bounds.iter().any(|b| b.name == "fast_period"));
+        assert!(bounds.iter().any(|b| b.name == "slow_period"));
+    }
+
+    #[test]
+    fn test_canonicalize_macd_trend_display_name() {
+        let bounds = get_strategy_bounds("MACD Trend");
+        assert!(!bounds.is_empty());
+        assert!(bounds.iter().any(|b| b.name == "fast_period"));
+        assert!(bounds.iter().any(|b| b.name == "signal_period"));
+    }
+
+    #[test]
+    fn test_canonicalize_already_canonical_names() {
+        // Verify that internal keys still work
+        let bounds1 = get_strategy_bounds("GoldenCross");
+        let bounds2 = get_strategy_bounds("Golden Cross");
+
+        assert_eq!(bounds1.len(), bounds2.len());
+
+        // Verify same parameters are present
+        let names1: Vec<_> = bounds1.iter().map(|b| b.name.clone()).collect();
+        let names2: Vec<_> = bounds2.iter().map(|b| b.name.clone()).collect();
+        assert_eq!(names1, names2);
+    }
+
+    #[test]
+    fn test_canonicalize_whitespace_handling() {
+        // Test with extra whitespace
+        let bounds = get_strategy_bounds("  Golden Cross  ");
+        assert!(!bounds.is_empty());
+        assert!(bounds.iter().any(|b| b.name == "fast_period"));
     }
 }
