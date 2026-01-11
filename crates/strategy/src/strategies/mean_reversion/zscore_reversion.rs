@@ -271,7 +271,7 @@ impl Strategy for ZScoreReversionStrategy {
                 timestamp: bar.timestamp,
                 symbol: "UNKNOWN".to_string(),
                 signal_type: SignalType::Buy,
-                strength: strength.min(1.0).max(0.3),
+                strength: strength.clamp(0.3, 1.0),
                 metadata: Some(format!(
                     "Z-Score Extreme Entry: z={:.2} (< {:.1})",
                     zscore, self.config.entry_zscore
@@ -286,18 +286,6 @@ impl Strategy for ZScoreReversionStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
-
-    fn create_test_bar(price: f64) -> Bar {
-        Bar {
-            timestamp: Utc::now(),
-            open: price,
-            high: price,
-            low: price,
-            close: price,
-            volume: 1000.0,
-        }
-    }
 
     #[test]
     fn test_zscore_reversion_creation() {

@@ -235,7 +235,7 @@ impl Strategy for KeltnerReversionStrategy {
             self.last_position = SignalType::Buy;
             self.entry_price = Some(price);
             let distance = (middle - price) / middle;
-            let strength = distance.min(1.0).max(0.3);
+            let strength = distance.clamp(0.3, 1.0);
 
             return Some(vec![Signal {
                 timestamp: bar.timestamp,
@@ -259,18 +259,6 @@ impl Strategy for KeltnerReversionStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
-
-    fn create_test_bar(high: f64, low: f64, close: f64, volume: f64) -> Bar {
-        Bar {
-            timestamp: Utc::now(),
-            open: (high + low) / 2.0,
-            high,
-            low,
-            close,
-            volume,
-        }
-    }
 
     #[test]
     fn test_keltner_reversion_creation() {

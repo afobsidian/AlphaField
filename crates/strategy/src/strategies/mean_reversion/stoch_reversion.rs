@@ -232,7 +232,7 @@ impl Strategy for StochReversionStrategy {
                 let signal_strength = if crossover_confirmed {
                     1.0
                 } else {
-                    strength.min(0.9).max(0.3)
+                    strength.clamp(0.3, 0.9)
                 };
 
                 return Some(vec![Signal {
@@ -255,18 +255,6 @@ impl Strategy for StochReversionStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
-
-    fn create_test_bar(high: f64, low: f64, close: f64) -> Bar {
-        Bar {
-            timestamp: Utc::now(),
-            open: (high + low) / 2.0,
-            high,
-            low,
-            close,
-            volume: 1000.0,
-        }
-    }
 
     #[test]
     fn test_stoch_reversion_creation() {

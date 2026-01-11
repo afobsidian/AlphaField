@@ -244,8 +244,7 @@ impl Strategy for StatArbStrategy {
             self.last_position = SignalType::Buy;
             self.entry_price = Some(price);
             let strength = ((abs_zscore - self.config.entry_zscore) / self.config.entry_zscore)
-                .min(1.0)
-                .max(0.3);
+                .clamp(0.3, 1.0);
 
             return Some(vec![Signal {
                 timestamp: bar.timestamp,
@@ -266,18 +265,6 @@ impl Strategy for StatArbStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
-
-    fn create_test_bar(price: f64) -> Bar {
-        Bar {
-            timestamp: Utc::now(),
-            open: price,
-            high: price,
-            low: price,
-            close: price,
-            volume: 1000.0,
-        }
-    }
 
     #[test]
     fn test_stat_arb_creation() {

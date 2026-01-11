@@ -238,7 +238,7 @@ impl Strategy for RSIReversionStrategy {
                 timestamp: bar.timestamp,
                 symbol: "UNKNOWN".to_string(),
                 signal_type: SignalType::Buy,
-                strength: strength.min(1.0).max(0.1),
+                strength: strength.clamp(0.1, 1.0),
                 metadata: Some(format!("RSI Oversold Entry: RSI = {:.1}", rsi_value)),
             }]);
         }
@@ -250,18 +250,6 @@ impl Strategy for RSIReversionStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
-
-    fn create_test_bar(price: f64) -> Bar {
-        Bar {
-            timestamp: Utc::now(),
-            open: price,
-            high: price,
-            low: price,
-            close: price,
-            volume: 1000.0,
-        }
-    }
 
     #[test]
     fn test_rsi_reversion_creation() {

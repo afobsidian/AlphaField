@@ -23,10 +23,10 @@ pub mod stoch_reversion;
 pub mod zscore_reversion;
 
 // Re-export strategies for convenience
-pub use bollinger_bands::BollingerBandsStrategy;
-pub use keltner_reversion::KeltnerReversionStrategy;
-pub use price_channel::PriceChannelStrategy;
-pub use rsi_reversion::RSIReversionStrategy;
-pub use stat_arb::StatArbStrategy;
-pub use stoch_reversion::StochReversionStrategy;
-pub use zscore_reversion::ZScoreReversionStrategy;
+pub use bollinger_bands::{BollingerBandsConfig, BollingerBandsStrategy};
+pub use keltner_reversion::{KeltnerReversionConfig, KeltnerReversionStrategy};
+pub use price_channel::{PriceChannelConfig, PriceChannelStrategy};
+pub use rsi_reversion::{RSIReversionConfig, RSIReversionStrategy};
+pub use stat_arb::{StatArbConfig, StatArbStrategy};
+pub use stoch_reversion::{StochReversionConfig, StochReversionStrategy};
+pub use zscore_reversion::{ZScoreReversionConfig, ZScoreReversionStrategy};

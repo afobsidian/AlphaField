@@ -239,7 +239,7 @@ impl Strategy for PriceChannelStrategy {
             self.entry_price = Some(price);
             let channel_range = highest_high - lowest_low;
             let distance_from_low = (price - lowest_low) / channel_range;
-            let strength = (1.0 - distance_from_low).min(1.0).max(0.3);
+            let strength = (1.0 - distance_from_low).clamp(0.3, 1.0);
 
             return Some(vec![Signal {
                 timestamp: bar.timestamp,
@@ -260,18 +260,6 @@ impl Strategy for PriceChannelStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
-
-    fn create_test_bar(high: f64, low: f64, close: f64) -> Bar {
-        Bar {
-            timestamp: Utc::now(),
-            open: (high + low) / 2.0,
-            high,
-            low,
-            close,
-            volume: 1000.0,
-        }
-    }
 
     #[test]
     fn test_price_channel_creation() {
