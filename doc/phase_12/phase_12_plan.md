@@ -437,9 +437,9 @@ CREATE INDEX idx_failures_severity ON strategy_failures(severity);
 
 ### Status: Phase 12.4 Complete, Phase 12.3 Complete, Phase 12.2 Complete, Phase 12.1 Complete
 
-**Current Phase**: 12.4 (Momentum Strategies)  
-**Phase Status**: ✅ Complete (2026-01-11)  
-**Next Phase**: 12.5 (Volatility-Based Strategies)
+**Current Phase**: 12.6 (Sentiment-Based Strategies)  
+**Phase Status**: Phase 12.5: ✅ Complete (2026-01-15)  
+**Next Phase**: 12.6 (Sentiment-Based Strategies)
 
 ### Progress by Phase
 
@@ -449,20 +449,20 @@ CREATE INDEX idx_failures_severity ON strategy_failures(severity);
 | 12.2 | Trend Following | ✅ Complete | 2026-01-11 | 7 strategies implemented, documented, tested, integrated |
 | 12.3 | Mean Reversion | ✅ Complete | 2026-01-11 | 7 strategies implemented, documented, tested, integrated |
 | 12.4 | Momentum | ✅ Complete | 2026-01-11 | 7 strategies implemented, documented, tested, integrated |
-| 12.5 | Volatility-Based | ⏳ Not Started | TBD | Target: 7 strategies |
-| 12.6 | Sentiment-Based | ⏳ Not Started | TBD | Target: 7 strategies |
+| 12.5 | Volatility-Based | ✅ Complete | 2026-01-15 | 7 strategies implemented |
+| 12.5 | Volatility-Based | ✅ Complete | 2026-01-15 | 7 strategies implemented |
 | 12.7 | Multi-Indicator | ⏳ Not Started | TBD | Target: 7 strategies |
 | 12.8 | Research & Documentation | ⏳ Not Started | TBD | Final validation, documentation, reports |
 
 ### Overall Metrics
 
 - **Total Phases**: 8
-- **Completed**: 4 (50%)
+- **Completed**: 5 (62.5%)
 - **In Progress**: 0 (0%)
 - **Not Started**: 4 (50%)
 
 - **Target Strategies**: 50+
-- **Implemented**: 25 (50%)
+- **Implemented**: 32 (61.5%)
   - Baselines: 2 (HODL, Market Average)
   - Trend Following: 7 (Golden Cross, Breakout, MA Crossover, Adaptive MA, Triple MA, MACD Trend, Parabolic SAR)
   - Mean Reversion: 7 (Bollinger Bands, RSI Reversion, Stat Arb, Stochastic, Keltner, Price Channel, Z-Score)

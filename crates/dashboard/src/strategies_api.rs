@@ -381,6 +381,68 @@ pub fn initialize_registry() -> Arc<StrategyRegistry> {
         );
     }
 
+    // ------------------------------------------------------------------------
+    // Volatility-Based Strategies (Phase 12.5)
+    // ------------------------------------------------------------------------
+
+    // Register ATR Breakout strategy
+    let atr_breakout = Arc::new(
+        alphafield_strategy::strategies::volatility::ATRBreakoutStrategy::new(14, 1.5, 20),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(atr_breakout) {
+        eprintln!("Failed to register ATR Breakout strategy: {}", e);
+    }
+
+    // Register Volatility Squeeze strategy
+    let vol_squeeze = Arc::new(
+        alphafield_strategy::strategies::volatility::VolSqueezeStrategy::new(20, 2.0, 20, 1.5, 0.1),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(vol_squeeze) {
+        eprintln!("Failed to register Volatility Squeeze strategy: {}", e);
+    }
+
+    // Register Volatility Regime strategy
+    let vol_regime =
+        Arc::new(alphafield_strategy::strategies::volatility::VolRegimeStrategy::new(14, 100))
+            as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(vol_regime) {
+        eprintln!("Failed to register Volatility Regime strategy: {}", e);
+    }
+
+    // Register ATR Trailing Stop strategy
+    let atr_trailing = Arc::new(
+        alphafield_strategy::strategies::volatility::ATRTrailingStrategy::new(14, 2.0, 10, 30),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(atr_trailing) {
+        eprintln!("Failed to register ATR Trailing Stop strategy: {}", e);
+    }
+
+    // Register Volatility-Adjusted Position Sizing strategy
+    let vol_sizing = Arc::new(
+        alphafield_strategy::strategies::volatility::VolSizingStrategy::new(14, 10.0, 100),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(vol_sizing) {
+        eprintln!(
+            "Failed to register Volatility-Adjusted Position Sizing strategy: {}",
+            e
+        );
+    }
+
+    // Register GARCH-Based strategy
+    let garch = Arc::new(alphafield_strategy::strategies::volatility::GARCHStrategy::new(0.94, 20))
+        as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(garch) {
+        eprintln!("Failed to register GARCH-Based strategy: {}", e);
+    }
+
+    // Register VIX-Style strategy
+    let vix_style =
+        Arc::new(alphafield_strategy::strategies::volatility::VIXStyleStrategy::new(14, 100))
+            as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(vix_style) {
+        eprintln!("Failed to register VIX-Style strategy: {}", e);
+    }
+
     registry
 }
 

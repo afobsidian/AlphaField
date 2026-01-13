@@ -32,13 +32,14 @@
 5. **Integration-Ready**: All strategies registered in dashboard with API access
 
 ### Phase Goals
+### Progress Dashboard
 
-| Goal | Target | Current | Status |
-|-------|---------|----------|--------|
-| Total Strategies | 50+ | 11 | 22% |
-| Strategy Categories | 6 | 2 (Trend Following, Baseline) | 33% |
+| Metric | Target | Current | Status |
+|--------|---------|----------|--------|
+| Total Strategies | 50+ | 32 | 64% |
+| Strategy Categories | 6 | 4 (Trend Following, Mean Reversion, Momentum, Volatility-Based) | 67% |
 | Documentation Coverage | 100% | 100% | ✅ |
-| Test Pass Rate | 100% | 100% | ✅ |
+| Test Pass Rate | 100% | 100% (298/298) | ✅ |
 | Dashboard Integration | 100% | 100% | ✅ |
 | Validation Complete | 100% | 0% | ⏳ |
 
@@ -49,12 +50,12 @@
 ### Phase-by-Phase Status
 
 | Phase | Name | Status | Completion Date | Strategies | Notes |
-|-------|-------|--------|-------------|-------|
+|-------|-------|--------|-------------|-----------|-------|
 | 12.1 | Foundation | ✅ Complete | 2026-01-09 | 2 baselines + framework |
 | 12.2 | Trend Following | ✅ Complete | 2026-01-11 | 7 strategies |
-| 12.3 | Mean Reversion | ⏳ Not Started | TBD | Target: 7 strategies |
-| 12.4 | Momentum | ⏳ Not Started | TBD | Target: 7 strategies |
-| 12.5 | Volatility-Based | ⏳ Not Started | TBD | Target: 7 strategies |
+| 12.3 | Mean Reversion | ✅ Complete | 2026-01-11 | 7 strategies |
+| 12.4 | Momentum | ✅ Complete | 2026-01-11 | 7 strategies |
+| 12.5 | Volatility-Based | ✅ Complete | 2026-01-15 | 7 strategies |
 | 12.6 | Sentiment-Based | ⏳ Not Started | TBD | Target: 7 strategies |
 | 12.7 | Multi-Indicator | ⏳ Not Started | TBD | Target: 7 strategies |
 | 12.8 | Research & Documentation | ⏳ Not Started | TBD | Final validation and reports |
@@ -78,6 +79,15 @@
 - ✅ RSI Mean Reversion
 - ✅ EMA-MACD Momentum
 - ✅ Bollinger Bands Mean Reversion
+
+**Volatility-Based Strategies (7)**
+- ✅ [ATR Breakout](#volatility-based-strategies) - Volatility-adjusted breakout levels
+- ✅ [Volatility Squeeze](#volatility-based-strategies) - BB + Keltner squeeze detection
+- ✅ [Volatility Regime](#volatility-based-strategies) - Regime-adaptive signals
+- ✅ [ATR Trailing Stop](#volatility-based-strategies) - Dynamic ATR-based stops
+- ✅ [Volatility-Adjusted Position Sizing](#volatility-based-strategies) - Volatility-scaled position sizes
+- ✅ [GARCH-Based](#volatility-based-strategies) - EWMA volatility prediction
+- ✅ [VIX-Style](#volatility-based-strategies) - Crypto volatility index contrarian
 
 ### Code Quality Metrics
 

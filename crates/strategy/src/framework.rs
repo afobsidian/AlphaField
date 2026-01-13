@@ -522,12 +522,79 @@ pub fn canonicalize_strategy_name(name: &str) -> String {
         "RSI Mean Reversion" => "Rsi".to_string(),
         "Bollinger Bands Mean Reversion" => "MeanReversion".to_string(),
         "EMA-MACD Momentum" => "Momentum".to_string(),
+        "EMA-MACD" => "Momentum".to_string(),
 
         // Phase 12.2 trend-following strategies (display name → key)
         "Adaptive MA" => "AdaptiveMA".to_string(),
         "MA Crossover" => "MACrossover".to_string(),
         "MACD Trend" => "MacdTrend".to_string(),
         "Parabolic SAR" => "ParabolicSAR".to_string(),
+        "Triple MA" => "TripleMA".to_string(),
+
+        // Phase 12.3 mean reversion strategies (display name → key)
+        "Bollinger Bands" => "BollingerBands".to_string(),
+        "RSI Reversion" => "RSIReversion".to_string(),
+        "Stochastic Reversion" => "StochReversion".to_string(),
+        "Stochastic Mean Reversion" => "StochReversion".to_string(),
+        "Z-Score Reversion" => "ZScoreReversion".to_string(),
+        "Z-Score Mean Reversion" => "ZScoreReversion".to_string(),
+        "Price Channel (Donchian)" => "PriceChannel".to_string(),
+        "Price Channel Mean Reversion" => "PriceChannel".to_string(),
+        "Keltner Channel" => "KeltnerReversion".to_string(),
+        "Keltner Channel Mean Reversion" => "KeltnerReversion".to_string(),
+        "Statistical Arbitrage" => "StatArb".to_string(),
+        "Statistical Arbitrage Mean Reversion" => "StatArb".to_string(),
+
+        // Phase 12.4 momentum strategies (display name → key)
+        "RSI Momentum" => "RsiMomentumStrategy".to_string(),
+        "MACD Momentum" => "MACDStrategy".to_string(),
+        "Rate of Change (ROC)" => "RocStrategy".to_string(),
+        "ROC Momentum" => "RocStrategy".to_string(),
+        "ADX Trend" => "AdxTrendStrategy".to_string(),
+        "Momentum Factor" => "MomentumFactorStrategy".to_string(),
+        "Volume Momentum" => "VolumeMomentumStrategy".to_string(),
+        "Multi-Timeframe Momentum" => "MultiTfMomentumStrategy".to_string(),
+        "Multi-TF Momentum" => "MultiTfMomentumStrategy".to_string(),
+
+        // Volatility-based strategies (display name → key)
+        "ATR Breakout" => "ATRBreakout".to_string(),
+        "ATR Trailing Stop" => "ATRTrailingStop".to_string(),
+        "Volatility Squeeze" => "VolatilitySqueeze".to_string(),
+        "Volatility Regime" => "VolatilityRegime".to_string(),
+        "Volatility-Adjusted Position Sizing" => "VolSizingStrategy".to_string(),
+        "GARCH-Based" => "GarchStrategy".to_string(),
+        "VIX-Style" => "VixStyleStrategy".to_string(),
+
+        // Baseline strategies (display name → key)
+        "HODL Baseline" => "HODL_Baseline".to_string(),
+        "Market Average Baseline" => "Market_Average_Baseline".to_string(),
+
+        // Strategy variations (display name → key)
+        "RSI" => "Rsi".to_string(),
+        "Stochastic" => "StochReversion".to_string(),
+        "Z Score" => "ZScoreReversion".to_string(),
+        "Donchian" => "PriceChannel".to_string(),
+        "Keltner" => "KeltnerReversion".to_string(),
+        "Stat Arb" => "StatArb".to_string(),
+        "ATR" => "ATRBreakout".to_string(),
+        "GARCH" => "GarchStrategy".to_string(),
+        "VIX" => "VixStyleStrategy".to_string(),
+        "EMA MACD" => "Momentum".to_string(),
+        "Rate of Change" => "RocStrategy".to_string(),
+        "ADX" => "AdxTrendStrategy".to_string(),
+        "SAR" => "ParabolicSAR".to_string(),
+        "KAMA" => "AdaptiveMA".to_string(),
+        "EMA" => "Momentum".to_string(),
+        "SMA" => "Breakout".to_string(),
+
+        // Strategy + "Strategy" suffix (display name → key)
+        "Golden Cross Strategy" => "GoldenCross".to_string(),
+        "MA Crossover Strategy" => "MACrossover".to_string(),
+        "Breakout Strategy" => "Breakout".to_string(),
+        "Mean Reversion Strategy" => "MeanReversion".to_string(),
+        "Trend Following Strategy" => "GoldenCross".to_string(),
+        "Momentum Strategy" => "Momentum".to_string(),
+        "Volatility Strategy" => "ATRBreakout".to_string(),
 
         // Already canonical / fallback - return as-is
         // This handles the case where the internal key is passed directly

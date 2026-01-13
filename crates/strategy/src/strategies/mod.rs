@@ -8,6 +8,7 @@ pub mod mean_reversion;
 pub mod momentum;
 pub mod rsi;
 pub mod trend_following;
+pub mod volatility;
 
 // Re-export strategies for convenience
 pub use golden_cross::GoldenCrossStrategy;
@@ -21,3 +22,6 @@ pub use mean_reversion::*;
 
 // Re-export momentum strategies
 pub use momentum::*;
+
+// Re-export volatility strategies
+pub use volatility::*;

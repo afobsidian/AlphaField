@@ -350,7 +350,188 @@ pub fn get_strategy_bounds(strategy_name: &str) -> Vec<ParamBounds> {
         ],
 
         // --------------------------------------------------------------------
+        // Phase 12.3: Mean Reversion Strategies
+        // --------------------------------------------------------------------
+        "BollingerBands" => vec![
+            ParamBounds::new("period", 10.0, 30.0, 5.0),
+            ParamBounds::new("std_dev", 1.5, 2.5, 0.5),
+            ParamBounds::new("take_profit", 2.0, 8.0, 2.0),
+            ParamBounds::new("stop_loss", 3.0, 8.0, 2.5),
+        ],
+        "RSIReversion" => vec![
+            ParamBounds::new("period", 7.0, 21.0, 7.0),
+            ParamBounds::new("lower_bound", 20.0, 35.0, 5.0),
+            ParamBounds::new("upper_bound", 65.0, 80.0, 5.0),
+            ParamBounds::new("take_profit", 2.0, 8.0, 2.0),
+            ParamBounds::new("stop_loss", 3.0, 8.0, 2.5),
+        ],
+        "StochReversion" => vec![
+            ParamBounds::new("k_period", 10.0, 20.0, 5.0),
+            ParamBounds::new("d_period", 3.0, 5.0, 1.0),
+            ParamBounds::new("lower_bound", 20.0, 30.0, 5.0),
+            ParamBounds::new("upper_bound", 70.0, 80.0, 5.0),
+            ParamBounds::new("take_profit", 2.0, 8.0, 2.0),
+            ParamBounds::new("stop_loss", 3.0, 8.0, 2.5),
+        ],
+        "ZScoreReversion" => vec![
+            ParamBounds::new("period", 20.0, 60.0, 10.0),
+            ParamBounds::new("entry_threshold", 1.5, 2.5, 0.5),
+            ParamBounds::new("exit_threshold", 0.5, 1.0, 0.5),
+            ParamBounds::new("take_profit", 2.0, 8.0, 2.0),
+            ParamBounds::new("stop_loss", 3.0, 8.0, 2.5),
+        ],
+        "PriceChannel" => vec![
+            ParamBounds::new("period", 10.0, 40.0, 10.0),
+            ParamBounds::new("take_profit", 2.0, 8.0, 2.0),
+            ParamBounds::new("stop_loss", 3.0, 8.0, 2.5),
+        ],
+        "KeltnerReversion" => vec![
+            ParamBounds::new("period", 10.0, 30.0, 5.0),
+            ParamBounds::new("multiplier", 1.5, 2.5, 0.5),
+            ParamBounds::new("take_profit", 2.0, 8.0, 2.0),
+            ParamBounds::new("stop_loss", 3.0, 8.0, 2.5),
+        ],
+        "StatArb" => vec![
+            ParamBounds::new("lookback", 20.0, 60.0, 10.0),
+            ParamBounds::new("entry_threshold", 1.5, 2.5, 0.5),
+            ParamBounds::new("exit_threshold", 0.5, 1.0, 0.5),
+            ParamBounds::new("take_profit", 2.0, 8.0, 2.0),
+            ParamBounds::new("stop_loss", 3.0, 8.0, 2.5),
+        ],
+
+        // --------------------------------------------------------------------
+        // Phase 12.4: Momentum Strategies
+        // --------------------------------------------------------------------
+        "RsiMomentumStrategy" => vec![
+            ParamBounds::new("period", 10.0, 20.0, 5.0),
+            ParamBounds::new("threshold", 50.0, 60.0, 5.0),
+            ParamBounds::new("take_profit", 3.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 3.0, 8.0, 2.5),
+        ],
+        "MACDStrategy" => vec![
+            ParamBounds::new("fast_period", 8.0, 15.0, 2.0),
+            ParamBounds::new("slow_period", 20.0, 30.0, 5.0),
+            ParamBounds::new("signal_period", 7.0, 12.0, 2.0),
+            ParamBounds::new("take_profit", 3.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 3.0, 8.0, 2.5),
+        ],
+        "RocStrategy" => vec![
+            ParamBounds::new("period", 10.0, 30.0, 5.0),
+            ParamBounds::new("threshold", 0.5, 2.0, 0.5),
+            ParamBounds::new("take_profit", 3.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 3.0, 8.0, 2.5),
+        ],
+        "AdxTrendStrategy" => vec![
+            ParamBounds::new("period", 10.0, 20.0, 5.0),
+            ParamBounds::new("threshold", 20.0, 30.0, 5.0),
+            ParamBounds::new("take_profit", 3.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 3.0, 8.0, 2.5),
+        ],
+        "MomentumFactorStrategy" => vec![
+            ParamBounds::new("lookback", 20.0, 60.0, 10.0),
+            ParamBounds::new("formation_period", 60.0, 120.0, 20.0),
+            ParamBounds::new("skip_period", 20.0, 40.0, 10.0),
+            ParamBounds::new("take_profit", 3.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 3.0, 8.0, 2.5),
+        ],
+        "VolumeMomentumStrategy" => vec![
+            ParamBounds::new("price_period", 10.0, 30.0, 5.0),
+            ParamBounds::new("volume_period", 10.0, 30.0, 5.0),
+            ParamBounds::new("volume_threshold", 1.2, 2.0, 0.2),
+            ParamBounds::new("take_profit", 3.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 3.0, 8.0, 2.5),
+        ],
+        "MultiTfMomentumStrategy" => vec![
+            ParamBounds::new("fast_ema", 5.0, 15.0, 5.0),
+            ParamBounds::new("medium_ema", 20.0, 40.0, 10.0),
+            ParamBounds::new("slow_ema", 50.0, 100.0, 25.0),
+            ParamBounds::new("take_profit", 3.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 3.0, 8.0, 2.5),
+        ],
+
+        // --------------------------------------------------------------------
+        // Baseline Strategies
+        // --------------------------------------------------------------------
+        "HODL_Baseline" => vec![ParamBounds::new("take_profit", 10.0, 50.0, 10.0)],
+        "Market_Average_Baseline" => vec![
+            ParamBounds::new("rebalance_period", 20.0, 60.0, 10.0),
+            ParamBounds::new("take_profit", 10.0, 50.0, 10.0),
+        ],
+
+        // --------------------------------------------------------------------
+        // Volatility-Based Strategies
+        // --------------------------------------------------------------------
+        "ATRBreakout" => vec![
+            ParamBounds::new("atr_period", 10.0, 20.0, 2.0),
+            ParamBounds::new("atr_multiplier", 1.0, 3.0, 0.5),
+            ParamBounds::new("lookback_period", 15.0, 30.0, 5.0),
+            ParamBounds::new("volume_multiplier", 1.2, 2.0, 0.2),
+            ParamBounds::new("sma_period", 40.0, 60.0, 10.0),
+            ParamBounds::new("take_profit", 5.0, 12.0, 2.0),
+            ParamBounds::new("stop_loss", 2.0, 6.0, 1.0),
+        ],
+        "ATRTrailingStop" => vec![
+            ParamBounds::new("atr_period", 10.0, 20.0, 2.0),
+            ParamBounds::new("atr_multiplier", 1.5, 3.0, 0.5),
+            ParamBounds::new("fast_period", 8.0, 15.0, 2.0),
+            ParamBounds::new("slow_period", 25.0, 40.0, 5.0),
+            ParamBounds::new("min_trailing_distance", 0.5, 2.0, 0.5),
+            ParamBounds::new("take_profit", 8.0, 15.0, 2.0),
+        ],
+        "VolatilitySqueeze" => vec![
+            ParamBounds::new("bb_period", 15.0, 25.0, 5.0),
+            ParamBounds::new("bb_std", 1.5, 2.5, 0.5),
+            ParamBounds::new("kc_period", 15.0, 25.0, 5.0),
+            ParamBounds::new("kc_multiplier", 1.5, 2.5, 0.5),
+            ParamBounds::new("take_profit", 3.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 2.0, 6.0, 1.0),
+        ],
+        "VolatilityRegime" => vec![
+            ParamBounds::new("atr_period", 10.0, 20.0, 2.0),
+            ParamBounds::new("regime_period", 50.0, 150.0, 25.0),
+            ParamBounds::new("low_threshold", 20.0, 40.0, 10.0),
+            ParamBounds::new("high_threshold", 60.0, 80.0, 10.0),
+            ParamBounds::new("take_profit", 3.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 2.0, 6.0, 1.0),
+        ],
+        "VolSizingStrategy" => vec![
+            ParamBounds::new("atr_period", 10.0, 20.0, 2.0),
+            ParamBounds::new("baseline_period", 80.0, 120.0, 20.0),
+            ParamBounds::new("risk_per_trade", 0.5, 2.5, 0.5),
+            ParamBounds::new("take_profit", 3.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 2.0, 6.0, 1.0),
+        ],
+        "GarchStrategy" => vec![
+            ParamBounds::new("lookback", 20.0, 60.0, 10.0),
+            ParamBounds::new("alpha", 0.05, 0.2, 0.05),
+            ParamBounds::new("beta", 0.7, 0.95, 0.05),
+            ParamBounds::new("volatility_threshold", 1.0, 2.5, 0.5),
+            ParamBounds::new("take_profit", 3.0, 10.0, 2.0),
+            ParamBounds::new("stop_loss", 2.0, 6.0, 1.0),
+        ],
+        "VixStyleStrategy" => vec![
+            ParamBounds::new("atr_period", 10.0, 20.0, 2.0),
+            ParamBounds::new("high_threshold", 25.0, 40.0, 5.0),
+            ParamBounds::new("low_threshold", 15.0, 25.0, 5.0),
+            ParamBounds::new("lookback", 10.0, 30.0, 5.0),
+            ParamBounds::new("take_profit", 5.0, 15.0, 2.5),
+            ParamBounds::new("stop_loss", 3.0, 8.0, 2.0),
+        ],
+
+        // --------------------------------------------------------------------
         // Existing strategies
+        // --------------------------------------------------------------------
+        "Momentum" => vec![
+            ParamBounds::new("ema_period", 30.0, 70.0, 20.0),
+            ParamBounds::new("macd_fast", 8.0, 15.0, 4.0),
+            ParamBounds::new("macd_slow", 20.0, 30.0, 5.0),
+            ParamBounds::new("macd_signal", 7.0, 11.0, 2.0),
+            ParamBounds::new("take_profit", 3.0, 8.0, 2.5),
+            ParamBounds::new("stop_loss", 3.0, 8.0, 2.5),
+        ],
+
+        // --------------------------------------------------------------------
+        // Existing strategies that were missing
         // --------------------------------------------------------------------
         "Rsi" => vec![
             ParamBounds::new("period", 7.0, 21.0, 7.0),
@@ -365,14 +546,10 @@ pub fn get_strategy_bounds(strategy_name: &str) -> Vec<ParamBounds> {
             ParamBounds::new("take_profit", 2.0, 6.0, 2.0),
             ParamBounds::new("stop_loss", 3.0, 8.0, 2.5),
         ],
-        "Momentum" => vec![
-            ParamBounds::new("ema_period", 30.0, 70.0, 20.0),
-            ParamBounds::new("macd_fast", 8.0, 15.0, 4.0),
-            ParamBounds::new("macd_slow", 20.0, 30.0, 5.0),
-            ParamBounds::new("macd_signal", 7.0, 11.0, 2.0),
-            ParamBounds::new("take_profit", 3.0, 8.0, 2.5),
-            ParamBounds::new("stop_loss", 3.0, 8.0, 2.5),
-        ],
+
+        // --------------------------------------------------------------------
+        // Additional baseline strategies (missing ones only)
+        // --------------------------------------------------------------------
         _ => vec![],
     }
 }

@@ -21,7 +21,7 @@ fn test_golden_cross_signals() {
 
     // Setup: Fast < Slow initially
     // We need enough bars to establish the trend
-    let prices = vec![
+    let prices = [
         100.0, 90.0, 80.0, 70.0, 60.0, // Now reverse trend sharply
         80.0, 100.0, 120.0, 140.0,
     ];

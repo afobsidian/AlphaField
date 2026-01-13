@@ -87,16 +87,10 @@
                         data-tab="orders"
                         onclick="switchTab('orders')"
                     >
-                        <button class="workflow-tab" data-tab="deploy" onclick="switchTab('deploy')">
-                            <span class="tab-number">4</span>
-                            <span class="tab-label">Deploy</span>
-                        </button>
-                        <span class="tab-arrow">→</span>
-                        <button class="workflow-tab" data-tab="orders" onclick="switchTab('orders')">
-                            <span class="tab-number">5</span>
-                            <span class="tab-label">Orders</span>
-                        </button>
-                    </nav>
+                        <span class="tab-number">5</span>
+                        <span class="tab-label">Orders</span>
+                    </button>
+                </nav>
 
                 <!-- Status Indicators -->
                 <div class="nav-status">
@@ -156,7 +150,10 @@
                                     oninput="filterStrategies(this.value)"
                                 />
                             </div>
-                            <div class="strategy-categories" id="strategy-categories">
+                            <div
+                                class="strategy-categories"
+                                id="strategy-categories"
+                            >
                                 <div class="strategy-loading">
                                     Loading strategies…
                                 </div>
@@ -1861,388 +1858,725 @@
                     </div>
                 </section>
 
-            <!-- ==================== TAB 5: ORDERS ==================== -->
-            <section id="orders-view" class="view-section">
-                <div class="view-header">
-                    <h1>📋 Advanced Order Management</h1>
-                    <p>OCO, bracket, iceberg, limit chase, and position management</p>
-                </div>
+                <!-- ==================== TAB 5: ORDERS ==================== -->
+                <section id="orders-view" class="view-section">
+                    <div class="view-header">
+                        <h1>📋 Advanced Order Management</h1>
+                        <p>
+                            OCO, bracket, iceberg, limit chase, and position
+                            management
+                        </p>
+                    </div>
 
-                <div class="orders-grid">
-                    <!-- Pending Orders -->
-                    <div class="card orders-queue-card">
-                        <div class="card-header">
-                            <h3>Pending Orders</h3>
-                            <div class="order-actions">
-                                <button type="button" class="btn btn-sm btn-secondary" onclick="refreshOrders()">
-                                    🔄 Refresh
-                                </button>
-                                <button type="button" class="btn btn-sm btn-danger" onclick="cancelAllOrders()">
-                                    ✖️ Cancel All
-                                </button>
+                    <div class="orders-grid">
+                        <!-- Pending Orders -->
+                        <div class="card orders-queue-card">
+                            <div class="card-header">
+                                <h3>Pending Orders</h3>
+                                <div class="order-actions">
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm btn-secondary"
+                                        onclick="refreshOrders()"
+                                    >
+                                        🔄 Refresh
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="btn btn-sm btn-danger"
+                                        onclick="cancelAllOrders()"
+                                    >
+                                        ✖️ Cancel All
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover orders-table">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Symbol</th>
+                                            <th>Side</th>
+                                            <th>Type</th>
+                                            <th>Qty</th>
+                                            <th>Price</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="pending-orders-table">
+                                        <tr>
+                                            <td
+                                                colspan="8"
+                                                class="text-center text-muted"
+                                            >
+                                                No pending orders
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
-                        <div class="table-responsive">
-                            <table class="table table-hover orders-table">
-                                <thead>
-                                    <tr>
-                                        <th>ID</th>
-                                        <th>Symbol</th>
-                                        <th>Side</th>
-                                        <th>Type</th>
-                                        <th>Qty</th>
-                                        <th>Price</th>
-                                        <th>Status</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="pending-orders-table">
-                                    <tr>
-                                        <td colspan="8" class="text-center text-muted">No pending orders</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
 
-                    <!-- Order Queue Summary -->
-                    <div class="card order-queue-summary">
-                        <h3>Order Queue Summary</h3>
-                        <div class="queue-stats">
-                            <div class="queue-stat">
-                                <span class="stat-label">Total Pending</span>
-                                <span class="stat-value" id="queue-total-count">0</span>
-                            </div>
-                            <div class="queue-stat">
-                                <span class="stat-label">Total Qty</span>
-                                <span class="stat-value" id="queue-total-qty">0.00</span>
-                            </div>
-                            <div class="queue-stat">
-                                <span class="stat-label">By Symbol</span>
-                                <span class="stat-value" id="queue-symbol-count">0</span>
+                        <!-- Order Queue Summary -->
+                        <div class="card order-queue-summary">
+                            <h3>Order Queue Summary</h3>
+                            <div class="queue-stats">
+                                <div class="queue-stat">
+                                    <span class="stat-label"
+                                        >Total Pending</span
+                                    >
+                                    <span
+                                        class="stat-value"
+                                        id="queue-total-count"
+                                        >0</span
+                                    >
+                                </div>
+                                <div class="queue-stat">
+                                    <span class="stat-label">Total Qty</span>
+                                    <span
+                                        class="stat-value"
+                                        id="queue-total-qty"
+                                        >0.00</span
+                                    >
+                                </div>
+                                <div class="queue-stat">
+                                    <span class="stat-label">By Symbol</span>
+                                    <span
+                                        class="stat-value"
+                                        id="queue-symbol-count"
+                                        >0</span
+                                    >
+                                </div>
                             </div>
                         </div>
-                    </div>
 
-                    <!-- Create OCO Order -->
-                    <div class="card order-form-card">
-                        <h3>🔄 OCO (One-Cancels-Other) Order</h3>
-                        <p class="form-hint">When one order fills, all other orders in the group are automatically canceled</p>
-                        <form id="oco-form" onsubmit="createOCOOrder(event)">
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Symbol</label>
-                                    <input type="text" id="oco-symbol" class="form-input" placeholder="BTCUSDT" required>
-                                </div>
-                            </div>
-                            <div class="oco-orders-list" id="oco-orders-list">
-                                <!-- Order rows added dynamically -->
-                                <div class="oco-order-row">
-                                    <div class="form-row">
-                                        <div class="form-group">
-                                            <label>Side</label>
-                                            <select class="form-select oco-side">
-                                                <option value="Buy">Buy</option>
-                                                <option value="Sell">Sell</option>
-                                            </select>
-                                        </div>
-                                        <div class="form-group">
-                                            <label>Type</label>
-                                            <select class="form-select oco-type" onchange="toggleOCOPrice(this)">
-                                                <option value="Limit">Limit</option>
-                                                <option value="Market">Market</option>
-                                            </select>
-                                        </div>
-                                        <div class="form-group oco-price-group">
-                                            <label>Price</label>
-                                            <input type="number" step="0.01" class="form-input oco-price" placeholder="0.00">
-                                        </div>
-                                        <div class="form-group">
-                                            <label>Quantity</label>
-                                            <input type="number" step="0.01" class="form-input oco-qty" placeholder="0.00">
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <button type="button" class="btn btn-secondary btn-sm" onclick="addOCOOrderRow()">
-                                + Add Another Order
-                            </button>
-                            <button type="submit" class="btn btn-primary btn-action">
-                                Submit OCO Order
-                            </button>
-                        </form>
-                    </div>
-
-                    <!-- Create Bracket Order -->
-                    <div class="card order-form-card">
-                        <h3>📐 Bracket Order</h3>
-                        <p class="form-hint">Entry order with automatically attached stop-loss and take-profit</p>
-                        <form id="bracket-form" onsubmit="createBracketOrder(event)">
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Symbol</label>
-                                    <input type="text" id="bracket-symbol" class="form-input" placeholder="BTCUSDT" required>
-                                </div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Entry Type</label>
-                                    <select class="form-select" id="bracket-entry-type" onchange="toggleBracketEntryPrice()">
-                                        <option value="Limit">Limit</option>
-                                        <option value="Market">Market</option>
-                                    </select>
-                                </div>
-                                <div class="form-group" id="bracket-entry-price-group">
-                                    <label>Entry Price</label>
-                                    <input type="number" step="0.01" id="bracket-entry-price" class="form-input" placeholder="0.00">
-                                </div>
-                                <div class="form-group">
-                                    <label>Quantity</label>
-                                    <input type="number" step="0.01" id="bracket-qty" class="form-input" placeholder="0.00" required>
-                                </div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Stop Loss Price</label>
-                                    <input type="number" step="0.01" id="bracket-sl" class="form-input" placeholder="0.00" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>SL Quantity</label>
-                                    <input type="number" step="0.01" id="bracket-sl-qty" class="form-input" placeholder="Same as entry">
-                                </div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Take Profit Price</label>
-                                    <input type="number" step="0.01" id="bracket-tp" class="form-input" placeholder="0.00" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>TP Quantity</label>
-                                    <input type="number" step="0.01" id="bracket-tp-qty" class="form-input" placeholder="Same as entry">
-                                </div>
-                            </div>
-                            <button type="submit" class="btn btn-primary btn-action">
-                                Submit Bracket Order
-                            </button>
-                        </form>
-                    </div>
-
-                    <!-- Create Iceberg Order -->
-                    <div class="card order-form-card">
-                        <h3>🧊 Iceberg Order</h3>
-                        <p class="form-hint">Split large orders into smaller visible portions to minimize market impact</p>
-                        <form id="iceberg-form" onsubmit="createIcebergOrder(event)">
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Symbol</label>
-                                    <input type="text" id="iceberg-symbol" class="form-input" placeholder="BTCUSDT" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>Side</label>
-                                    <select class="form-select" id="iceberg-side">
-                                        <option value="Buy">Buy</option>
-                                        <option value="Sell">Sell</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Limit Price</label>
-                                    <input type="number" step="0.01" id="iceberg-price" class="form-input" placeholder="0.00" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>Total Quantity</label>
-                                    <input type="number" step="0.01" id="iceberg-total-qty" class="form-input" placeholder="0.00" required>
-                                </div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Visible Quantity (per slice)</label>
-                                    <input type="number" step="0.01" id="iceberg-visible-qty" class="form-input" placeholder="0.00" required>
-                                </div>
-                                <div class="form-group">
-                                    <label class="form-hint">Slices: <span id="iceberg-slices">0</span></label>
-                                </div>
-                            </div>
-                            <button type="submit" class="btn btn-primary btn-action">
-                                Submit Iceberg Order
-                            </button>
-                        </form>
-                    </div>
-
-                    <!-- Create Limit Chase Order -->
-                    <div class="card order-form-card">
-                        <h3>🏃 Limit Chase Order</h3>
-                        <p class="form-hint">Automatically adjust limit order if price moves away without filling</p>
-                        <form id="chase-form" onsubmit="createLimitChaseOrder(event)">
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Symbol</label>
-                                    <input type="text" id="chase-symbol" class="form-input" placeholder="BTCUSDT" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>Side</label>
-                                    <select class="form-select" id="chase-side">
-                                        <option value="Buy">Buy</option>
-                                        <option value="Sell">Sell</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Initial Limit Price</label>
-                                    <input type="number" step="0.01" id="chase-price" class="form-input" placeholder="0.00" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>Quantity</label>
-                                    <input type="number" step="0.01" id="chase-qty" class="form-input" placeholder="0.00" required>
-                                </div>
-                            </div>
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label>Chase Amount</label>
-                                    <input type="number" step="0.01" id="chase-amount" class="form-input" placeholder="1.0" required>
-                                </div>
-                                <div class="form-group">
-                                    <label>Amount Type</label>
-                                    <select class="form-select" id="chase-type">
-                                        <option value="percentage">Percentage (%)</option>
-                                        <option value="absolute">Absolute Price</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label>Max Adjustments</label>
-                                <input type="number" id="chase-max-adj" class="form-input" value="5" min="1" max="20" required>
-                            </div>
-                            <button type="submit" class="btn btn-primary btn-action">
-                                Submit Limit Chase Order
-                            </button>
-                        </form>
-                    </div>
-
-                    <!-- Position Management -->
-                    <div class="card position-mgmt-card">
-                        <h3>📊 Position Management</h3>
-
-                        <!-- Scale In/Out -->
-                        <div class="mgmt-section">
-                            <h4>Scale Position</h4>
-                            <form class="mgmt-form" onsubmit="scalePosition(event)">
+                        <!-- Create OCO Order -->
+                        <div class="card order-form-card">
+                            <h3>🔄 OCO (One-Cancels-Other) Order</h3>
+                            <p class="form-hint">
+                                When one order fills, all other orders in the
+                                group are automatically canceled
+                            </p>
+                            <form
+                                id="oco-form"
+                                onsubmit="createOCOOrder(event)"
+                            >
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label>Symbol</label>
-                                        <input type="text" id="scale-symbol" class="form-input" placeholder="BTCUSDT" required>
+                                        <input
+                                            type="text"
+                                            id="oco-symbol"
+                                            class="form-input"
+                                            placeholder="BTCUSDT"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div
+                                    class="oco-orders-list"
+                                    id="oco-orders-list"
+                                >
+                                    <!-- Order rows added dynamically -->
+                                    <div class="oco-order-row">
+                                        <div class="form-row">
+                                            <div class="form-group">
+                                                <label>Side</label>
+                                                <select
+                                                    class="form-select oco-side"
+                                                >
+                                                    <option value="Buy">
+                                                        Buy
+                                                    </option>
+                                                    <option value="Sell">
+                                                        Sell
+                                                    </option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Type</label>
+                                                <select
+                                                    class="form-select oco-type"
+                                                    onchange="
+                                                        toggleOCOPrice(this)
+                                                    "
+                                                >
+                                                    <option value="Limit">
+                                                        Limit
+                                                    </option>
+                                                    <option value="Market">
+                                                        Market
+                                                    </option>
+                                                </select>
+                                            </div>
+                                            <div
+                                                class="form-group oco-price-group"
+                                            >
+                                                <label>Price</label>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    class="form-input oco-price"
+                                                    placeholder="0.00"
+                                                />
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Quantity</label>
+                                                <input
+                                                    type="number"
+                                                    step="0.01"
+                                                    class="form-input oco-qty"
+                                                    placeholder="0.00"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    class="btn btn-secondary btn-sm"
+                                    onclick="addOCOOrderRow()"
+                                >
+                                    + Add Another Order
+                                </button>
+                                <button
+                                    type="submit"
+                                    class="btn btn-primary btn-action"
+                                >
+                                    Submit OCO Order
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Create Bracket Order -->
+                        <div class="card order-form-card">
+                            <h3>📐 Bracket Order</h3>
+                            <p class="form-hint">
+                                Entry order with automatically attached
+                                stop-loss and take-profit
+                            </p>
+                            <form
+                                id="bracket-form"
+                                onsubmit="createBracketOrder(event)"
+                            >
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Symbol</label>
+                                        <input
+                                            type="text"
+                                            id="bracket-symbol"
+                                            class="form-input"
+                                            placeholder="BTCUSDT"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Entry Type</label>
+                                        <select
+                                            class="form-select"
+                                            id="bracket-entry-type"
+                                            onchange="toggleBracketEntryPrice()"
+                                        >
+                                            <option value="Limit">Limit</option>
+                                            <option value="Market">
+                                                Market
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div
+                                        class="form-group"
+                                        id="bracket-entry-price-group"
+                                    >
+                                        <label>Entry Price</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            id="bracket-entry-price"
+                                            class="form-input"
+                                            placeholder="0.00"
+                                        />
                                     </div>
                                     <div class="form-group">
                                         <label>Quantity</label>
-                                        <input type="number" step="0.01" id="scale-qty" class="form-input" placeholder="+ to add, - to reduce" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Price (optional)</label>
-                                        <input type="number" step="0.01" id="scale-price" class="form-input" placeholder="Market if empty">
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            id="bracket-qty"
+                                            class="form-input"
+                                            placeholder="0.00"
+                                            required
+                                        />
                                     </div>
                                 </div>
-                                <button type="submit" class="btn btn-secondary">
-                                    Scale Position
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Stop Loss Price</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            id="bracket-sl"
+                                            class="form-input"
+                                            placeholder="0.00"
+                                            required
+                                        />
+                                    </div>
+                                    <div class="form-group">
+                                        <label>SL Quantity</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            id="bracket-sl-qty"
+                                            class="form-input"
+                                            placeholder="Same as entry"
+                                        />
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Take Profit Price</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            id="bracket-tp"
+                                            class="form-input"
+                                            placeholder="0.00"
+                                            required
+                                        />
+                                    </div>
+                                    <div class="form-group">
+                                        <label>TP Quantity</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            id="bracket-tp-qty"
+                                            class="form-input"
+                                            placeholder="Same as entry"
+                                        />
+                                    </div>
+                                </div>
+                                <button
+                                    type="submit"
+                                    class="btn btn-primary btn-action"
+                                >
+                                    Submit Bracket Order
                                 </button>
                             </form>
                         </div>
 
-                        <!-- Partial Take Profit -->
-                        <div class="mgmt-section">
-                            <h4>Partial Take Profit</h4>
-                            <form class="mgmt-form" onsubmit="partialTakeProfit(event)">
+                        <!-- Create Iceberg Order -->
+                        <div class="card order-form-card">
+                            <h3>🧊 Iceberg Order</h3>
+                            <p class="form-hint">
+                                Split large orders into smaller visible portions
+                                to minimize market impact
+                            </p>
+                            <form
+                                id="iceberg-form"
+                                onsubmit="createIcebergOrder(event)"
+                            >
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label>Symbol</label>
-                                        <input type="text" id="tp-symbol" class="form-input" placeholder="BTCUSDT" required>
+                                        <input
+                                            type="text"
+                                            id="iceberg-symbol"
+                                            class="form-input"
+                                            placeholder="BTCUSDT"
+                                            required
+                                        />
                                     </div>
                                     <div class="form-group">
-                                        <label>Close Quantity</label>
-                                        <input type="number" step="0.01" id="tp-close-qty" class="form-input" placeholder="0.00" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Target Price</label>
-                                        <input type="number" step="0.01" id="tp-price" class="form-input" placeholder="0.00" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Remaining Qty</label>
-                                        <input type="number" step="0.01" id="tp-remaining" class="form-input" placeholder="0.00" required>
+                                        <label>Side</label>
+                                        <select
+                                            class="form-select"
+                                            id="iceberg-side"
+                                        >
+                                            <option value="Buy">Buy</option>
+                                            <option value="Sell">Sell</option>
+                                        </select>
                                     </div>
                                 </div>
-                                <button type="submit" class="btn btn-secondary">
-                                    Submit Partial TP
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Limit Price</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            id="iceberg-price"
+                                            class="form-input"
+                                            placeholder="0.00"
+                                            required
+                                        />
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Total Quantity</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            id="iceberg-total-qty"
+                                            class="form-input"
+                                            placeholder="0.00"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label
+                                            >Visible Quantity (per slice)</label
+                                        >
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            id="iceberg-visible-qty"
+                                            class="form-input"
+                                            placeholder="0.00"
+                                            required
+                                        />
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-hint"
+                                            >Slices:
+                                            <span id="iceberg-slices"
+                                                >0</span
+                                            ></label
+                                        >
+                                    </div>
+                                </div>
+                                <button
+                                    type="submit"
+                                    class="btn btn-primary btn-action"
+                                >
+                                    Submit Iceberg Order
                                 </button>
                             </form>
                         </div>
 
-                        <!-- Break-Even Stop -->
-                        <div class="mgmt-section">
-                            <h4>Break-Even Stop</h4>
-                            <form class="mgmt-form" onsubmit="moveBreakEvenStop(event)">
+                        <!-- Create Limit Chase Order -->
+                        <div class="card order-form-card">
+                            <h3>🏃 Limit Chase Order</h3>
+                            <p class="form-hint">
+                                Automatically adjust limit order if price moves
+                                away without filling
+                            </p>
+                            <form
+                                id="chase-form"
+                                onsubmit="createLimitChaseOrder(event)"
+                            >
                                 <div class="form-row">
                                     <div class="form-group">
                                         <label>Symbol</label>
-                                        <input type="text" id="be-symbol" class="form-input" placeholder="BTCUSDT" required>
+                                        <input
+                                            type="text"
+                                            id="chase-symbol"
+                                            class="form-input"
+                                            placeholder="BTCUSDT"
+                                            required
+                                        />
                                     </div>
                                     <div class="form-group">
-                                        <label>Entry Price</label>
-                                        <input type="number" step="0.01" id="be-entry" class="form-input" placeholder="0.00" required>
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Stop Offset</label>
-                                        <input type="number" step="0.01" id="be-offset" class="form-input" placeholder="0.00" required>
+                                        <label>Side</label>
+                                        <select
+                                            class="form-select"
+                                            id="chase-side"
+                                        >
+                                            <option value="Buy">Buy</option>
+                                            <option value="Sell">Sell</option>
+                                        </select>
                                     </div>
                                 </div>
-                                <button type="submit" class="btn btn-secondary">
-                                    Move to Break-Even
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Initial Limit Price</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            id="chase-price"
+                                            class="form-input"
+                                            placeholder="0.00"
+                                            required
+                                        />
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Quantity</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            id="chase-qty"
+                                            class="form-input"
+                                            placeholder="0.00"
+                                            required
+                                        />
+                                    </div>
+                                </div>
+                                <div class="form-row">
+                                    <div class="form-group">
+                                        <label>Chase Amount</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            id="chase-amount"
+                                            class="form-input"
+                                            placeholder="1.0"
+                                            required
+                                        />
+                                    </div>
+                                    <div class="form-group">
+                                        <label>Amount Type</label>
+                                        <select
+                                            class="form-select"
+                                            id="chase-type"
+                                        >
+                                            <option value="percentage">
+                                                Percentage (%)
+                                            </option>
+                                            <option value="absolute">
+                                                Absolute Price
+                                            </option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Max Adjustments</label>
+                                    <input
+                                        type="number"
+                                        id="chase-max-adj"
+                                        class="form-input"
+                                        value="5"
+                                        min="1"
+                                        max="20"
+                                        required
+                                    />
+                                </div>
+                                <button
+                                    type="submit"
+                                    class="btn btn-primary btn-action"
+                                >
+                                    Submit Limit Chase Order
                                 </button>
                             </form>
                         </div>
+
+                        <!-- Position Management -->
+                        <div class="card position-mgmt-card">
+                            <h3>📊 Position Management</h3>
+
+                            <!-- Scale In/Out -->
+                            <div class="mgmt-section">
+                                <h4>Scale Position</h4>
+                                <form
+                                    class="mgmt-form"
+                                    onsubmit="scalePosition(event)"
+                                >
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>Symbol</label>
+                                            <input
+                                                type="text"
+                                                id="scale-symbol"
+                                                class="form-input"
+                                                placeholder="BTCUSDT"
+                                                required
+                                            />
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Quantity</label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                id="scale-qty"
+                                                class="form-input"
+                                                placeholder="+ to add, - to reduce"
+                                                required
+                                            />
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Price (optional)</label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                id="scale-price"
+                                                class="form-input"
+                                                placeholder="Market if empty"
+                                            />
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        class="btn btn-secondary"
+                                    >
+                                        Scale Position
+                                    </button>
+                                </form>
+                            </div>
+
+                            <!-- Partial Take Profit -->
+                            <div class="mgmt-section">
+                                <h4>Partial Take Profit</h4>
+                                <form
+                                    class="mgmt-form"
+                                    onsubmit="partialTakeProfit(event)"
+                                >
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>Symbol</label>
+                                            <input
+                                                type="text"
+                                                id="tp-symbol"
+                                                class="form-input"
+                                                placeholder="BTCUSDT"
+                                                required
+                                            />
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Close Quantity</label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                id="tp-close-qty"
+                                                class="form-input"
+                                                placeholder="0.00"
+                                                required
+                                            />
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Target Price</label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                id="tp-price"
+                                                class="form-input"
+                                                placeholder="0.00"
+                                                required
+                                            />
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Remaining Qty</label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                id="tp-remaining"
+                                                class="form-input"
+                                                placeholder="0.00"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        class="btn btn-secondary"
+                                    >
+                                        Submit Partial TP
+                                    </button>
+                                </form>
+                            </div>
+
+                            <!-- Break-Even Stop -->
+                            <div class="mgmt-section">
+                                <h4>Break-Even Stop</h4>
+                                <form
+                                    class="mgmt-form"
+                                    onsubmit="moveBreakEvenStop(event)"
+                                >
+                                    <div class="form-row">
+                                        <div class="form-group">
+                                            <label>Symbol</label>
+                                            <input
+                                                type="text"
+                                                id="be-symbol"
+                                                class="form-input"
+                                                placeholder="BTCUSDT"
+                                                required
+                                            />
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Entry Price</label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                id="be-entry"
+                                                class="form-input"
+                                                placeholder="0.00"
+                                                required
+                                            />
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Stop Offset</label>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                id="be-offset"
+                                                class="form-input"
+                                                placeholder="0.00"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        class="btn btn-secondary"
+                                    >
+                                        Move to Break-Even
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Active Advanced Orders -->
+                        <div class="card active-orders-card">
+                            <h3>Active Advanced Orders</h3>
+
+                            <!-- OCO Orders -->
+                            <div class="order-subsection">
+                                <h4>OCO Orders</h4>
+                                <div
+                                    id="active-oco-orders"
+                                    class="empty-section"
+                                >
+                                    No active OCO orders
+                                </div>
+                            </div>
+
+                            <!-- Bracket Orders -->
+                            <div class="order-subsection">
+                                <h4>Bracket Orders</h4>
+                                <div
+                                    id="active-bracket-orders"
+                                    class="empty-section"
+                                >
+                                    No active bracket orders
+                                </div>
+                            </div>
+
+                            <!-- Iceberg Orders -->
+                            <div class="order-subsection">
+                                <h4>Iceberg Orders</h4>
+                                <div
+                                    id="active-iceberg-orders"
+                                    class="empty-section"
+                                >
+                                    No active iceberg orders
+                                </div>
+                            </div>
+
+                            <!-- Limit Chase Orders -->
+                            <div class="order-subsection">
+                                <h4>Limit Chase Orders</h4>
+                                <div
+                                    id="active-chase-orders"
+                                    class="empty-section"
+                                >
+                                    No active limit chase orders
+                                </div>
+                            </div>
+                        </div>
                     </div>
-
-                    <!-- Active Advanced Orders -->
-                    <div class="card active-orders-card">
-                        <h3>Active Advanced Orders</h3>
-
-                        <!-- OCO Orders -->
-                        <div class="order-subsection">
-                            <h4>OCO Orders</h4>
-                            <div id="active-oco-orders" class="empty-section">
-                                No active OCO orders
-                            </div>
-                        </div>
-
-                        <!-- Bracket Orders -->
-                        <div class="order-subsection">
-                            <h4>Bracket Orders</h4>
-                            <div id="active-bracket-orders" class="empty-section">
-                                No active bracket orders
-                            </div>
-                        </div>
-
-                        <!-- Iceberg Orders -->
-                        <div class="order-subsection">
-                            <h4>Iceberg Orders</h4>
-                            <div id="active-iceberg-orders" class="empty-section">
-                                No active iceberg orders
-                            </div>
-                        </div>
-
-                        <!-- Limit Chase Orders -->
-                        <div class="order-subsection">
-                            <h4>Limit Chase Orders</h4>
-                            <div id="active-chase-orders" class="empty-section">
-                                No active limit chase orders
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-        </main>
-    </div>
-    <script src="app.js"></script>
-</body>
+                </section>
+            </main>
+        </div>
+        <script src="app.js"></script>
+    </body>
 </html>
