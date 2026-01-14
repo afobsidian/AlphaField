@@ -1,0 +1,17 @@
+Create environment.json
+
+{
+  "workdir": "/workdir",
+  "base_image": "ubuntu:24.04",
+  "setup_commands": [
+    "apt-get update -y",
+    "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends build-essential make curl ca-certificates git pkg-config libssl-dev libpq-dev postgresql-client python3 python3-pip jq cmake clang-format",
+    "curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && apt-get install -y nodejs",
+    "npm install -g pnpm || true",
+    "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y",
+    "echo 'export PATH=\"$HOME/.cargo/bin:$PATH\"' > /etc/profile.d/cargo.sh && chmod +x /etc/profile.d/cargo.sh",
+    "rustup default stable",
+    "rustup component add clippy rustfmt",
+    "cargo install --locked cargo-make || true"
+  ]
+}
