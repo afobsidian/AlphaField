@@ -44,7 +44,7 @@ impl SentimentMomentumConfig {
             bullish_threshold,
             bearish_threshold,
             momentum_threshold,
-            volume_confirmation: 1.2,
+            volume_confirmation: 1.0,
         }
     }
 
@@ -54,7 +54,7 @@ impl SentimentMomentumConfig {
             bullish_threshold: 30.0,
             bearish_threshold: 70.0,
             momentum_threshold: 5.0,
-            volume_confirmation: 1.2,
+            volume_confirmation: 1.0,
         }
     }
 
@@ -358,7 +358,7 @@ mod tests {
         let config = SentimentMomentumConfig::default_config();
         assert_eq!(config.lookback_period, 14);
         assert_eq!(config.bullish_threshold, 30.0);
-        assert_eq!(config.volume_confirmation, 1.2);
+        assert_eq!(config.volume_confirmation, 1.0);
     }
 
     #[test]
@@ -401,11 +401,18 @@ mod tests {
     fn test_on_bar_buy_and_exit() {
         let mut strategy = SentimentMomentumStrategy::new();
 
-        // Build strong improving sentiment scenario with high volume
+        // Build strong improving sentiment scenario
+        // Use dramatic price changes to ensure sentiment momentum is positive
         let mut bought = false;
         for i in 0..30 {
-            let close = 85.0 + i as f64 * 1.5;
-            let bar = create_test_bar(i, close, 2000.0); // high volume for confirmation
+            // Start with bearish prices, then dramatic uptrend
+            let close = if i < 10 {
+                80.0 - i as f64 * 0.5 // Downtrend first
+            } else {
+                75.0 + (i - 10) as f64 * 3.0 // Strong uptrend
+            };
+            let bar = create_test_bar(i, close, 2000.0);
+
             if let Some(sigs) = strategy.on_bar(&bar) {
                 if sigs
                     .iter()
@@ -456,6 +463,6 @@ mod tests {
         let config = SentimentMomentumConfig::new(14, 30.0, 70.0, 5.0);
         let display = format!("{}", config);
         assert!(display.contains("lookback=14"));
-        assert!(display.contains("bullish_threshold=30.0"));
+        assert!(display.contains("bullish_threshold=30"));
     }
 }

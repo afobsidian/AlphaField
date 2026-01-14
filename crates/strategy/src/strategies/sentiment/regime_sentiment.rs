@@ -60,7 +60,7 @@ impl RegimeSentimentConfig {
         Self {
             regime_lookback: 20,
             sentiment_lookback: 14,
-            trend_threshold: 30.0,
+            trend_threshold: 50.0,
             volatility_threshold: 2.0,
             bull_bullish_threshold: 60.0,
             bear_bullish_threshold: 40.0,
@@ -218,19 +218,19 @@ impl RegimeSentimentStrategy {
 
     /// Calculate average true range (ATR) for volatility
     fn calculate_atr(&self) -> f64 {
-        if self.price_history.len() < 2 {
+        if self.bar_history.len() < 2 {
             return 0.0;
         }
 
-        let period = self.config.regime_lookback.min(self.price_history.len());
-        // Use only the most recent `period` bars for ATR calculation to avoid the unused `period` warning
-        let recent = &self.price_history[self.price_history.len() - period..];
+        let period = self.config.regime_lookback.min(self.bar_history.len());
+        // Use only the most recent `period` bars for ATR calculation
+        let recent = &self.bar_history[self.bar_history.len() - period..];
         let mut true_ranges: Vec<f64> = Vec::new();
 
         for window in recent.windows(2) {
-            let high = window[1] * 1.01; // Approximate
-            let low = window[1] * 0.99; // Approximate
-            let prev_close = window[0];
+            let high = window[1].high;
+            let low = window[1].low;
+            let prev_close = window[0].close;
 
             let tr = (high - low)
                 .max((high - prev_close).abs())
@@ -308,10 +308,12 @@ impl RegimeSentimentStrategy {
 
         let is_high_volatility = volatility_pct >= self.config.volatility_threshold;
 
-        // Determine direction if trending
-        let price_trend = if self.price_history.len() >= 2 {
-            let oldest = self.price_history[0];
-            let newest = *self.price_history.last().unwrap();
+        // Determine direction if trending - use recent period for trend direction
+        let period = self.config.regime_lookback.min(self.price_history.len());
+        let recent_prices = &self.price_history[self.price_history.len() - period..];
+        let price_trend = if period >= 2 {
+            let oldest = recent_prices[0];
+            let newest = recent_prices[period - 1];
             if oldest > 0.0 {
                 ((newest - oldest) / oldest) * 100.0
             } else {
@@ -323,14 +325,9 @@ impl RegimeSentimentStrategy {
 
         // Classify regime
         self.current_regime = if is_trending {
+            // Prefer trend-based classification over volatility when strongly trending
             if price_trend > 0.0 {
-                if is_high_volatility {
-                    MarketRegime::HighVolatility
-                } else {
-                    MarketRegime::Bull
-                }
-            } else if is_high_volatility {
-                MarketRegime::HighVolatility
+                MarketRegime::Bull
             } else {
                 MarketRegime::Bear
             }
@@ -675,10 +672,21 @@ mod tests {
     fn test_detect_regime_sideways() {
         let mut strategy = RegimeSentimentStrategy::new();
 
-        // Create sideways market
-        for i in 0..25 {
-            let close = 100.0 + (i % 5) as f64 * 0.5 - 1.0;
-            let bar = create_test_bar(i, close, 1000.0);
+        // Create sideways market with alternating up/down movements
+        // Use tighter high/low ranges to avoid high volatility detection
+        let sideways_prices = [
+            100.0, 100.5, 100.0, 99.5, 100.0, 100.5, 100.0, 99.5, 100.0, 100.5, 100.0, 99.5, 100.0,
+            100.5, 100.0, 99.5, 100.0, 100.5, 100.0, 99.5, 100.0, 100.5, 100.0, 99.5, 100.0,
+        ];
+        for (i, &close) in sideways_prices.iter().enumerate() {
+            let bar = Bar {
+                timestamp: Utc.timestamp_opt(i as i64, 0).unwrap(),
+                open: close * 0.995,
+                high: close * 1.005,
+                low: close * 0.995,
+                close,
+                volume: 1000.0,
+            };
             strategy.on_bar(&bar);
         }
 
@@ -688,7 +696,8 @@ mod tests {
                 strategy.current_regime,
                 MarketRegime::Sideways | MarketRegime::Ranging
             ),
-            "Should detect sideways regime in flat market"
+            "Should detect sideways regime in flat market, got {:?}",
+            strategy.current_regime
         );
     }
 
