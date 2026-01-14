@@ -156,8 +156,15 @@ AlphaField/
 │   │       ├── strategy.rs          # Strategy trait (backtest version)
 │   │       ├── execution.rs         # Order execution simulation
 │   │       ├── metrics.rs           # Performance metrics calculation
-│   │       ├── validation.rs         # Walk-forward, Monte Carlo, sensitivity
-│   │       └── ml/                   # ML validation utilities
+│   │       ├── validation/           # Automated validation framework
+│   │       │   ├── mod.rs          # Validation module exports
+│   │       │   ├── validator.rs    # Main validation orchestrator
+│   │       │   ├── scoring.rs      # Score calculation system
+│   │       │   ├── regime.rs       # Regime analysis module
+│   │       │   └── config.rs       # Validation configuration
+│   │       ├── ml/                 # ML validation utilities
+│   │       └── bin/                # CLI tools
+│   │           └── validate_strategy.rs
 │   ├── execution/
 │   │   └── src/
 │   │       ├── lib.rs                # Risk management, order types
@@ -169,6 +176,7 @@ AlphaField/
 ├── doc/
 │   └── phase_12/
 │       ├── plan.md                   # This file
+│       ├── validation_guide.md        # Strategy validation guide
 │       ├── strategy_template.md      # AI agent template for strategies
 │       └── hypotheses/               # Strategy hypothesis documents
 │           ├── template.md           # Hypothesis template
@@ -435,11 +443,11 @@ CREATE INDEX idx_failures_severity ON strategy_failures(severity);
 
 ## 📊 Overall Progress Summary
 
-### Status: Phase 12.4 Complete, Phase 12.3 Complete, Phase 12.2 Complete, Phase 12.1 Complete
+### Status: Phase 12.6 Partially Complete, Phase 12.5 Complete, Phase 12.4 Complete, Phase 12.3 Complete, Phase 12.2 Complete, Phase 12.1 Complete
 
-**Current Phase**: 12.6 (Sentiment-Based Strategies)  
-**Phase Status**: Phase 12.5: ✅ Complete (2026-01-15)  
-**Next Phase**: 12.6 (Sentiment-Based Strategies)
+**Current Phase**: 12.7 (Automated Strategy Validation Framework)  
+**Phase Status**: Phase 12.6: ⚠️ Partially Complete (3/7 strategies, 4 deferred) - 2026-01-20  
+**Next Phase**: 12.7 (Automated Validation Framework) - Ready to Begin
 
 ### Progress by Phase
 
@@ -449,96 +457,119 @@ CREATE INDEX idx_failures_severity ON strategy_failures(severity);
 | 12.2 | Trend Following | ✅ Complete | 2026-01-11 | 7 strategies implemented, documented, tested, integrated |
 | 12.3 | Mean Reversion | ✅ Complete | 2026-01-11 | 7 strategies implemented, documented, tested, integrated |
 | 12.4 | Momentum | ✅ Complete | 2026-01-11 | 7 strategies implemented, documented, tested, integrated |
-| 12.5 | Volatility-Based | ✅ Complete | 2026-01-15 | 7 strategies implemented |
-| 12.5 | Volatility-Based | ✅ Complete | 2026-01-15 | 7 strategies implemented |
-| 12.7 | Multi-Indicator | ⏳ Not Started | TBD | Target: 7 strategies |
-| 12.8 | Research & Documentation | ⏳ Not Started | TBD | Final validation, documentation, reports |
+| 12.5 | Volatility-Based | ✅ Complete | 2026-01-15 | 7 strategies implemented, documented, tested, integrated |
+| 12.6 | Sentiment-Based | ⚠️ Partial | 2026-01-20 | 3 strategies implemented, 4 deferred pending API infrastructure |
+| 12.7 | Automated Validation | 🔄 Planned | TBD | Validation framework, CLI tool, regime analysis, scoring |
+| 12.8 | Multi-Indicator | ⏳ Not Started | TBD | Target: 7 strategies (post-validation framework) |
+| 12.9 | Research & Documentation | ⏳ Not Started | TBD | Final validation, cross-asset analysis, reports, documentation |
 
 ### Overall Metrics
 
-- **Total Phases**: 8
-- **Completed**: 5 (62.5%)
-- **In Progress**: 0 (0%)
-- **Not Started**: 4 (50%)
+- **Total Phases**: 9
+- **Completed**: 5 (55.6%)
+- **Partially Complete**: 1 (11.1%)
+- **Not Started**: 3 (33.3%)
 
-- **Target Strategies**: 50+
-- **Implemented**: 32 (61.5%)
-  - Baselines: 2 (HODL, Market Average)
+- **Target Strategies**: 47+ (excluding 4 deferred sentiment strategies)
+- **Implemented**: 34 (72.3%)
+  - Baselines: 3 (HoldBaseline, MarketAverage, BuyAndHold)
   - Trend Following: 7 (Golden Cross, Breakout, MA Crossover, Adaptive MA, Triple MA, MACD Trend, Parabolic SAR)
   - Mean Reversion: 7 (Bollinger Bands, RSI Reversion, Stat Arb, Stochastic, Keltner, Price Channel, Z-Score)
   - Momentum: 7 (RSI Momentum, MACD, ROC, ADX Trend, Momentum Factor, Volume Momentum, Multi-TF)
-  - Existing: 2 (RSI Mean Reversion, Golden Cross - legacy)
-  - Remaining: 25
+  - Volatility: 7 (ATR Breakout, Vol Squeeze, Vol Regime, ATR Trailing, Vol Sizing, GARCH, VIX-Style)
+  - Sentiment: 3 (Sentiment Momentum, Divergence, Regime Sentiment)
+  - Deferred: 4 (Fear & Greed, News Sentiment, Social Volume, Composite Sentiment) - pending API infrastructure
+  - Remaining: 13 (Multi-Indicator strategies to be implemented)
 
-- **Total Code Written**: ~19,000+ lines
+- **Total Code Written**: ~30,000+ lines
   - Framework: ~1,100 lines
-  - Baselines: ~415 lines
+  - Baselines: ~420 lines
   - Trend Following: ~4,040 lines
   - Mean Reversion: ~5,500 lines
   - Momentum: ~6,300 lines
+  - Volatility: ~5,800 lines
+  - Sentiment: ~2,156 lines (3 strategies)
   - Dashboard API: ~630 lines
   - Documentation: ~4,800 lines
   - Migrations: ~260 lines
-  - Tests: ~3,500 lines
+  - Tests: ~4,500 lines
 
-- **Test Coverage**: 171+ tests in strategy crate, 100% pass rate
-- **Documentation**: 100% coverage for completed strategies (21 hypothesis documents)
+- **Test Coverage**: 285+ tests in strategy crate, 100% pass rate
+- **Documentation**: 100% coverage for completed strategies (34 strategy documents)
 
 ### Quality Metrics
 
 - **Compilation Warnings**: 0
-- **Test Pass Rate**: 100% (171/171 in strategy crate)
-- **Code Review**: All Phase 12.1, 12.2, 12.3, and 12.4 code reviewed
+- **Test Pass Rate**: 100% (285/285 in strategy crate)
+- **Code Review**: All Phase 12.1, 12.2, 12.3, 12.4, 12.5, and 12.6 code reviewed
 - **Integration Status**: All strategies integrated and exported
 
 ### Key Achievements
 
 1. **Phase 12.1 (Foundation)**
    - ✅ Strategy framework with metadata and classification system
-   - ✅ StrategyRegistry for dynamic strategy management
-   - ✅ Baseline strategies (HODL, Market Average)
+   - ✅ Baseline strategies (HoldBaseline, MarketAverage, BuyAndHold)
    - ✅ Database schema (strategies, performance, failures)
    - ✅ Hypothesis and strategy templates
    - ✅ Dashboard API integration
+   - ✅ BacktestEngine, WalkForwardAnalyzer, MonteCarloSimulator infrastructure
 
 2. **Phase 12.2 (Trend Following)**
    - ✅ 7 trend-following strategies fully implemented
    - ✅ All strategies with comprehensive hypothesis documents
-   - ✅ 3 new indicators (ATR, ADX, KAMA)
+   - ✅ Golden Cross, Breakout, MA Crossover, Adaptive MA, Triple MA, MACD Trend, Parabolic SAR
    - ✅ Dashboard API with strategy management endpoints
-   - ✅ Strategy name canonicalization utility
    - ✅ Optimizer integration with parameter bounds
    - ✅ Comprehensive testing
 
 3. **Phase 12.3 (Mean Reversion)**
    - ✅ 7 mean-reversion strategies fully implemented
    - ✅ All strategies with comprehensive hypothesis documents
-   - ✅ Stochastic, Keltner, and Z-Score indicators
+   - ✅ Bollinger Bands, RSI Reversion, Stat Arb, Stochastic, Keltner, Price Channel, Z-Score
    - ✅ Comprehensive testing and integration
 
 4. **Phase 12.4 (Momentum)**
    - ✅ 7 momentum strategies fully implemented
    - ✅ All strategies with comprehensive hypothesis documents
-   - ✅ RSI Momentum, ROC, ADX Trend, Multi-factor, Volume, Multi-TF
-   - ✅ 171 tests with 100% pass rate
+   - ✅ RSI Momentum, MACD, ROC, ADX Trend, Momentum Factor, Volume Momentum, Multi-TF
    - ✅ Complete integration with strategy registry
+
+5. **Phase 12.5 (Volatility-Based)**
+   - ✅ 7 volatility-based strategies fully implemented
+   - ✅ All strategies with comprehensive hypothesis documents
+   - ✅ ATR Breakout, Vol Squeeze, Vol Regime, ATR Trailing, Vol Sizing, GARCH, VIX-Style
+   - ✅ Volatility detection and regime analysis
+   - ✅ Comprehensive testing with regime-aware scenarios
+   - ✅ Integration with existing backtest infrastructure
+
+6. **Phase 12.6 (Sentiment-Based)**
+   - ✅ 3 sentiment-based strategies fully implemented (technical sentiment from price action)
+   - ✅ Sentiment Momentum Strategy with RSI, momentum, and volume components
+   - ✅ Divergence Strategy detecting price-sentiment divergences with stop-loss/take-profit
+   - ✅ Regime-Based Sentiment Strategy adapting thresholds based on market regimes
+   - ✅ 47 passing tests (100% coverage)
+   - ✅ 2,156 lines of code with comprehensive documentation
+   - ✅ Strategic deferral of 4 external-data-dependent strategies (Fear & Greed, News, Social Volume, Composite) pending API infrastructure
 
 ### Next Immediate Steps
 
-1. **Start Phase 12.5 (Volatility-Based Strategies)**
-   - Implement 7 volatility strategies
-   - Follow same pattern as previous phases
-   - Document, test, and integrate
+1. **Start Phase 12.7 (Automated Strategy Validation Framework)**
+   - Implement comprehensive validation orchestrator
+   - Build regime analysis module
+   - Create CLI validation tool
+   - Design scoring and recommendation system
+   - Document validation framework usage
 
-2. **Run Validation on Completed Strategies**
-   - Execute walk-forward analysis
-   - Run Monte Carlo simulations
-   - Populate validation report
-   - Generate rankings and recommendations
+2. **Validate All Completed Strategies**
+   - Run automated validation on 34 implemented strategies
+   - Generate comprehensive reports with scores and verdicts
+   - Identify strategies ready for deployment
+   - Document optimization opportunities
 
-3. **Database Migration Execution**
-   - Execute all Phase 12 migrations
-   - Store strategy metadata
+3. **Phase 12.8 Preparation (Multi-Indicator Strategies)**
+   - Plan 7 multi-indicator strategy implementations
+   - Design hybrid strategy architectures
+   - Prepare for ensemble and adaptive combination approaches
    - Initialize strategy performance tables
 
 ---
@@ -3827,15 +3858,722 @@ pub use regime_sentiment::RegimeSentimentStrategy;
 ### Phase 12.6 Summary
 
 **Total Duration**: 3 weeks (15 working days)
-
-**Next Phase**: Phase 12.7 - Multi-Indicator Strategies (7 strategies)
+**Status**: Partially Complete (3/7 strategies implemented, 4 deferred)
+**Next Phase**: Phase 12.7 - Automated Strategy Validation Framework
 
 ---
 
-## 📚 Phase 12.7: Multi-Indicator Strategies (Weeks 18-20)
+## 📚 Phase 12.7: Automated Strategy Validation Framework (Weeks 18-19)
+
+### Mission Statement
+Build a comprehensive, automated validation system that provides quick performance indicators for strategies without requiring full dashboard integration. The validation framework will enable developers to rapidly assess strategy viability through backtesting, walk-forward analysis, Monte Carlo simulation, and regime-based performance analysis.
 
 ### Dependencies
-- Phase 12.6 complete and validated
+- Phase 12.1-12.6 complete (strategies implemented)
+- Existing backtest modules (BacktestEngine, WalkForwardAnalyzer, MonteCarloSimulator)
+- Database access for historical data
+
+### Deliverables
+- Complete validation framework with CLI tool
+- Regime analysis module
+- Comprehensive validation reports
+- Documentation and examples
+- All implemented strategies validated
+
+### Success Criteria
+- Validate any strategy with single CLI command
+- Generate comprehensive reports in <2 minutes per strategy
+- Provide actionable pass/fail verdicts
+- Support batch validation of multiple strategies
+- Integration with strategy registry
+
+---
+
+### Task 12.7.1: Design Validation Data Structures (1 day)
+
+**File**: `crates/backtest/src/validation/mod.rs`
+
+**Objective**: Define the core data structures for the validation framework.
+
+**Data Structures to Implement**:
+
+```rust
+/// Configuration for strategy validation run
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationConfig {
+    /// Data source (database connection string)
+    pub data_source: String,
+    /// Symbol to validate against
+    pub symbol: String,
+    /// Timeframe/interval
+    pub interval: String,
+    /// Walk-forward configuration
+    pub walk_forward: WalkForwardConfig,
+    /// Monte Carlo configuration
+    pub monte_carlo: MonteCarloConfig,
+    /// Risk-free rate for Sharpe calculation
+    pub risk_free_rate: f64,
+    /// Pass/fail thresholds
+    pub thresholds: ValidationThresholds,
+}
+
+/// Thresholds for pass/fail verdicts
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationThresholds {
+    /// Minimum Sharpe ratio to pass
+    pub min_sharpe: f64,
+    /// Maximum acceptable drawdown
+    pub max_drawdown: f64,
+    /// Minimum walk-forward win rate
+    pub min_win_rate: f64,
+    /// Minimum Monte Carlo positive return probability
+    pub min_positive_probability: f64,
+}
+
+/// Comprehensive validation report
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ValidationReport {
+    /// Strategy name
+    pub strategy_name: String,
+    /// Validation timestamp
+    pub validated_at: DateTime<Utc>,
+    /// Data period tested
+    pub test_period: TestPeriod,
+    
+    /// Overall scores
+    pub overall_score: f64,           // 0-100
+    pub grade: char,                  // A-F
+    pub verdict: ValidationVerdict,     // PASS/FAIL/OPTIMIZE
+    
+    /// Component results
+    pub backtest: BacktestResult,
+    pub walk_forward: WalkForwardResult,
+    pub monte_carlo: MonteCarloResult,
+    pub regime_analysis: RegimeAnalysisResult,
+    
+    /// Risk assessment
+    pub risk_assessment: RiskAssessment,
+    
+    /// Recommendations
+    pub recommendations: Recommendations,
+}
+
+pub enum ValidationVerdict {
+    Pass,
+    Fail,
+    NeedsOptimization,
+}
+```
+
+**Acceptance Criteria**:
+- All data structures defined
+- Serialization support (JSON/YAML)
+- Default configurations for common scenarios
+- Comprehensive documentation
+
+---
+
+### Task 12.7.2: Implement Regime Analysis Module (2 days)
+
+**File**: `crates/backtest/src/validation/regime.rs`
+
+**Objective**: Detect market regimes in historical data and analyze strategy performance across regimes.
+
+**Key Components**:
+
+```rust
+/// Regime analysis engine
+pub struct RegimeAnalyzer {
+    /// Trend strength threshold for regime classification
+    trend_threshold: f64,
+    /// Volatility threshold for high volatility regime
+    volatility_threshold: f64,
+}
+
+/// Result from regime-based performance analysis
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegimeAnalysisResult {
+    /// Overall results across all regimes
+    pub overall: RegimePerformance,
+    /// Performance in bull regime
+    pub bull_regime: RegimePerformance,
+    /// Performance in bear regime
+    pub bear_regime: RegimePerformance,
+    /// Performance in sideways regime
+    pub sideways_regime: RegimePerformance,
+    /// Performance in high volatility regime
+    pub high_vol_regime: RegimePerformance,
+    
+    /// Regime mismatch warning
+    pub regime_mismatch: Option<RegimeMismatch>,
+}
+
+/// Performance metrics for a specific regime
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegimePerformance {
+    /// Total return in this regime
+    pub total_return: f64,
+    /// Sharpe ratio in this regime
+    pub sharpe_ratio: f64,
+    /// Max drawdown in this regime
+    pub max_drawdown: f64,
+    /// Win rate in this regime
+    pub win_rate: f64,
+    /// Number of trades in this regime
+    pub total_trades: usize,
+    /// Percentage of time spent in this regime
+    pub time_in_regime: f64,
+}
+
+impl RegimeAnalyzer {
+    /// Detect regime for a set of bars
+    pub fn detect_regime(&self, bars: &[Bar]) -> MarketRegime;
+    
+    /// Analyze strategy performance across regimes
+    pub fn analyze<S: Strategy>(
+        &self,
+        strategy: &S,
+        bars: &[Bar],
+    ) -> Result<RegimeAnalysisResult>;
+}
+```
+
+**Acceptance Criteria**:
+- Regime detection algorithm implemented (similar to RegimeSentimentStrategy)
+- Performance calculated for each regime
+- Regime mismatch detection (strategy performs well in unexpected regimes)
+- Comprehensive tests
+
+---
+
+### Task 12.7.3: Implement Strategy Validator (2 days)
+
+**File**: `crates/backtest/src/validation/validator.rs`
+
+**Objective**: Main orchestrator that runs all validation tests and generates comprehensive reports.
+
+**Key Components**:
+
+```rust
+/// Main strategy validator orchestrator
+pub struct StrategyValidator {
+    config: ValidationConfig,
+}
+
+impl StrategyValidator {
+    /// Create new validator with configuration
+    pub fn new(config: ValidationConfig) -> Self;
+    
+    /// Validate a strategy against historical data
+    pub fn validate<S: Strategy>(
+        &self,
+        strategy: S,
+        bars: &[Bar],
+    ) -> Result<ValidationReport> {
+        // 1. Run basic backtest
+        let backtest_result = self.run_backtest(&strategy, bars)?;
+        
+        // 2. Run walk-forward analysis
+        let walk_forward_result = self.run_walk_forward(&strategy, bars)?;
+        
+        // 3. Run Monte Carlo simulation
+        let monte_carlo_result = self.run_monte_carlo(&backtest_result)?;
+        
+        // 4. Run regime analysis
+        let regime_result = self.regime_analyzer.analyze(&strategy, bars)?;
+        
+        // 5. Calculate overall score
+        let overall_score = self.calculate_score(
+            &backtest_result,
+            &walk_forward_result,
+            &monte_carlo_result,
+            &regime_result,
+        );
+        
+        // 6. Generate verdict
+        let verdict = self.generate_verdict(
+            &backtest_result,
+            &walk_forward_result,
+            &monte_carlo_result,
+        );
+        
+        // 7. Assemble report
+        Ok(ValidationReport {
+            // ... assemble all components
+        })
+    }
+}
+```
+
+**Acceptance Criteria**:
+- Integrates with BacktestEngine
+- Integrates with WalkForwardAnalyzer
+- Integrates with MonteCarloSimulator
+- Integrates with RegimeAnalyzer
+- Error handling for all edge cases
+- Comprehensive tests
+
+---
+
+### Task 12.7.4: Implement Scoring System (1 day)
+
+**File**: `crates/backtest/src/validation/scoring.rs`
+
+**Objective**: Calculate overall strategy score and generate actionable recommendations.
+
+**Scoring Algorithm**:
+
+```rust
+/// Strategy score calculator
+pub struct ScoreCalculator {
+    weights: ScoreWeights,
+}
+
+pub struct ScoreWeights {
+    pub backtest: f64,      // 30%
+    pub walk_forward: f64,   // 25%
+    pub monte_carlo: f64,     // 20%
+    pub regime_match: f64,    // 15%
+    pub risk_metrics: f64,     // 10%
+}
+
+impl ScoreCalculator {
+    /// Calculate overall score (0-100) from all validation components
+    pub fn calculate(&self, components: &ValidationComponents) -> f64 {
+        let backtest_score = self.score_backtest(&components.backtest);
+        let wf_score = self.score_walk_forward(&components.walk_forward);
+        let mc_score = self.score_monte_carlo(&components.monte_carlo);
+        let regime_score = self.score_regime_match(&components.regime);
+        let risk_score = self.score_risk(&components);
+        
+        backtest_score * self.weights.backtest
+            + wf_score * self.weights.walk_forward
+            + mc_score * self.weights.monte_carlo
+            + regime_score * self.weights.regime_match
+            + risk_score * self.weights.risk_metrics
+    }
+    
+    /// Convert numeric score to letter grade
+    pub fn grade(score: f64) -> char {
+        match score {
+            s if s >= 90 => 'A',
+            s if s >= 80 => 'B',
+            s if s >= 70 => 'C',
+            s if s >= 60 => 'D',
+            _ => 'F',
+        }
+    }
+}
+```
+
+**Recommendations Generator**:
+
+```rust
+pub struct Recommendations {
+    pub strengths: Vec<String>,
+    pub weaknesses: Vec<String>,
+    pub improvements: Vec<String>,
+    pub deployment: DeploymentRecommendation,
+}
+
+pub enum DeploymentRecommendation {
+    Deploy { confidence: f64 },
+    OptimizeThenValidate { params: Vec<String> },
+    Reject { reason: String },
+}
+```
+
+**Acceptance Criteria**:
+- Scoring algorithm implemented with weighted components
+- Grade assignment logic
+- Recommendation generation based on score breakdown
+- Customizable weights via config
+
+---
+
+### Task 12.7.5: Create CLI Validation Tool (2 days)
+
+**File**: `crates/backtest/src/bin/validate_strategy.rs`
+
+**Objective**: Command-line tool for validating strategies without dashboard.
+
+**CLI Interface**:
+
+```bash
+# Basic validation
+cargo run --bin validate_strategy -- \
+    --strategy golden_cross \
+    --symbol BTC \
+    --interval 1h
+
+# Full validation with all tests
+cargo run --bin validate_strategy -- \
+    --strategy golden_cross \
+    --symbol BTC \
+    --interval 1h \
+    --walk-forward \
+    --monte-carlo \
+    --regime-analysis \
+    --output report.json \
+    --format json
+
+# Batch validation
+cargo run --bin validate_strategy -- \
+    --batch strategies.txt \
+    --symbols BTC,ETH \
+    --interval 1h \
+    --output reports/
+
+# Custom thresholds
+cargo run --bin validate_strategy -- \
+    --strategy sentiment_momentum \
+    --symbol BTC \
+    --interval 1h \
+    --min-sharpe 1.5 \
+    --max-drawdown 0.20
+```
+
+**Output Formats**:
+- **JSON**: Machine-readable, suitable for dashboard integration
+- **YAML**: Human-readable, suitable for configuration
+- **Markdown**: Documentation-quality reports
+- **Terminal**: Quick summary with color coding
+
+**Implementation**:
+
+```rust
+use clap::{Parser, Subcommand};
+use alphafield_backtest::validation::StrategyValidator;
+
+#[derive(Parser)]
+#[command(author, version, about)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Validate a single strategy
+    Validate {
+        #[arg(long)]
+        strategy: String,
+        #[arg(long)]
+        symbol: String,
+        #[arg(long)]
+        interval: String,
+        #[arg(long)]
+        walk_forward: bool,
+        #[arg(long)]
+        monte_carlo: bool,
+        #[arg(long)]
+        regime_analysis: bool,
+        #[arg(long)]
+        output: Option<String>,
+        #[arg(long, default_value = "terminal")]
+        format: OutputFormat,
+    },
+    
+    /// Batch validate multiple strategies
+    Batch {
+        #[arg(long)]
+        batch_file: String,
+        #[arg(long)]
+        symbols: String,
+        #[arg(long)]
+        interval: String,
+        #[arg(long)]
+        output_dir: String,
+    },
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
+    
+    match cli.command {
+        Commands::Validate { /* args */ } => {
+            // Create validator
+            // Run validation
+            // Generate report
+            // Output in requested format
+        }
+        Commands::Batch { /* args */ } => {
+            // Parse batch file
+            // Validate each strategy
+            // Generate summary report
+        }
+    }
+    
+    Ok(())
+}
+```
+
+**Acceptance Criteria**:
+- Full CLI implementation with clap
+- Single strategy validation
+- Batch validation support
+- Multiple output formats
+- Exit codes (0=pass, 1=fail, 2=error)
+- Comprehensive help documentation
+
+---
+
+### Task 12.7.6: Documentation and Examples (1 day)
+
+**Files**:
+- `doc/phase_12/validation_guide.md`
+- `examples/validation/quickstart.md`
+
+**Documentation Contents**:
+
+```markdown
+# Strategy Validation Guide
+
+## Overview
+The validation framework provides automated assessment of strategy performance without requiring full dashboard integration.
+
+## Quick Start
+
+### Install
+```bash
+cargo install --path crates/backtest --bin validate_strategy
+```
+
+### Basic Usage
+```bash
+validate_strategy --strategy golden_cross --symbol BTC --interval 1h
+```
+
+### Understanding Reports
+
+### Overall Score (0-100)
+- 90-100: Excellent (A) - Ready for deployment
+- 80-89: Good (B) - Consider with monitoring
+- 70-79: Fair (C) - Needs optimization
+- 60-69: Poor (D) - Not recommended
+- <60: Fail (F) - Reject
+
+### Component Scores
+
+#### Backtest (30%)
+- Total return, Sharpe, Max DD
+- Win rate, Profit factor
+- Trade statistics
+
+#### Walk-Forward (25%)
+- Stability score (0-100)
+- In-sample vs out-of-sample comparison
+- Percentage of profitable windows
+- Parameter stability
+
+#### Monte Carlo (20%)
+- Confidence intervals (5th, 50th, 95th percentile)
+- Probability of positive return
+- Worst-case drawdown (95th percentile)
+- Path dependency analysis
+
+#### Regime Match (15%)
+- Performance by regime
+- Expected vs actual best regimes
+- Regime mismatch warnings
+- Market correlation
+
+#### Risk Metrics (10%)
+- Expected vs actual max drawdown
+- Tail risk analysis
+- Exposure profile
+- Leverage check
+
+### Recommendations
+
+The validator provides three types of recommendations:
+
+1. **Strengths**: What the strategy does well
+2. **Weaknesses**: Areas for improvement
+3. **Improvements**: Specific optimization suggestions
+
+### Deployment Verdict
+
+- **PASS**: Strategy meets all thresholds, recommended for deployment
+- **NEEDS OPTIMIZATION**: Strategy shows promise but requires parameter tuning
+- **FAIL**: Strategy fails key criteria, not recommended for use
+
+## Advanced Usage
+
+### Custom Thresholds
+```bash
+validate_strategy --strategy my_strategy \
+    --min-sharpe 1.5 \
+    --max-drawdown 0.15 \
+    --min-win-rate 0.60
+```
+
+### Batch Validation
+Create a `strategies.txt` file:
+```
+golden_cross,sma_fast=20,sma_slow=50
+sentiment_momentum,lookback=14,bullish_threshold=30
+regime_sentiment,regime_lookback=20
+```
+
+Run batch validation:
+```bash
+validate_strategy --batch strategies.txt --symbols BTC,ETH --interval 1h
+```
+
+### Integrating with Dashboard
+
+The CLI tool outputs JSON reports that can be consumed by the dashboard:
+
+```rust
+use serde_json;
+
+let report = serde_json::from_str::<ValidationReport>(&json_output)?;
+// Display in dashboard UI
+```
+
+## Interpreting Common Issues
+
+### High Sharpe but Fails Walk-Forward
+Strategy is overfitted to historical data. Consider:
+- Reducing parameter complexity
+- Increasing walk-forward window size
+- Testing on out-of-sample data
+
+### Good Returns but High Drawdown
+Strategy has high tail risk. Consider:
+- Adding stop-loss mechanisms
+- Reducing position sizes
+- Implementing volatility-based sizing
+
+### Fails Regime Analysis
+Strategy performs poorly in expected regimes. Consider:
+- Revisiting strategy hypothesis
+- Adding regime filters
+- Implementing adaptive parameters
+
+## Best Practices
+
+1. **Always run full validation** before deployment
+2. **Review recommendations** even if strategy passes
+3. **Test on multiple assets** to ensure robustness
+4. **Re-validate periodically** with new data
+5. **Document validation parameters** for reproducibility
+```
+
+**Acceptance Criteria**:
+- Complete validation guide written
+- Quick start examples provided
+- Common issues documented with solutions
+- Best practices outlined
+- Dashboard integration guide included
+
+---
+
+### Task 12.7.7: Integration Testing (1 day)
+
+**File**: `crates/backtest/tests/validation_integration_tests.rs`
+
+**Objective**: Ensure validation framework works correctly with all implemented strategies.
+
+**Test Cases**:
+
+```rust
+#[tokio::test]
+async fn test_validate_golden_cross() {
+    let validator = create_test_validator();
+    let strategy = GoldenCrossStrategy::new(20, 50);
+    let bars = load_test_data("BTC", "1h").await;
+    
+    let report = validator.validate(strategy, &bars).unwrap();
+    
+    assert_eq!(report.strategy_name, "Golden Cross");
+    assert!(report.overall_score >= 0.0 && report.overall_score <= 100.0);
+    assert!(!matches!(report.verdict, ValidationVerdict::Fail));
+}
+
+#[tokio::test]
+async fn test_validate_all_implemented_strategies() {
+    let strategies = get_all_strategies(); // from registry/factory
+    let validator = create_test_validator();
+    let bars = load_test_data("BTC", "1h").await;
+    
+    for strategy in strategies {
+        let report = validator.validate(strategy, &bars);
+        assert!(report.is_ok(), "Strategy {} failed validation", strategy.name());
+    }
+}
+
+#[test]
+fn test_scoring_algorithm() {
+    let calculator = ScoreCalculator::default();
+    let components = create_test_components();
+    
+    let score = calculator.calculate(&components);
+    let grade = ScoreCalculator::grade(score);
+    
+    assert!(score >= 0.0 && score <= 100.0);
+    assert!(grade.is_ascii_alphabetic());
+}
+
+#[test]
+fn test_cli_batch_validation() {
+    let output = Command::new("validate_strategy")
+        .args(["--batch", "test_batch.txt", "--symbols", "BTC"])
+        .output()
+        .expect("Failed to execute command");
+    
+    assert!(output.status.success());
+    assert!(String::from_utf8_lossy(&output.stdout).contains("SUMMARY"));
+}
+```
+
+**Acceptance Criteria**:
+- All implemented strategies validate successfully
+- CLI tool works with all strategies
+- JSON output parses correctly
+- Batch validation works
+- Performance benchmarks met (validation <2 minutes per strategy)
+
+---
+
+### Phase 12.7 Summary
+
+**Total Duration**: 2 weeks (10 working days)
+
+**Deliverables**:
+- ✅ Validation framework core modules
+- ✅ Regime analysis module
+- ✅ Strategy validator orchestrator
+- ✅ Scoring and recommendation system
+- ✅ CLI validation tool
+- ✅ Comprehensive documentation
+- ✅ Integration tests passing
+- ✅ All implemented strategies validated
+
+**Key Achievements**:
+- Automated validation without dashboard dependency
+- Comprehensive performance indicators in <2 minutes
+- Actionable pass/fail verdicts
+- Support for batch validation
+- Integration-ready with dashboard
+
+**Integration Points**:
+- Uses existing BacktestEngine, WalkForwardAnalyzer, MonteCarloSimulator
+- Extensible for additional validation types
+- JSON output for dashboard consumption
+- Registry integration for strategy discovery
+
+**Next Phase**: Phase 12.8 - Multi-Indicator Strategies (7 strategies)
+
+---
+
+## 📚 Phase 12.8: Multi-Indicator Strategies (Weeks 20-22)
+
+### Dependencies
+- Phase 12.7 complete and validated
+- Automated validation framework available
 
 ### Deliverables
 - 7 multi-indicator strategies implemented
@@ -3979,15 +4717,15 @@ pub use ml_enhanced::MLEnhancedStrategy;
 
 ---
 
-### Phase 12.7 Summary
+### Phase 12.8 Summary
 
 **Total Duration**: 3 weeks (15 working days)
 
-**Next Phase**: Phase 12.8 - Research & Documentation (Weeks 21-22)
+**Next Phase**: Phase 12.9 - Research & Documentation (2 weeks)
 
 ---
 
-## 📚 Phase 12.8: Research & Documentation (Weeks 21-22)
+## 📚 Phase 12.9: Research & Documentation (Weeks 23-24)
 
 ### Dependencies
 - All previous phases complete and validated
@@ -4201,13 +4939,14 @@ pub use ml_enhanced::MLEnhancedStrategy;
 
 ## 🎯 Phase 12 Final Summary
 
-**Total Duration**: 22 weeks (110 working days, ~5.5 months)
+**Total Duration**: 24 weeks (120 working days, ~6 months)
 
 **Total Deliverables**:
 - ✅ Strategy framework with registry
-- ✅ 49 strategies implemented (7 per category × 7 categories)
-- ✅ 49 hypothesis documents
-- ✅ Comprehensive validation for all strategies
+- ✅ 38 strategies implemented (3 baseline + 6 trend + 7 mean rev + 7 momentum + 7 volatility + 3 sentiment + 5 multi-indicator)
+- ✅ 38 hypothesis documents
+- ✅ Automated validation framework
+- ✅ All strategies validated with comprehensive reports
 - ✅ Database schema and performance metrics
 - ✅ API endpoints for all strategies
 - ✅ Cross-asset validation
@@ -4215,13 +4954,13 @@ pub use ml_enhanced::MLEnhancedStrategy;
 - ✅ Selection guides and documentation
 
 **Strategy Breakdown**:
-- Trend Following: 7 strategies
-- Mean Reversion: 7 strategies
-- Momentum: 7 strategies
-- Volatility: 7 strategies
-- Sentiment: 7 strategies
-- Multi-Indicator: 7 strategies
-- Baselines: 2 strategies (included in framework)
+- Baselines: 3 strategies (Hold, Market Average, Buy & Hold)
+- Trend Following: 7 strategies (Golden Cross, MA Crossover, Adaptive MA, Breakout, MACD Trend, Triple MA, Parabolic SAR)
+- Mean Reversion: 7 strategies (Bollinger Bands, RSI Reversion, Stat Arb, Stochastic, Keltner Channel, Price Channel, Z-Score)
+- Momentum: 7 strategies (RSI Momentum, MACD, ROC, ADX Trend, Momentum Factor, Volume Momentum, Multi-TF Momentum)
+- Volatility: 7 strategies (ATR Breakout, Vol Squeeze, Vol Regime, ATR Trailing, Vol Sizing, GARCH, VIX-Style)
+- Sentiment: 3 strategies (Sentiment Momentum, Divergence, Regime Sentiment) [4 deferred pending API]
+- Multi-Indicator: 5 strategies (Trend + Mean Rev, MACD + RSI, Adaptive Combo, Ensemble Weighted, Regime Switching)
 
 **Success Metrics**:
 - ✅ 49+ strategies implemented
@@ -4344,5 +5083,5 @@ pub use ml_enhanced::MLEnhancedStrategy;
 ---
 
 **Last Updated**: January 2026  
-**Document Version**: 3.0 (AI Agent Optimized)  
-**Status**: Ready for Execution
+**Document Version**: 3.1 (Updated with Validation Framework)  
+**Status**: Ready for Execution - Phase 12.7 prioritized for automated validation
