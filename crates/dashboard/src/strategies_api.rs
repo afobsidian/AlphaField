@@ -443,6 +443,33 @@ pub fn initialize_registry() -> Arc<StrategyRegistry> {
         eprintln!("Failed to register VIX-Style strategy: {}", e);
     }
 
+    // ------------------------------------------------------------------------
+    // Sentiment-Based Strategies (Phase 12.6)
+    // ------------------------------------------------------------------------
+
+    // Register Sentiment Momentum strategy
+    let sentiment_momentum =
+        Arc::new(alphafield_strategy::strategies::sentiment::SentimentMomentumStrategy::new())
+            as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(sentiment_momentum) {
+        eprintln!("Failed to register Sentiment Momentum strategy: {}", e);
+    }
+
+    // Register Divergence strategy
+    let divergence = Arc::new(alphafield_strategy::strategies::sentiment::DivergenceStrategy::new())
+        as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(divergence) {
+        eprintln!("Failed to register Divergence strategy: {}", e);
+    }
+
+    // Register Regime-Based Sentiment strategy
+    let regime_sentiment =
+        Arc::new(alphafield_strategy::strategies::sentiment::RegimeSentimentStrategy::new())
+            as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(regime_sentiment) {
+        eprintln!("Failed to register Regime-Based Sentiment strategy: {}", e);
+    }
+
     registry
 }
 
