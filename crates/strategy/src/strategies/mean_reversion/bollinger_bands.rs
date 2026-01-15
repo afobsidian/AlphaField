@@ -149,6 +149,13 @@ impl BollingerBandsStrategy {
     }
 }
 
+impl Default for BollingerBandsStrategy {
+    fn default() -> Self {
+        // Default Bollinger Bands: 20-period, 2 standard deviations
+        Self::new(20, 2.0)
+    }
+}
+
 impl MetadataStrategy for BollingerBandsStrategy {
     fn metadata(&self) -> StrategyMetadata {
         StrategyMetadata {
@@ -156,9 +163,9 @@ impl MetadataStrategy for BollingerBandsStrategy {
             category: StrategyCategory::MeanReversion,
             sub_type: Some("bollinger_bands".to_string()),
             description: format!(
-                "Mean Reversion strategy using Bollinger Bands with period {} and {:.1} standard deviations, 
-                with RSI confirmation (period {}, oversold {:.0}, overbought {:.0}). 
-                Uses {:.1}% TP and {:.1}% SL. Buys when price crosses below lower band and RSI is oversold, 
+                "Mean Reversion strategy using Bollinger Bands with period {} and {:.1} standard deviations,
+                with RSI confirmation (period {}, oversold {:.0}, overbought {:.0}).
+                Uses {:.1}% TP and {:.1}% SL. Buys when price crosses below lower band and RSI is oversold,
                 sells on middle band crossover or RSI overbought.",
                 self.config.period, self.config.num_std_dev, self.config.rsi_period,
                 self.config.rsi_oversold, self.config.rsi_overbought,

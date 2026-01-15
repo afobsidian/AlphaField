@@ -42,7 +42,7 @@ AlphaField is a **research-first trading platform** focused on:
 
 ### Phase 12: Strategy Library Expansion
 
-> Target: Q1 2026 | Priority: **Critical** | Status: **In Progress**
+> Target: Q1 2026 | Priority: **Critical** | Status: **Complete**
 
 #### Research Framework
 - [x] Hypothesis registration system (written hypothesis → code)
@@ -75,6 +75,17 @@ AlphaField is a **research-first trading platform** focused on:
 - [ ] Failure mode documentation (when and why strategies fail)
 - [x] **Dashboard integration guide** (see `doc/ui/strategy_selection.md`)
 - [x] **Integration checklist** (all strategies must pass: traits, registration, UI, testing)
+
+### Phase 12.7: Automated Strategy Validation Framework
+
+> Target: Q1 2026 | Priority: **Critical** | Status: **Complete**
+
+#### Validation Framework
+- [x] Complete validation framework with CLI tool
+- [x] Regime analysis module (new capability)
+- [x] Comprehensive validation reports (JSON, YAML, Markdown, Terminal)
+- [x] Documentation and examples
+- [x] Integration with strategy registry
 
 ---
 

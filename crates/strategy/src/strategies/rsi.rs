@@ -68,6 +68,13 @@ impl RsiStrategy {
     }
 }
 
+impl Default for RsiStrategy {
+    fn default() -> Self {
+        // Default RSI: period 14, oversold 30, overbought 70
+        Self::new(14, 30.0, 70.0)
+    }
+}
+
 impl MetadataStrategy for RsiStrategy {
     fn metadata(&self) -> StrategyMetadata {
         StrategyMetadata {
@@ -75,7 +82,7 @@ impl MetadataStrategy for RsiStrategy {
             category: StrategyCategory::MeanReversion,
             sub_type: Some("rsi_based".to_string()),
             description: format!(
-                "RSI Mean Reversion strategy using {} period RSI with bounds [{:.0}, {:.0}] and {:.1}% TP, {:.1}% SL. 
+                "RSI Mean Reversion strategy using {} period RSI with bounds [{:.0}, {:.0}] and {:.1}% TP, {:.1}% SL.
                 Buys on RSI crossover below lower bound (oversold), sells on crossover above upper bound (overbought).",
                 self.config.period, self.config.lower_bound, self.config.upper_bound,
                 self.config.take_profit, self.config.stop_loss
