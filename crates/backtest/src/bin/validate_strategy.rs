@@ -307,26 +307,50 @@ async fn main() -> Result<()> {
                 fee_rate,
             };
 
-            // Create strategy based on name
-            let backtest_strategy = create_strategy(&strategy, &symbol, initial_capital)?;
+            // Look up strategy factory from registry for enhanced walk-forward
+            let normalized_name = canonicalize_strategy_name(&strategy);
+            let (core_factory, metadata) = STRATEGY_FACTORY_REGISTRY
+                .get(&normalized_name)
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Unknown strategy: '{}'. Available strategies: {}. Use --list-strategies to see all options.",
+                        strategy,
+                        STRATEGY_FACTORY_REGISTRY
+                            .keys()
+                            .cloned()
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
+                })?;
 
-            // Extract metadata before strategy is moved to validate()
-            let metadata = backtest_strategy.metadata();
+            // Create wrapped factory that adds StrategyAdapter
+            let symbol_clone = symbol.clone();
+            let wrapped_factory = move || {
+                let core_strategy = core_factory();
+                Box::new(StrategyAdapter::new(
+                    core_strategy,
+                    &symbol_clone,
+                    initial_capital,
+                )) as Box<dyn Strategy>
+            };
 
+            // **ENHANCED**: Use validate_with_factory for proper walk-forward
             let validator = StrategyValidator::new(config);
             let report = validator
-                .validate(backtest_strategy, &symbol, &bars)
+                .validate_with_factory(wrapped_factory, &symbol, &bars)
                 .context("Validation failed")?;
 
             // Run regime analysis separately if strategy has metadata
-            let report = if let Some(md) = metadata {
+            let report = {
+                // metadata is now a reference from the registry tuple
                 println!("📊 Strategy has metadata, running regime analysis...");
 
                 // Convert core MarketRegime to validation MarketRegime
                 use alphafield_backtest::validation::MarketRegime as BacktestRegime;
-                let expected_regimes = md
+                let expected_regimes = metadata
                     .expected_regimes
-                    .into_iter()
+                    .iter()
+                    .cloned()
                     .map(|r| match r {
                         alphafield_strategy::MarketRegime::Bull => BacktestRegime::Bull,
                         alphafield_strategy::MarketRegime::Bear => BacktestRegime::Bear,
@@ -351,9 +375,6 @@ async fn main() -> Result<()> {
                     regime_analysis: regime_result.unwrap_or_default(),
                     ..report
                 }
-            } else {
-                println!("⚠️  Strategy has no metadata, skipping regime analysis");
-                report
             };
 
             // Output report

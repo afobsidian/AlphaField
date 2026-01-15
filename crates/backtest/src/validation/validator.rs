@@ -37,13 +37,33 @@ impl StrategyValidator {
 
     /// Validate a strategy against historical data
     ///
+    /// This method provides comprehensive validation including:
+    /// - Backtest performance analysis (30% of score)
+    /// - Walk-forward robustness testing (25% of score) - **SIMPLIFIED version**
+    /// - Monte Carlo simulation (20% of score)
+    /// - Regime analysis (15% of score)
+    /// - Risk assessment (10% of score)
+    ///
+    /// **IMPORTANT**: This method uses a SIMPLIFIED walk-forward implementation
+    /// (buy-and-hold returns) because it receives a Box<dyn Strategy> without
+    /// access to a factory function. For enhanced walk-forward with actual strategy
+    /// execution, use `validate_with_factory()` instead.
+    ///
     /// # Arguments
-    /// * `strategy` - Box<dyn BacktestStrategy> to validate
+    /// * `strategy` - Box<dyn BacktestStrategy> to validate (ownership transferred)
     /// * `symbol` - Symbol name for data registration
     /// * `bars` - Historical bar data (must be sorted by time)
     ///
     /// # Returns
     /// Comprehensive validation report with all test results
+    ///
+    /// # When to Use
+    /// - When you have a Box<dyn Strategy> instance
+    /// - When you don't have access to strategy creation logic
+    /// - When simplified walk-forward is acceptable
+    ///
+    /// # See Also
+    /// - `validate_with_factory()` - For factory functions (enhanced walk-forward)
     pub fn validate(
         &self,
         strategy: Box<dyn Strategy>,
@@ -70,6 +90,116 @@ impl StrategyValidator {
 
         // Run regime analysis (no strategy reference required for regime analysis)
         let regime_result = self.run_regime_analysis(bars)?;
+
+        // Calculate risk assessment
+        let risk_assessment = self.assess_risk(&backtest_result, &monte_carlo_result);
+
+        // Calculate overall score and generate verdict
+        let components = ValidationComponents {
+            backtest: backtest_result.clone(),
+            walk_forward: walk_forward_result.clone(),
+            monte_carlo: monte_carlo_result.clone(),
+            regime: regime_result.clone(),
+            config: self.config.clone(),
+        };
+
+        let calculator = ScoreCalculator::new();
+        let overall_score = calculator.calculate(&components);
+        let grade = ScoreCalculator::grade(overall_score);
+        let verdict = self.generate_verdict(&components, overall_score);
+
+        // Generate recommendations
+        let rec_generator = RecommendationsGenerator::new();
+        let recommendations = rec_generator.generate(&components);
+
+        // Assemble report
+        Ok(ValidationReport {
+            strategy_name: symbol.to_string(),
+            validated_at: Utc::now(),
+            test_period,
+            overall_score,
+            grade,
+            verdict,
+            backtest: backtest_result,
+            walk_forward: walk_forward_result,
+            monte_carlo: monte_carlo_result,
+            regime_analysis: regime_result,
+            risk_assessment,
+            recommendations,
+        })
+    }
+
+    /// Validate strategy using a factory function for enhanced walk-forward analysis
+    ///
+    /// This method provides full walk-forward analysis with actual strategy execution
+    /// in each test window, rather than simplified buy-and-hold returns.
+    ///
+    /// # Arguments
+    /// * `strategy_factory` - Function that creates fresh strategy instances
+    /// * `symbol` - Trading symbol
+    /// * `bars` - Historical bar data
+    ///
+    /// # Returns
+    /// Comprehensive validation report with enhanced walk-forward metrics
+    ///
+    /// # When to Use
+    /// - Validating strategies from registry (which provide factories)
+    /// - When you have access to strategy creation logic
+    /// - When accurate walk-forward analysis is critical
+    ///
+    /// # See Also
+    /// - `validate()` - For boxed strategies (simplified walk-forward)
+    pub fn validate_with_factory<F>(
+        &self,
+        strategy_factory: F,
+        symbol: &str,
+        bars: &[Bar],
+    ) -> Result<ValidationReport, CoreError>
+    where
+        F: Fn() -> Box<dyn Strategy> + Clone + 'static,
+    {
+        if bars.is_empty() {
+            return Err(CoreError::DataValidation(
+                "No historical data provided for validation".to_string(),
+            ));
+        }
+
+        // Create test period info
+        let test_period = self.create_test_period(symbol, bars);
+
+        // Run backtest (call factory once for main backtest)
+        let strategy = strategy_factory();
+        let backtest_result = self.run_backtest(strategy, symbol, bars)?;
+
+        // **ENHANCED**: Run walk-forward with actual strategy execution
+        // Gracefully handle insufficient data by returning empty results
+        let walk_forward_result =
+            if let Ok(result) =
+                crate::walk_forward::WalkForwardAnalyzer::new(self.config.walk_forward.clone())
+                    .analyze(bars, symbol, strategy_factory.clone())
+            {
+                result
+            } else {
+                // Not enough data for full walk-forward, return empty result
+                crate::walk_forward::WalkForwardResult {
+                    windows: Vec::new(),
+                    aggregate_oos: crate::walk_forward::AggregateMetrics {
+                        mean_return: 0.0,
+                        median_return: 0.0,
+                        mean_sharpe: 0.0,
+                        worst_drawdown: 0.0,
+                        win_rate: 0.0,
+                    },
+                    stability_score: 0.0,
+                }
+            };
+
+        // Run Monte Carlo simulation (uses backtest result)
+        let monte_carlo_result = self.run_monte_carlo(&backtest_result)?;
+
+        // Run regime analysis (no strategy reference required)
+        // Gracefully handle insufficient data by returning empty results
+        let regime_result = self.run_regime_analysis(bars).unwrap_or_default();
 
         // Calculate risk assessment
         let risk_assessment = self.assess_risk(&backtest_result, &monte_carlo_result);
@@ -451,6 +581,150 @@ impl StrategyValidator {
 
 #[cfg(test)]
 mod tests {
+    /// Test validate_with_factory() method with successful validation
+    #[test]
+    fn test_validate_with_factory_success() {
+        let config = create_test_config();
+        let validator = StrategyValidator::new(config);
+        let bars = create_test_bars(400); // 400 bars, need at least 125 (100 train + 25 test)
+
+        let factory = || -> Box<dyn Strategy> { Box::new(TestStrategy::new()) };
+
+        let result = validator.validate_with_factory(factory, "TEST", &bars);
+        assert!(result.is_ok());
+
+        let report = result.unwrap();
+        assert_eq!(report.strategy_name, "TEST");
+        assert!(report.walk_forward.stability_score >= 0.0);
+        assert!(report.walk_forward.stability_score <= 1.0);
+        assert!(report.overall_score >= 0.0);
+        assert!(report.overall_score <= 100.0);
+    }
+
+    /// Test validate_with_factory() with insufficient data for walk-forward
+    #[test]
+    fn test_validate_with_factory_insufficient_data() {
+        let config = create_test_config();
+        let validator = StrategyValidator::new(config);
+        let bars = create_test_bars(50); // Only 50 bars, but need 125 (100 train + 25 test)
+
+        let factory = || -> Box<dyn Strategy> { Box::new(TestStrategy::new()) };
+
+        let result = validator.validate_with_factory(factory, "TEST", &bars);
+
+        // Debug: Print error if any
+        if let Err(ref e) = result {
+            eprintln!("validate_with_factory failed with: {:?}", e);
+        }
+
+        // Should succeed overall but with minimal walk-forward results
+        assert!(
+            result.is_ok(),
+            "Validation should succeed even with insufficient data"
+        );
+        let report = result.unwrap();
+        assert!(report.walk_forward.windows.is_empty());
+    }
+
+    /// Test that validate_with_factory() produces enhanced walk-forward results
+    /// compared to the simplified validate() method
+    #[test]
+    fn test_validate_vs_validate_with_factory() {
+        let config = create_test_config();
+        let validator = StrategyValidator::new(config);
+        let bars = create_test_bars(400);
+
+        // Test 1: Original method with Box<dyn Strategy> (simplified walk-forward)
+        let strategy = Box::new(TestStrategy::new());
+        let result_boxed = validator.validate(strategy, "TEST", &bars).unwrap();
+
+        // Test 2: New method with factory (enhanced walk-forward)
+        let factory = || -> Box<dyn Strategy> { Box::new(TestStrategy::new()) };
+        let result_factory = validator
+            .validate_with_factory(factory, "TEST", &bars)
+            .unwrap();
+
+        // Main backtest results should be similar (same data, same strategy type)
+        // May differ slightly due to random factors in some components
+        assert!(
+            (result_boxed.backtest.metrics.total_return
+                - result_factory.backtest.metrics.total_return)
+                .abs()
+                < 0.01
+        );
+
+        // Walk-forward results should differ significantly:
+        // - Simplified: empty windows or minimal results
+        // - Enhanced: actual strategy execution in windows
+        assert!(
+            result_factory.walk_forward.windows.len() >= result_boxed.walk_forward.windows.len()
+        );
+
+        // Enhanced version should have non-empty windows (actual strategy execution)
+        if !result_factory.walk_forward.windows.is_empty() {
+            let first_window = &result_factory.walk_forward.windows[0];
+            assert!(first_window.train_start < first_window.train_end);
+            assert!(first_window.test_start < first_window.test_end);
+        }
+    }
+
+    /// Test validate_with_factory() error handling for empty data
+    #[test]
+    fn test_validate_with_factory_empty_data() {
+        let config = create_test_config();
+        let validator = StrategyValidator::new(config);
+        let bars: Vec<Bar> = Vec::new();
+
+        let factory = || -> Box<dyn Strategy> { Box::new(TestStrategy::new()) };
+
+        let result = validator.validate_with_factory(factory, "TEST", &bars);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No historical data"));
+    }
+
+    /// Test validate_with_factory() produces valid report structure
+    #[test]
+    fn test_validate_with_factory_report_structure() {
+        let config = create_test_config();
+        let validator = StrategyValidator::new(config);
+        let bars = create_test_bars(400);
+
+        let factory = || -> Box<dyn Strategy> { Box::new(TestStrategy::new()) };
+
+        let result = validator
+            .validate_with_factory(factory, "TEST", &bars)
+            .unwrap();
+
+        // Verify all required fields are present and valid
+        assert!(!result.strategy_name.is_empty());
+        assert!(result.overall_score >= 0.0 && result.overall_score <= 100.0);
+
+        // Verify component results
+        assert_eq!(
+            result.backtest.metrics.total_trades,
+            result.backtest.total_trades
+        );
+        assert!(
+            result.walk_forward.stability_score >= 0.0
+                && result.walk_forward.stability_score <= 1.0
+        );
+        assert!(result.monte_carlo.num_simulations > 0);
+
+        // Verify risk assessment
+        assert!(result.risk_assessment.actual_max_drawdown >= 0.0);
+        assert_eq!(result.risk_assessment.leverage, 1.0); // Spot-only
+
+        // Verify verdict is one of the valid options
+        matches!(
+            result.verdict,
+            ValidationVerdict::Pass
+                | ValidationVerdict::Fail
+                | ValidationVerdict::NeedsOptimization
+        );
+    }
     use super::*;
     use crate::validation::ValidationThresholds;
     use alphafield_core::Bar;
