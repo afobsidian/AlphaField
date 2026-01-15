@@ -53,9 +53,9 @@ enum Commands {
         #[arg(long)]
         interval: String,
 
-        /// Data file path (CSV or JSON)
+        /// Data file path (CSV or JSON) - optional, loads from database if not provided
         #[arg(long)]
-        data_file: String,
+        data_file: Option<String>,
 
         /// Run walk-forward analysis
         #[arg(long, default_value = "false")]
@@ -169,6 +169,19 @@ impl std::fmt::Display for OutputFormat {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Try to load .env, but fallback to manual parsing if it fails
+    if dotenvy::dotenv().is_err() {
+        // Manual fallback: read DATABASE_URL directly from .env
+        if let Ok(contents) = fs::read_to_string(".env") {
+            for line in contents.lines() {
+                if line.starts_with("DATABASE_URL=") {
+                    let value = line.trim_start_matches("DATABASE_URL=");
+                    std::env::set_var("DATABASE_URL", value);
+                    break;
+                }
+            }
+        }
+    }
     let cli = Cli::parse();
 
     match cli.command {
@@ -190,9 +203,11 @@ async fn main() -> Result<()> {
             fee_rate,
             risk_free_rate,
         } => {
-            let bars = load_bars_from_file(&data_file)?;
+            let bars = load_bars(&data_file, &symbol, &interval).await?;
             let config = ValidationConfig {
-                data_source: data_file.clone(),
+                data_source: data_file
+                    .clone()
+                    .unwrap_or_else(|| format!("database:{}", symbol)),
                 symbol: symbol.clone(),
                 interval: interval.clone(),
                 walk_forward: WalkForwardConfig::default(),
@@ -400,7 +415,53 @@ async fn main() -> Result<()> {
     }
 }
 
-/// Load bars from CSV or JSON file
+/// Load bars from database or file
+async fn load_bars(data_file: &Option<String>, symbol: &str, interval: &str) -> Result<Vec<Bar>> {
+    // Try to load from database if DATABASE_URL is set and no file specified
+    if data_file.is_none() {
+        println!("📡 Connecting to database...");
+        if let Ok(db) = alphafield_data::DatabaseClient::new_from_env().await {
+            println!("🔍 Checking if data exists in database...");
+            if db.exists(symbol, interval).await? {
+                println!("✅ Loading historical data from database...");
+                let bars = db.load_bars(symbol, interval).await?;
+                println!("Loaded {} bars from database", bars.len());
+                return Ok(bars);
+            } else {
+                println!("🌐 Data not in database, fetching from API...");
+                let client = alphafield_data::UnifiedDataClient::new_from_env();
+                let bars = client
+                    .get_bars(symbol, interval, None, None, Some(1000))
+                    .await
+                    .context("Failed to fetch data from API")?;
+
+                println!("💾 Saving {} bars to database...", bars.len());
+                db.save_bars(symbol, interval, &bars)
+                    .await
+                    .context("Failed to save data to database")?;
+                println!("✅ Saved {} bars to database", bars.len());
+                return Ok(bars);
+            }
+        } else {
+            return Err(anyhow::anyhow!(
+                "DATABASE_URL environment variable not set and no data file provided.\n\
+                 Either:\n\
+                 1. Set DATABASE_URL in .env file or environment\n\
+                 2. Provide --data-file <path> to use CSV/JSON file\n\
+                 3. Run database setup scripts"
+            ));
+        }
+    }
+
+    // Fall back to file loading
+    let path = data_file
+        .as_ref()
+        .ok_or_else(|| anyhow::anyhow!("data_file is None"))?;
+    println!("📂 Loading data from file: {}", path);
+    load_bars_from_file(path)
+}
+
+/// Load bars from file (CSV or JSON)
 fn load_bars_from_file(path: &str) -> Result<Vec<Bar>> {
     let content =
         fs::read_to_string(path).context(format!("Failed to read data file: {}", path))?;
@@ -469,7 +530,13 @@ fn create_strategy(name: &str) -> Result<Box<dyn Strategy>> {
 
     const DEFAULT_CAPITAL: f64 = 10000.0;
 
-    match name.to_lowercase().as_str() {
+    // Normalize strategy name (remove _strategy suffix if present)
+    let normalized_name = name
+        .to_lowercase()
+        .replace("_strategy", "")
+        .replace("_", "");
+
+    match normalized_name.as_str() {
         "golden_cross" | "goldencross" => Ok(Box::new(StrategyAdapter::new(
             GoldenCrossStrategy::default(),
             "BTCUSDT",
