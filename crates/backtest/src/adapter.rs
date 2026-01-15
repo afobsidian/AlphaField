@@ -1,6 +1,7 @@
 use crate::error::Result;
 use crate::strategy::{OrderRequest, OrderSide, OrderType, Strategy as BacktestStrategy};
 use alphafield_core::{Bar, Tick};
+use alphafield_strategy::MetadataStrategy;
 
 /// Position state for the adapter
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -155,5 +156,25 @@ where
         } else {
             Ok(Vec::new())
         }
+    }
+}
+
+/// Extension methods for StrategyAdapter when wrapped strategy implements MetadataStrategy
+///
+/// This provides a way to access strategy metadata for strategies that implement
+/// the MetadataStrategy trait from alphafield_strategy.
+impl<T> StrategyAdapter<T>
+where
+    T: alphafield_core::Strategy + MetadataStrategy,
+{
+    /// Get strategy metadata
+    ///
+    /// This method is only available when the wrapped strategy implements MetadataStrategy.
+    /// It allows accessing strategy metadata such as category, description, and expected regimes.
+    ///
+    /// # Returns
+    /// Strategy metadata including name, category, description, and expected market regimes
+    pub fn get_metadata(&self) -> alphafield_strategy::StrategyMetadata {
+        self.inner.metadata()
     }
 }

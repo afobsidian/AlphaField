@@ -2,16 +2,35 @@
 //!
 //! Command-line tool for validating trading strategies without requiring
 //! full dashboard integration.
-
+use alphafield_backtest::validation::MarketRegime as BacktestRegime;
+use alphafield_backtest::RegimeAnalyzer;
 use alphafield_backtest::{
     Strategy, StrategyAdapter, StrategyValidator, ValidationConfig, ValidationReport,
     ValidationThresholds, WalkForwardConfig,
 };
 use alphafield_core::Bar;
+use alphafield_strategy::{
+    framework::{
+        canonicalize_strategy_name, MetadataStrategy, StrategyCategory, StrategyMetadata,
+        StrategyWithMetadata,
+    },
+    BollingerBandsStrategy,
+    // Sentiment strategies
+    DivergenceStrategy,
+    // Trend following strategies
+    GoldenCrossStrategy,
+    MacdTrendStrategy,
+    RegimeSentimentStrategy,
+    // Mean reversion strategies
+    RsiStrategy,
+    SentimentMomentumStrategy,
+};
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand};
 use colored::*;
+use lazy_static::lazy_static;
+use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
@@ -132,6 +151,72 @@ enum Commands {
         #[arg(long, default_value = "json")]
         format: OutputFormat,
     },
+
+    /// List all available strategies
+    ListStrategies {
+        /// Filter by category (trend_following, mean_reversion, momentum, volatility, sentiment, baseline)
+        #[arg(long)]
+        category: Option<String>,
+    },
+}
+
+/// Strategy factory function type
+type StrategyFactory = fn() -> Box<dyn StrategyWithMetadata>;
+
+lazy_static! {
+    /// Global strategy factory registry
+    ///
+    /// This registry maps canonical strategy names to factory functions and metadata.
+    /// Using factory functions allows creating fresh strategy instances on demand,
+    /// which is essential for backtesting where each test needs an independent strategy.
+    ///
+    /// # Key Features:
+    /// - Lazy initialization: Registry is built once on first access
+    /// - Factory pattern: Each entry returns a new strategy instance
+    /// - Metadata included: Enables listing and categorization
+    /// - Canonical names: Supports fuzzy matching (underscores, dashes, spaces)
+    ///
+    /// # Registration Process:
+    /// 1. Create default instance of strategy
+    /// 2. Extract metadata (name, category, description, expected regimes)
+    /// 3. Canonicalize the strategy name for consistent lookup
+    /// 4. Store factory function and metadata in HashMap
+    static ref STRATEGY_FACTORY_REGISTRY: HashMap<String, (StrategyFactory, StrategyMetadata)> = {
+        let mut registry = HashMap::new();
+
+        // Helper macro to register strategies
+        // This macro eliminates boilerplate code by:
+        // - Creating a default instance to extract metadata
+        // - Canonicalizing the strategy name for consistent lookups
+        // - Creating a factory function for new instances
+        macro_rules! register_strategy {
+            ($strategy:ty) => {
+                let instance = <$strategy>::default();
+                let metadata = instance.metadata();
+                let canonical_name = canonicalize_strategy_name(&metadata.name);
+                let factory: StrategyFactory = || Box::new(<$strategy>::default());
+                registry.insert(canonical_name, (factory, metadata));
+            };
+        }
+
+        // Register trend following strategies (only those with Default implementation)
+        // These strategies perform best in trending markets
+        register_strategy!(GoldenCrossStrategy);
+        register_strategy!(MacdTrendStrategy);
+
+        // Register mean reversion strategies (only those with Default implementation)
+        // These strategies perform best in ranging/sideways markets
+        register_strategy!(RsiStrategy);
+        register_strategy!(BollingerBandsStrategy);
+
+        // Register sentiment strategies (only those with Default implementation)
+        // These strategies combine technical indicators with market sentiment
+        register_strategy!(DivergenceStrategy);
+        register_strategy!(RegimeSentimentStrategy);
+        register_strategy!(SentimentMomentumStrategy);
+
+        registry
+    };
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -223,12 +308,53 @@ async fn main() -> Result<()> {
             };
 
             // Create strategy based on name
-            let strategy = create_strategy(&strategy)?;
+            let backtest_strategy = create_strategy(&strategy, &symbol, initial_capital)?;
+
+            // Extract metadata before strategy is moved to validate()
+            let metadata = backtest_strategy.metadata();
 
             let validator = StrategyValidator::new(config);
             let report = validator
-                .validate(strategy, &symbol, &bars)
+                .validate(backtest_strategy, &symbol, &bars)
                 .context("Validation failed")?;
+
+            // Run regime analysis separately if strategy has metadata
+            let report = if let Some(md) = metadata {
+                println!("📊 Strategy has metadata, running regime analysis...");
+
+                // Convert core MarketRegime to validation MarketRegime
+                use alphafield_backtest::validation::MarketRegime as BacktestRegime;
+                let expected_regimes = md
+                    .expected_regimes
+                    .into_iter()
+                    .map(|r| match r {
+                        alphafield_strategy::MarketRegime::Bull => BacktestRegime::Bull,
+                        alphafield_strategy::MarketRegime::Bear => BacktestRegime::Bear,
+                        alphafield_strategy::MarketRegime::Sideways => BacktestRegime::Sideways,
+                        alphafield_strategy::MarketRegime::HighVolatility => {
+                            BacktestRegime::HighVolatility
+                        }
+                        alphafield_strategy::MarketRegime::LowVolatility => {
+                            BacktestRegime::LowVolatility
+                        }
+                        alphafield_strategy::MarketRegime::Trending => BacktestRegime::Trending,
+                        alphafield_strategy::MarketRegime::Ranging => BacktestRegime::Ranging,
+                    })
+                    .collect();
+
+                // Run regime analysis
+                let analyzer = RegimeAnalyzer::default();
+                let regime_result = analyzer.analyze(&bars, expected_regimes);
+
+                // Merge regime analysis into report
+                ValidationReport {
+                    regime_analysis: regime_result.unwrap_or_default(),
+                    ..report
+                }
+            } else {
+                println!("⚠️  Strategy has no metadata, skipping regime analysis");
+                report
+            };
 
             // Output report
             match format {
@@ -322,7 +448,6 @@ async fn main() -> Result<()> {
                             continue;
                         }
                     };
-
                     let config = ValidationConfig {
                         data_source: data_file.clone(),
                         symbol: symbol.to_string(),
@@ -334,7 +459,7 @@ async fn main() -> Result<()> {
                         fee_rate: 0.001,
                     };
 
-                    let strategy = match create_strategy(strategy_name) {
+                    let backtest_strategy = match create_strategy(strategy_name, symbol, 10000.0) {
                         Ok(s) => s,
                         Err(e) => {
                             println!(
@@ -346,8 +471,25 @@ async fn main() -> Result<()> {
                         }
                     };
 
+                    backtest_strategy.metadata().map(|m| {
+                        // Convert core MarketRegime to validation MarketRegime
+                        m.expected_regimes.into_iter().map(|r| match r {
+                            alphafield_strategy::MarketRegime::Bull => BacktestRegime::Bull,
+                            alphafield_strategy::MarketRegime::Bear => BacktestRegime::Bear,
+                            alphafield_strategy::MarketRegime::Sideways => BacktestRegime::Sideways,
+                            alphafield_strategy::MarketRegime::HighVolatility => {
+                                BacktestRegime::HighVolatility
+                            }
+                            alphafield_strategy::MarketRegime::LowVolatility => {
+                                BacktestRegime::LowVolatility
+                            }
+                            alphafield_strategy::MarketRegime::Trending => BacktestRegime::Trending,
+                            alphafield_strategy::MarketRegime::Ranging => BacktestRegime::Ranging,
+                        })
+                    });
+
                     let validator = StrategyValidator::new(config);
-                    let report = match validator.validate(strategy, symbol, &bars) {
+                    let report = match validator.validate(backtest_strategy, symbol, &bars) {
                         Ok(r) => r,
                         Err(e) => {
                             println!(
@@ -412,7 +554,127 @@ async fn main() -> Result<()> {
 
             std::process::exit(if failed_validations > 0 { 1 } else { 0 });
         }
+        Commands::ListStrategies { category } => {
+            println!("{}", "Available Strategies".cyan().bold());
+            println!("{}", "=".repeat(50));
+
+            if let Some(cat_filter) = category {
+                // Parse category string to enum
+                // Supports flexible input: "trend_following", "Trend Following", etc.
+                let target_category = match cat_filter.to_lowercase().as_str() {
+                    "trend_following" => StrategyCategory::TrendFollowing,
+                    "mean_reversion" => StrategyCategory::MeanReversion,
+                    "momentum" => StrategyCategory::Momentum,
+                    "volatility" => StrategyCategory::VolatilityBased,
+                    "sentiment" => StrategyCategory::SentimentBased,
+                    "baseline" => StrategyCategory::Baseline,
+                    _ => {
+                        eprintln!("Unknown category: {}. Valid options: trend_following, mean_reversion, momentum, volatility, sentiment, baseline", cat_filter);
+                        std::process::exit(1);
+                    }
+                };
+
+                // Filter strategies by category and display
+                let filtered: Vec<_> = STRATEGY_FACTORY_REGISTRY
+                    .iter()
+                    .filter(|(_, (_, metadata))| metadata.category == target_category)
+                    .collect();
+
+                println!("\n{} ({})\n", "Category".yellow().bold(), cat_filter);
+                for (name, (_, metadata)) in &filtered {
+                    print_strategy_info(name, metadata);
+                }
+            } else {
+                // List all strategies grouped by category
+                // This provides a better user experience than a flat list
+                let categories = vec![
+                    (StrategyCategory::TrendFollowing, "Trend Following"),
+                    (StrategyCategory::MeanReversion, "Mean Reversion"),
+                    (StrategyCategory::Momentum, "Momentum"),
+                    (StrategyCategory::VolatilityBased, "Volatility"),
+                    (StrategyCategory::SentimentBased, "Sentiment"),
+                ];
+
+                for (category, category_name) in categories {
+                    let filtered: Vec<_> = STRATEGY_FACTORY_REGISTRY
+                        .iter()
+                        .filter(|(_, (_, metadata))| metadata.category == category)
+                        .collect();
+
+                    if !filtered.is_empty() {
+                        println!(
+                            "\n{} ({})\n",
+                            category_name.cyan().bold(),
+                            format!("{:?}", category).to_lowercase().replace("_", " ")
+                        );
+                        for (name, (_, metadata)) in &filtered {
+                            print_strategy_info(name, metadata);
+                        }
+                    }
+                }
+            }
+
+            println!("\n{}", "=".repeat(50));
+            println!(
+                "Total strategies available: {}",
+                STRATEGY_FACTORY_REGISTRY.len()
+            );
+        }
     }
+    Ok(())
+}
+
+/// Print strategy information to stdout
+///
+/// This helper function formats and displays strategy metadata in a user-friendly way.
+/// It handles long descriptions by truncating and formats enums for readability.
+///
+/// # Display Format
+/// ```text
+///   • StrategyName
+///     Category: category name
+///     Type: sub_type (if present)
+///     Description: Brief description (truncated to 80 chars)
+///     Expected regimes: Regime1, Regime2, ...
+/// ```
+///
+/// # Arguments
+/// * `name` - Canonical strategy name (key from registry)
+/// * `metadata` - Strategy metadata containing all details
+fn print_strategy_info(name: &str, metadata: &StrategyMetadata) {
+    println!("  • {}", name.green().bold());
+    println!(
+        "    Category: {}",
+        format!("{:?}", metadata.category)
+            .to_lowercase()
+            .replace("_", " ")
+    );
+
+    if let Some(sub_type) = &metadata.sub_type {
+        println!("    Type: {}", sub_type);
+    }
+
+    if !metadata.description.is_empty() {
+        // Truncate long descriptions for better terminal display
+        let desc = if metadata.description.len() > 80 {
+            format!("{}...", &metadata.description[..77])
+        } else {
+            metadata.description.clone()
+        };
+        println!("    {}", desc.dimmed());
+    }
+
+    if !metadata.expected_regimes.is_empty() {
+        // Convert regime enums to readable strings
+        let regimes: Vec<String> = metadata
+            .expected_regimes
+            .iter()
+            .map(|r| format!("{:?}", r))
+            .collect();
+        println!("    Expected regimes: {}", regimes.join(", "));
+    }
+
+    println!();
 }
 
 /// Load bars from database or file
@@ -522,48 +784,72 @@ fn parse_csv_bars(content: &str) -> Result<Vec<Bar>> {
     Ok(bars)
 }
 
-/// Create strategy from name
-fn create_strategy(name: &str) -> Result<Box<dyn Strategy>> {
-    use alphafield_strategy::{
-        BollingerBandsStrategy, GoldenCrossStrategy, MacdTrendStrategy, RsiStrategy,
-    };
-
-    const DEFAULT_CAPITAL: f64 = 10000.0;
-
-    // Normalize strategy name (remove _strategy suffix if present)
+/// Create strategy instance from name using the global factory registry
+///
+/// # Arguments
+/// * `name` - Strategy name (supports multiple formats: "golden_cross", "Golden Cross", etc.)
+/// * `symbol` - Trading symbol for the strategy (e.g., "BTCUSDT")
+/// * `capital` - Initial capital for position sizing
+///
+/// # Returns
+/// * `Ok(Box<dyn Strategy>)` - Wrapped strategy ready for backtesting
+/// * `Err(QuantError)` - If strategy name is not found
+///
+/// # Name Normalization
+/// This function supports flexible strategy name input:
+/// - Underscored: "golden_cross", "macd_trend"
+/// - Spaced: "Golden Cross", "MACD Trend"
+/// - Dashed: "golden-cross", "macd-trend"
+/// - Already canonical: "GoldenCross", "MacdTrend"
+///
+/// # Architecture
+/// 1. Normalize input (underscores/dashes → spaces)
+/// 2. Canonicalize using shared function (display name → key)
+/// 3. Lookup factory in registry
+/// 4. Create fresh instance via factory
+/// 5. Wrap with StrategyAdapter for backtest compatibility
+///
+/// # Why Factories?
+/// Each validation/backtest needs a fresh strategy instance with clean state.
+/// The factory pattern ensures this without cloning complex strategy objects.
+fn create_strategy(name: &str, symbol: &str, capital: f64) -> Result<Box<dyn Strategy>> {
+    // Normalize strategy name before canonicalization
+    // Handle common variations: underscores, dashes, spaces, etc.
     let normalized_name = name
-        .to_lowercase()
-        .replace("_strategy", "")
-        .replace("_", "");
+        .to_string()
+        .replace("_", " ") // "golden_cross" -> "golden cross"
+        .replace("-", " ") // "golden-cross" -> "golden cross"
+        .trim()
+        .to_string();
 
-    match normalized_name.as_str() {
-        "golden_cross" | "goldencross" => Ok(Box::new(StrategyAdapter::new(
-            GoldenCrossStrategy::default(),
-            "BTCUSDT",
-            DEFAULT_CAPITAL,
-        ))),
-        "rsi" | "rsi_strategy" => Ok(Box::new(StrategyAdapter::new(
-            RsiStrategy::default(),
-            "BTCUSDT",
-            DEFAULT_CAPITAL,
-        ))),
-        "macd" | "macd_strategy" => Ok(Box::new(StrategyAdapter::new(
-                    MacdTrendStrategy::default(),
-                    "BTCUSDT",
-                    DEFAULT_CAPITAL,
-                ))),
-        "bollinger_bands" | "bollingerbands" | "bb" => Ok(Box::new(
-            StrategyAdapter::new(
-                BollingerBandsStrategy::default(),
-                "BTCUSDT",
-                DEFAULT_CAPITAL,
-            ),
-        )),
-        _ => Err(anyhow::anyhow!(
-            "Unknown strategy: {}. Available strategies: golden_cross, rsi_strategy, macd_strategy, bollinger_bands",
-            name
-        )),
-    }
+    // Canonicalize the strategy name using the shared function
+    // This converts display names to internal keys
+    let canonical_name = canonicalize_strategy_name(&normalized_name);
+
+    // Look up strategy factory in the registry
+    let (factory, _metadata) = STRATEGY_FACTORY_REGISTRY.get(&canonical_name).ok_or_else(|| {
+        anyhow::anyhow!(
+            "Unknown strategy: '{}'. Available strategies: {}. Use --list-strategies to see all options.",
+            name,
+            STRATEGY_FACTORY_REGISTRY
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", ")
+        )
+    })?;
+
+    // Create a new strategy instance using the factory
+    // This ensures clean state for each backtest
+    let core_strategy = factory();
+
+    // Wrap core strategy with StrategyAdapter for backtest use
+    // Core strategies use Signals, backtest needs Orders
+    Ok(Box::new(StrategyAdapter::new(
+        core_strategy,
+        symbol,
+        capital,
+    )))
 }
 
 /// Output report to file or stdout
