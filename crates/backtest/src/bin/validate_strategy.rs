@@ -350,7 +350,6 @@ async fn main() -> Result<()> {
                 let expected_regimes = metadata
                     .expected_regimes
                     .iter()
-                    .cloned()
                     .map(|r| match r {
                         alphafield_strategy::MarketRegime::Bull => BacktestRegime::Bull,
                         alphafield_strategy::MarketRegime::Bear => BacktestRegime::Bear,
