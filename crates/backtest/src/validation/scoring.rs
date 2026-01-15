@@ -2,10 +2,7 @@
 //!
 //! Calculates overall strategy scores and generates actionable recommendations.
 
-use crate::metrics::PerformanceMetrics;
-use crate::validation::{
-    BacktestResult, MonteCarloResult, RegimeAnalysisResult, ValidationComponents, WalkForwardResult,
-};
+use crate::validation::ValidationComponents;
 
 /// Score weights for different validation components
 #[derive(Debug, Clone)]
@@ -112,7 +109,7 @@ impl ScoreCalculator {
     /// Score walk-forward component (0-100)
     fn score_walk_forward(&self, components: &ValidationComponents) -> f64 {
         let wf = &components.walk_forward;
-        let thresholds = &components.config.thresholds;
+        let _thresholds = &components.config.thresholds;
         if wf.windows.is_empty() {
             return 0.0;
         }
@@ -173,7 +170,7 @@ impl ScoreCalculator {
     /// Score risk metrics component (0-100)
     fn score_risk(&self, components: &ValidationComponents) -> f64 {
         let backtest = &components.backtest.metrics;
-        let wf = &components.walk_forward;
+        let _wf = &components.walk_forward;
         let mc = &components.monte_carlo;
 
         // Drawdown consistency score (0-30 points)
@@ -186,9 +183,7 @@ impl ScoreCalculator {
         };
 
         // Volatility score (0-35 points) - lower is better
-        let volatility_score = ((0.50 - backtest.volatility) / 0.50 * 35.0)
-            .max(0.0)
-            .min(35.0);
+        let volatility_score = ((0.50 - backtest.volatility) / 0.50 * 35.0).clamp(0.0, 35.0);
 
         // Tail risk score (0-35 points) - from Monte Carlo worst case
         let tail_risk_score = if mc.num_simulations == 0 {
@@ -238,7 +233,7 @@ impl RecommendationsGenerator {
         components: &ValidationComponents,
     ) -> crate::validation::Recommendations {
         let score = self.calculator.calculate(components);
-        let grade = ScoreCalculator::grade(score);
+        let _grade = ScoreCalculator::grade(score);
 
         let strengths = self.identify_strengths(components);
         let weaknesses = self.identify_weaknesses(components);
@@ -457,7 +452,6 @@ impl RecommendationsGenerator {
         let mc = &components.monte_carlo;
         let regime = &components.regime;
         let thresholds = &components.config.thresholds;
-        let regime = &components.regime;
 
         // Check for critical failures
         let critical_failures = [
@@ -527,7 +521,11 @@ impl Default for RecommendationsGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::validation::ValidationThresholds;
+    use crate::metrics::PerformanceMetrics;
+    use crate::monte_carlo::MonteCarloResult;
+    use crate::validation::RegimeAnalysisResult;
+    use crate::walk_forward::WalkForwardResult;
+    use crate::BacktestResult;
 
     fn create_test_backtest() -> BacktestResult {
         BacktestResult {
@@ -589,16 +587,19 @@ mod tests {
     }
 
     fn create_test_regime() -> RegimeAnalysisResult {
-        let mut result = RegimeAnalysisResult::default();
-        result.bull_regime = RegimeAnalysisResult::default().bull_regime;
-        result.bull_regime.sharpe_ratio = 2.5;
-        result.bull_regime.time_in_regime = 0.40;
-        result.expected_regimes = vec![crate::validation::MarketRegime::Bull];
-        result
+        crate::validation::RegimeAnalysisResult {
+            bull_regime: crate::validation::RegimePerformance {
+                sharpe_ratio: 2.5,
+                time_in_regime: 0.40,
+                ..Default::default()
+            },
+            expected_regimes: vec![crate::validation::MarketRegime::Bull],
+            ..Default::default()
+        }
     }
 
     fn create_test_components() -> ValidationComponents {
-        ValidationComponents {
+        crate::validation::ValidationComponents {
             backtest: create_test_backtest(),
             walk_forward: create_test_walk_forward(),
             monte_carlo: create_test_monte_carlo(),
@@ -609,12 +610,7 @@ mod tests {
                 interval: String::new(),
                 walk_forward: crate::walk_forward::WalkForwardConfig::default(),
                 risk_free_rate: 0.02,
-                thresholds: crate::validation::ValidationThresholds {
-                    min_sharpe: 1.0,
-                    max_drawdown: 0.30,
-                    min_win_rate: 0.60,
-                    min_positive_probability: 0.70,
-                },
+                thresholds: crate::validation::ValidationThresholds::default(),
                 initial_capital: 10000.0,
                 fee_rate: 0.001,
             },

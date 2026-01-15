@@ -3,8 +3,6 @@
 //! Detects market regimes in historical data and analyzes strategy
 //! performance across different market conditions.
 
-use crate::metrics::PerformanceMetrics;
-
 use alphafield_core::{Bar, QuantError as CoreError};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -181,7 +179,7 @@ impl RegimeAnalysisResult {
     /// Detect regime mismatch
     pub fn detect_mismatch(&mut self) {
         // Find best performing regime
-        let regime_performances = vec![
+        let regime_performances = [
             (MarketRegime::Bull, &self.bull_regime),
             (MarketRegime::Bear, &self.bear_regime),
             (MarketRegime::Sideways, &self.sideways_regime),

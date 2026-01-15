@@ -3,23 +3,25 @@
 //! Main orchestrator that runs all validation tests and generates
 //! comprehensive validation reports.
 
+#[allow(unused_imports)]
 use crate::adapter::StrategyAdapter;
 use crate::engine::BacktestEngine;
 use crate::exchange::SlippageModel;
 use crate::metrics::PerformanceMetrics;
 use crate::monte_carlo::{MonteCarloConfig, MonteCarloSimulator, Trade as McTrade};
+#[allow(unused_imports)]
 use crate::portfolio::Portfolio;
 use crate::strategy::Strategy;
+#[allow(unused_imports)]
 use crate::trade::Trade;
 use crate::validation::scoring::RecommendationsGenerator;
 use crate::validation::scoring::ScoreCalculator;
 use crate::validation::{
-    BacktestResult, MonteCarloResult, RegimeAnalysisResult, RiskAssessment, RiskRating, TestPeriod,
-    ValidationComponents, ValidationConfig, ValidationReport, ValidationThresholds,
-    ValidationVerdict,
+    BacktestResult, RegimeAnalysisResult, RiskAssessment, RiskRating, TestPeriod,
+    ValidationComponents, ValidationConfig, ValidationReport, ValidationVerdict,
 };
-use alphafield_core::{Bar, QuantError as CoreError, Signal};
-use chrono::{DateTime, Utc};
+use alphafield_core::{Bar, QuantError as CoreError};
+use chrono::Utc;
 
 /// Main strategy validator orchestrator
 pub struct StrategyValidator {
@@ -124,7 +126,7 @@ impl StrategyValidator {
         engine.add_data(symbol, bars.to_vec());
 
         // Run backtest
-        let metrics = engine.run().map_err(|e| CoreError::Api(e.to_string()))?;
+        let _metrics = engine.run().map_err(|e| CoreError::Api(e.to_string()))?;
 
         // Extract results from engine fields
         let portfolio = &engine.portfolio;
@@ -449,8 +451,8 @@ impl StrategyValidator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::adapter::StrategyAdapter;
-    use alphafield_core::{Bar, Signal};
+    use crate::validation::ValidationThresholds;
+    use alphafield_core::Bar;
     use chrono::Utc;
 
     #[derive(Debug, Clone)]

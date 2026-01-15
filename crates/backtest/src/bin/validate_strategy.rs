@@ -434,7 +434,7 @@ fn parse_csv_bars(content: &str) -> Result<Vec<Bar>> {
             .parse::<i64>()
             .ok()
             .and_then(|ts| DateTime::from_timestamp(ts, 0))
-            .unwrap_or_else(|| Utc::now());
+            .unwrap_or_else(Utc::now);
 
         let bar = Bar {
             timestamp,
@@ -800,13 +800,7 @@ fn generate_markdown_report(report: &ValidationReport) -> Result<String> {
         "- **Regime Match Score:** {:.1}%\n",
         report.regime_analysis.calculate_regime_match_score()
     ));
-    if let Some(ref mismatch) = report.regime_analysis.regime_mismatch {
-        md.push_str(&format!("- **Warning:** {}\n\n", mismatch.warning));
-    } else {
-        md.push_str("\n");
-    }
 
-    md.push_str("### Risk Assessment (10%)\n\n");
     md.push_str(&format!(
         "- **Expected Max Drawdown:** {:.2}%\n",
         report.risk_assessment.expected_max_drawdown * 100.0
@@ -831,19 +825,19 @@ fn generate_markdown_report(report: &ValidationReport) -> Result<String> {
     for strength in &report.recommendations.strengths {
         md.push_str(&format!("- {}\n", strength));
     }
-    md.push_str("\n");
+    md.push('\n');
 
     md.push_str("### Weaknesses\n\n");
     for weakness in &report.recommendations.weaknesses {
         md.push_str(&format!("- {}\n", weakness));
     }
-    md.push_str("\n");
+    md.push('\n');
 
     md.push_str("### Improvements\n\n");
     for improvement in &report.recommendations.improvements {
         md.push_str(&format!("- {}\n", improvement));
     }
-    md.push_str("\n");
+    md.push('\n');
 
     // Deployment
     md.push_str("## Deployment Recommendation\n\n");
@@ -860,7 +854,7 @@ fn generate_markdown_report(report: &ValidationReport) -> Result<String> {
             for param in params {
                 md.push_str(&format!("- {}\n", param));
             }
-            md.push_str("\n");
+            md.push('\n');
         }
         alphafield_backtest::DeploymentRecommendation::Reject { reason } => {
             md.push_str(&format!("**Status:** REJECT\n\n**Reason:** {}\n\n", reason));

@@ -13,7 +13,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::metrics::PerformanceMetrics;
 use crate::monte_carlo::MonteCarloResult;
-use crate::portfolio::Portfolio;
 use crate::trade::Trade;
 use crate::walk_forward::{WalkForwardConfig, WalkForwardResult};
 
@@ -204,9 +203,5 @@ pub struct ValidationComponents {
 
 // Re-export regime module types
 pub use regime::{MarketRegime, RegimeAnalysisResult, RegimeAnalyzer, RegimePerformance};
-
-// Re-export scoring module types
 pub use scoring::{RecommendationsGenerator, ScoreCalculator, ScoreWeights};
-
-// Re-export validator module types
 pub use validator::StrategyValidator;
