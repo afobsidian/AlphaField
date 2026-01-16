@@ -1,5 +1,6 @@
 use crate::error::Result;
 use alphafield_core::{Bar, Tick};
+use alphafield_strategy::StrategyMetadata;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum OrderSide {
@@ -26,6 +27,18 @@ pub trait Strategy {
     fn on_tick(&mut self, _tick: &Tick) -> Result<Vec<OrderRequest>> {
         // Default implementation does nothing for ticks
         Ok(Vec::new())
+    }
+
+    /// Get strategy metadata if available
+    ///
+    /// Returns None for strategies that don't implement MetadataStrategy.
+    /// This enables regime-based validation without breaking backward compatibility.
+    ///
+    /// # Returns
+    /// - Some(StrategyMetadata) if the strategy implements MetadataStrategy
+    /// - None for strategies without metadata support
+    fn metadata(&self) -> Option<StrategyMetadata> {
+        None
     }
 }
 

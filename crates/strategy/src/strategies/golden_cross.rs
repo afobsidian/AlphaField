@@ -70,6 +70,13 @@ impl GoldenCrossStrategy {
     }
 }
 
+impl Default for GoldenCrossStrategy {
+    fn default() -> Self {
+        // Default golden cross: 50-day and 200-day SMA
+        Self::new(50, 200)
+    }
+}
+
 impl MetadataStrategy for GoldenCrossStrategy {
     fn metadata(&self) -> StrategyMetadata {
         StrategyMetadata {
@@ -77,7 +84,7 @@ impl MetadataStrategy for GoldenCrossStrategy {
             category: StrategyCategory::TrendFollowing,
             sub_type: Some("moving_average_crossover".to_string()),
             description: format!(
-                "Golden Cross strategy using {} and {} period SMAs with {:.1}% TP and {:.1}% SL. 
+                "Golden Cross strategy using {} and {} period SMAs with {:.1}% TP and {:.1}% SL.
                 Generates buy signals on golden cross (fast MA crosses above slow MA) and sell signals on death cross.",
                 self.config.fast_period, self.config.slow_period, self.config.take_profit, self.config.stop_loss
             ),

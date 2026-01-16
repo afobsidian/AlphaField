@@ -104,7 +104,16 @@ impl MacdTrendStrategy {
     pub fn config(&self) -> &MacdTrendConfig {
         &self.config
     }
+}
 
+impl Default for MacdTrendStrategy {
+    fn default() -> Self {
+        // Default MACD: 12 fast, 26 slow, 9 signal
+        Self::new(12, 26, 9)
+    }
+}
+
+impl MacdTrendStrategy {
     /// Check if MACD crossover occurred (MACD crosses signal line)
     fn check_crossover(&self, macd: f64, signal: f64) -> Option<bool> {
         if let (Some(prev_macd), Some(prev_signal)) = (self.last_macd, self.last_signal) {

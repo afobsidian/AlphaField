@@ -73,6 +73,11 @@ pub struct MonteCarloResult {
     pub return_50th: f64,
     pub return_95th: f64,
 
+    /// Backwards-compatible field aliases for return percentiles
+    pub percentile_5: f64,
+    pub percentile_50: f64,
+    pub percentile_95: f64,
+
     /// Confidence intervals for max drawdown
     pub drawdown_5th: f64,
     pub drawdown_50th: f64,
@@ -80,9 +85,46 @@ pub struct MonteCarloResult {
 
     /// Probability of profit (% of simulations with positive return)
     pub probability_of_profit: f64,
+    /// Backwards-compatible field retained for legacy consumers expecting `positive_probability`
+    pub positive_probability: f64,
 
     /// All simulation results (for visualization)
     pub simulations: Vec<SimulationResult>,
+}
+
+impl Default for SimulationResult {
+    fn default() -> Self {
+        Self {
+            final_equity: 10000.0,
+            total_return: 0.0,
+            max_drawdown: 0.0,
+            sharpe_ratio: 0.0,
+        }
+    }
+}
+
+impl Default for MonteCarloResult {
+    fn default() -> Self {
+        Self {
+            num_simulations: 0,
+            original_metrics: SimulationResult::default(),
+            equity_5th: 10000.0,
+            equity_50th: 10000.0,
+            equity_95th: 10000.0,
+            return_5th: 0.0,
+            return_50th: 0.0,
+            return_95th: 0.0,
+            percentile_5: 0.0,
+            percentile_50: 0.0,
+            percentile_95: 0.0,
+            drawdown_5th: 0.0,
+            drawdown_50th: 0.0,
+            drawdown_95th: 0.0,
+            probability_of_profit: 0.0,
+            positive_probability: 0.0,
+            simulations: Vec::new(),
+        }
+    }
 }
 
 /// Monte Carlo simulator
@@ -118,10 +160,14 @@ impl MonteCarloSimulator {
                 return_5th: 0.0,
                 return_50th: 0.0,
                 return_95th: 0.0,
+                percentile_5: 0.0,
+                percentile_50: 0.0,
+                percentile_95: 0.0,
                 drawdown_5th: 0.0,
                 drawdown_50th: 0.0,
                 drawdown_95th: 0.0,
                 probability_of_profit: 0.0,
+                positive_probability: 0.0,
                 simulations: vec![],
             };
         }
@@ -170,10 +216,14 @@ impl MonteCarloSimulator {
             return_5th: returns[idx_5],
             return_50th: returns[idx_50],
             return_95th: returns[idx_95.min(n - 1)],
+            percentile_5: returns[idx_5],
+            percentile_50: returns[idx_50],
+            percentile_95: returns[idx_95.min(n - 1)],
             drawdown_5th: drawdowns[idx_5],
             drawdown_50th: drawdowns[idx_50],
             drawdown_95th: drawdowns[idx_95.min(n - 1)],
             probability_of_profit: profitable as f64 / n as f64,
+            positive_probability: profitable as f64 / n as f64,
             simulations,
         }
     }

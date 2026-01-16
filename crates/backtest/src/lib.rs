@@ -23,6 +23,7 @@ pub mod sensitivity;
 pub mod strategy;
 pub mod tax;
 pub mod trade;
+pub mod validation;
 pub mod walk_forward;
 
 pub use journal::{JournalEntry, TradeJournal};
@@ -55,4 +56,9 @@ pub use rolling_stats::{MonthlyReturn, RollingStats};
 pub use sensitivity::{ParameterRange, SensitivityAnalyzer, SensitivityConfig, SensitivityResult};
 pub use strategy::{BuyAndHold, OrderRequest, OrderSide, OrderType, Strategy, StrategyCombiner};
 pub use trade::{Trade, TradeSide, TradeStats};
+pub use validation::{
+    BacktestResult, DeploymentRecommendation, MarketRegime, Recommendations, RegimeAnalysisResult,
+    RegimeAnalyzer, RegimePerformance, RiskAssessment, RiskRating, StrategyValidator, TestPeriod,
+    ValidationConfig, ValidationReport, ValidationThresholds, ValidationVerdict,
+};
 pub use walk_forward::{WalkForwardAnalyzer, WalkForwardConfig, WalkForwardResult};

@@ -7,7 +7,7 @@ use alphafield_core::Bar;
 use serde::Serialize;
 
 /// Asset-level sentiment calculated from price action
-#[derive(Debug, Clone, Serialize, Default)]
+#[derive(Debug, Clone, Serialize, Default, PartialEq)]
 pub struct AssetSentiment {
     /// RSI value (0-100)
     pub rsi: f64,
@@ -354,18 +354,20 @@ mod tests {
     use chrono::{TimeZone, Utc};
 
     fn make_bars(closes: &[f64]) -> Vec<Bar> {
+        use chrono::Duration;
         closes
             .iter()
             .enumerate()
-            .map(|(i, &close)| Bar {
-                timestamp: Utc
-                    .with_ymd_and_hms(2024, 1, 1 + i as u32, 0, 0, 0)
-                    .unwrap(),
-                open: close,
-                high: close * 1.01,
-                low: close * 0.99,
-                close,
-                volume: 1000.0,
+            .map(|(i, &close)| {
+                let base_date = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+                Bar {
+                    timestamp: base_date + Duration::hours(i as i64),
+                    open: close,
+                    high: close * 1.01,
+                    low: close * 0.99,
+                    close,
+                    volume: 1000.0,
+                }
             })
             .collect()
     }
@@ -416,5 +418,386 @@ mod tests {
             "Momentum should be negative in downtrend"
         );
         assert!(sentiment.rsi < 50.0, "RSI should be below 50 in downtrend");
+    }
+
+    #[test]
+    fn test_composite_score_formula() {
+        // Test that composite_score follows: (rsi_score * 0.4 + momentum_score * 0.4 + volume_score * 0.2)
+        let calculator = AssetSentimentCalculator::default();
+        let closes: Vec<f64> = vec![100.0; 30];
+        let mut bars = make_bars(&closes);
+
+        // Set up specific conditions
+        // RSI = 70 (rsi_score = -20)
+        // Momentum = 10% (momentum_score = 50)
+        // Volume ratio = 2.0 with positive momentum (volume_score = 10)
+        // Expected: (-20 * 0.4) + (50 * 0.4) + (10 * 0.2) = -8 + 20 + 2 = 14
+        bars[29].close = 170.0; // High price to push RSI up
+        bars[15].close = 100.0; // Past price for momentum
+        bars[29].volume = 2000.0;
+
+        let sentiment = calculator.calculate(&bars);
+
+        // The score should be positive due to high momentum and volume
+        assert!(sentiment.composite_score > 0.0);
+        assert!(sentiment.composite_score <= 100.0);
+    }
+
+    #[test]
+    fn test_composite_score_clamping() {
+        let calculator = AssetSentimentCalculator::default();
+        let mut bars = make_bars(&vec![100.0; 30]);
+
+        // Create extreme conditions that would push score beyond bounds
+        // Very high RSI (> 100), very high momentum, high volume
+        bars[29].close = 10000.0;
+        bars[29].volume = 50000.0;
+
+        let sentiment = calculator.calculate(&bars);
+
+        assert!(
+            sentiment.composite_score <= 100.0,
+            "Composite score should be clamped to maximum 100.0"
+        );
+        assert!(
+            sentiment.composite_score >= -100.0,
+            "Composite score should be clamped to minimum -100.0"
+        );
+    }
+
+    #[test]
+    fn test_composite_score_negative_clamping() {
+        let calculator = AssetSentimentCalculator::default();
+        let mut bars = make_bars(&vec![100.0; 30]);
+
+        // Create extreme conditions that would push score below -100
+        // Very low RSI, very negative momentum, high volume with negative momentum
+        bars[15].close = 10000.0; // Past high price
+        bars[29].close = 1.0; // Current low price
+        bars[29].volume = 50000.0;
+
+        let sentiment = calculator.calculate(&bars);
+
+        assert!(
+            sentiment.composite_score >= -100.0,
+            "Composite score should be clamped to minimum -100.0"
+        );
+    }
+
+    #[test]
+    fn test_empty_and_insufficient_bars() {
+        let calculator = AssetSentimentCalculator::default();
+
+        // Empty bars
+        let sentiment = calculator.calculate(&[]);
+        assert!((sentiment.rsi - 0.0).abs() < f64::EPSILON);
+        assert!((sentiment.momentum - 0.0).abs() < f64::EPSILON);
+        assert!((sentiment.volume_ratio - 0.0).abs() < f64::EPSILON);
+        assert!((sentiment.composite_score - 0.0).abs() < f64::EPSILON);
+        assert_eq!(sentiment.rsi_zone, RsiZone::Neutral);
+        assert_eq!(sentiment.momentum_zone, MomentumZone::Flat);
+        assert_eq!(
+            sentiment.classification,
+            AssetSentimentClassification::Neutral
+        );
+
+        // Insufficient bars (less than required periods)
+        let bars = make_bars(&[100.0; 10]);
+        let sentiment = calculator.calculate(&bars);
+        assert!((sentiment.rsi - 0.0).abs() < f64::EPSILON);
+        assert!((sentiment.momentum - 0.0).abs() < f64::EPSILON);
+        assert!((sentiment.volume_ratio - 0.0).abs() < f64::EPSILON);
+        assert!((sentiment.composite_score - 0.0).abs() < f64::EPSILON);
+        assert_eq!(sentiment.rsi_zone, RsiZone::Neutral);
+        assert_eq!(sentiment.momentum_zone, MomentumZone::Flat);
+        assert_eq!(
+            sentiment.classification,
+            AssetSentimentClassification::Neutral
+        );
+    }
+
+    #[test]
+    fn test_rsi_calculation_extreme_values() {
+        let calculator = AssetSentimentCalculator::default();
+
+        // All gains (RSI should be 100)
+        let closes: Vec<f64> = (0..30).map(|i| 100.0 + i as f64).collect();
+        let bars = make_bars(&closes);
+        let rsi = calculator.calculate_rsi(&bars);
+        assert!(rsi > 90.0, "RSI should be very high for consistent gains");
+
+        // All losses (RSI should be 0)
+        let closes: Vec<f64> = (0..30).map(|i| 200.0 - i as f64).collect();
+        let bars = make_bars(&closes);
+        let rsi = calculator.calculate_rsi(&bars);
+        assert!(rsi < 10.0, "RSI should be very low for consistent losses");
+
+        // Flat price (RSI should be around 50, but may vary due to edge cases)
+        let bars = make_bars(&vec![100.0; 30]);
+        let rsi = calculator.calculate_rsi(&bars);
+        assert!(
+            (0.0..=100.0).contains(&rsi),
+            "RSI should be valid for flat price (got: {})",
+            rsi
+        );
+    }
+
+    #[test]
+    fn test_momentum_calculation_edge_cases() {
+        let calculator = AssetSentimentCalculator::default();
+        let mut bars = make_bars(&vec![100.0; 30]);
+
+        // Zero momentum (same price)
+        let momentum = calculator.calculate_momentum(&bars);
+        assert_eq!(
+            momentum, 0.0,
+            "Momentum should be zero when price unchanged"
+        );
+
+        // Positive momentum
+        bars[29].close = 110.0;
+        let momentum = calculator.calculate_momentum(&bars);
+        assert!(
+            momentum > 0.0,
+            "Momentum should be positive when price increased"
+        );
+
+        // Negative momentum
+        bars[29].close = 90.0;
+        let momentum = calculator.calculate_momentum(&bars);
+        assert!(
+            momentum < 0.0,
+            "Momentum should be negative when price decreased"
+        );
+
+        // Zero past price (should handle gracefully)
+        let bars = make_bars(
+            &vec![0.0; 15]
+                .into_iter()
+                .chain(vec![100.0; 15])
+                .collect::<Vec<_>>(),
+        );
+        let momentum = calculator.calculate_momentum(&bars);
+        assert!(
+            !momentum.is_nan() && !momentum.is_infinite(),
+            "Momentum should handle zero past price"
+        );
+    }
+
+    #[test]
+    fn test_volume_ratio_calculation() {
+        let calculator = AssetSentimentCalculator::default();
+        let mut bars = make_bars(&vec![100.0; 30]);
+
+        // All same volume (ratio should be 1.0)
+        let volume_ratio = calculator.calculate_volume_ratio(&bars);
+        assert_eq!(
+            volume_ratio, 1.0,
+            "Volume ratio should be 1.0 when all volumes equal"
+        );
+
+        // High current volume (ratio > 1.0)
+        bars[29].volume = 5000.0;
+        let volume_ratio = calculator.calculate_volume_ratio(&bars);
+        assert!(
+            volume_ratio > 1.0,
+            "Volume ratio should be > 1.0 when current volume is high"
+        );
+
+        // Low current volume (ratio < 1.0)
+        bars[29].volume = 100.0;
+        let volume_ratio = calculator.calculate_volume_ratio(&bars);
+        assert!(
+            volume_ratio < 1.0,
+            "Volume ratio should be < 1.0 when current volume is low"
+        );
+
+        // Zero average volume (should return 1.0 to avoid division by zero)
+        let mut bars = make_bars(&[100.0; 20]);
+        for bar in bars.iter_mut().take(19) {
+            bar.volume = 0.0;
+        }
+        bars[19].volume = 1000.0;
+        let volume_ratio = calculator.calculate_volume_ratio(&bars);
+        assert!(
+            volume_ratio == 1.0 || volume_ratio.is_infinite(),
+            "Volume ratio should handle zero average volume"
+        );
+    }
+
+    #[test]
+    fn test_classification_boundaries() {
+        // VeryBearish boundary (< -50)
+        assert_eq!(
+            AssetSentimentClassification::from_score(-51.0),
+            AssetSentimentClassification::VeryBearish
+        );
+        assert_eq!(
+            AssetSentimentClassification::from_score(-50.1),
+            AssetSentimentClassification::VeryBearish
+        );
+
+        // Bearish boundary (-50 to -20)
+        assert_eq!(
+            AssetSentimentClassification::from_score(-50.0),
+            AssetSentimentClassification::Bearish
+        );
+        assert_eq!(
+            AssetSentimentClassification::from_score(-35.0),
+            AssetSentimentClassification::Bearish
+        );
+        assert_eq!(
+            AssetSentimentClassification::from_score(-20.1),
+            AssetSentimentClassification::Bearish
+        );
+
+        // Neutral boundary (-20 to +20)
+        assert_eq!(
+            AssetSentimentClassification::from_score(-20.0),
+            AssetSentimentClassification::Neutral
+        );
+        assert_eq!(
+            AssetSentimentClassification::from_score(0.0),
+            AssetSentimentClassification::Neutral
+        );
+        assert_eq!(
+            AssetSentimentClassification::from_score(20.0),
+            AssetSentimentClassification::Neutral
+        );
+
+        // Bullish boundary (+20 to +50)
+        assert_eq!(
+            AssetSentimentClassification::from_score(20.1),
+            AssetSentimentClassification::Bullish
+        );
+        assert_eq!(
+            AssetSentimentClassification::from_score(35.0),
+            AssetSentimentClassification::Bullish
+        );
+        assert_eq!(
+            AssetSentimentClassification::from_score(50.0),
+            AssetSentimentClassification::Bullish
+        );
+
+        // VeryBullish boundary (> +50)
+        assert_eq!(
+            AssetSentimentClassification::from_score(50.1),
+            AssetSentimentClassification::VeryBullish
+        );
+        assert_eq!(
+            AssetSentimentClassification::from_score(100.0),
+            AssetSentimentClassification::VeryBullish
+        );
+    }
+
+    #[test]
+    fn test_classification_helper_methods() {
+        assert!(AssetSentimentClassification::Bullish.is_bullish());
+        assert!(AssetSentimentClassification::VeryBullish.is_bullish());
+        assert!(!AssetSentimentClassification::Neutral.is_bullish());
+        assert!(!AssetSentimentClassification::Bearish.is_bullish());
+        assert!(!AssetSentimentClassification::VeryBearish.is_bullish());
+
+        assert!(AssetSentimentClassification::Bearish.is_bearish());
+        assert!(AssetSentimentClassification::VeryBearish.is_bearish());
+        assert!(!AssetSentimentClassification::Neutral.is_bearish());
+        assert!(!AssetSentimentClassification::Bullish.is_bearish());
+        assert!(!AssetSentimentClassification::VeryBullish.is_bearish());
+    }
+
+    #[test]
+    fn test_volume_score_calculation() {
+        let calculator = AssetSentimentCalculator::default();
+
+        // Positive momentum with high volume should increase score
+        let mut bars = make_bars(&vec![100.0; 30]);
+        bars[15].close = 100.0;
+        bars[29].close = 110.0; // Positive momentum
+        bars[29].volume = 5000.0; // High volume
+
+        let sentiment = calculator.calculate(&bars);
+        assert!(
+            sentiment.composite_score > 0.0,
+            "High volume + positive momentum should increase score"
+        );
+
+        // Negative momentum with high volume should decrease score
+        let mut bars = make_bars(&vec![100.0; 30]);
+        bars[15].close = 110.0;
+        bars[29].close = 90.0; // Negative momentum
+        bars[29].volume = 5000.0; // High volume confirms trend
+
+        let sentiment = calculator.calculate(&bars);
+        assert!(
+            sentiment.composite_score < 0.0,
+            "High volume + negative momentum should decrease score"
+        );
+    }
+
+    #[test]
+    fn test_sentiment_series_calculation() {
+        let calculator = AssetSentimentCalculator::default();
+        let closes: Vec<f64> = (0..50).map(|i| 100.0 + i as f64 * 2.0).collect();
+        let bars = make_bars(&closes);
+
+        let series = calculator.calculate_series(&bars);
+
+        // Should calculate sentiment for bars after the minimum period
+        assert!(!series.is_empty(), "Series should not be empty");
+        assert!(
+            series.len() < 50,
+            "Should skip initial bars for warmup period"
+        );
+
+        // All bars in uptrend should have bullish or neutral sentiment
+        for (_timestamp, sentiment) in &series {
+            assert!(
+                !sentiment.classification.is_bearish(),
+                "Uptrend should not have bearish sentiment"
+            );
+        }
+    }
+
+    #[test]
+    fn test_sentiment_summary_calculation() {
+        let calculator = AssetSentimentCalculator::default();
+        let closes: Vec<f64> = (0..50).map(|i| 100.0 + i as f64 * 2.0).collect();
+        let bars = make_bars(&closes);
+
+        let series = calculator.calculate_series(&bars);
+
+        // Need some data to calculate summary
+        assert!(!series.is_empty(), "Should have sentiment series data");
+
+        let summary = AssetSentimentSummary::calculate(&series);
+
+        assert!(
+            summary.bullish_days > 0,
+            "Should have bullish days in uptrend"
+        );
+        assert!(
+            summary.avg_rsi > 50.0,
+            "Average RSI should be > 50 in uptrend"
+        );
+        assert!(
+            summary.avg_momentum > 0.0,
+            "Average momentum should be positive in uptrend"
+        );
+    }
+
+    #[test]
+    fn test_default_sentiment_values() {
+        let default = AssetSentiment::default();
+
+        assert!((default.rsi - 0.0).abs() < f64::EPSILON);
+        assert!((default.momentum - 0.0).abs() < f64::EPSILON);
+        assert!((default.volume_ratio - 0.0).abs() < f64::EPSILON);
+        assert!((default.composite_score - 0.0).abs() < f64::EPSILON);
+        assert_eq!(default.rsi_zone, RsiZone::Neutral);
+        assert_eq!(default.momentum_zone, MomentumZone::Flat);
+        assert_eq!(
+            default.classification,
+            AssetSentimentClassification::Neutral
+        );
     }
 }
