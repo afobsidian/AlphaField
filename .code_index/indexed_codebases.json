@@ -1,10 +1,10 @@
 {
-  "alphafield": {
-    "name": "alphafield",
+  "AlphaField": {
+    "name": "AlphaField",
     "path": "C:\\Users\\adamf\\Documents\\Projects\\AlphaField",
-    "db_path": ".code_index\\alphafield",
-    "status": "indexing",
+    "db_path": ".code_index\\AlphaField",
+    "status": "ready",
     "error": null,
-    "started_at": "2026-01-15T22:51:02.431249Z"
+    "last_indexed": "2026-01-16T14:28:36.236977+00:00"
   }
 }
