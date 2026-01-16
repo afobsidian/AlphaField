@@ -26,14 +26,12 @@ use alphafield_strategy::{
     SentimentMomentumStrategy,
 };
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
 use clap::{Parser, Subcommand};
 use colored::*;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;
-use std::path::Path;
 
 #[derive(Parser)]
 #[command(
@@ -71,10 +69,6 @@ enum Commands {
         /// Timeframe/interval (e.g., 1h, 4h, 1d)
         #[arg(long)]
         interval: String,
-
-        /// Data file path (CSV or JSON) - optional, loads from database if not provided
-        #[arg(long)]
-        data_file: Option<String>,
 
         /// Run walk-forward analysis
         #[arg(long, default_value = "false")]
@@ -139,9 +133,9 @@ enum Commands {
         #[arg(long)]
         interval: String,
 
-        /// Data directory (contains symbol-specific data files)
+        /// Data directory (deprecated - data is loaded from database)
         #[arg(long)]
-        data_dir: String,
+        data_dir: Option<String>,
 
         /// Output directory for reports
         #[arg(long)]
@@ -274,7 +268,6 @@ async fn main() -> Result<()> {
             strategy,
             symbol,
             interval,
-            data_file,
             walk_forward: _wf,
             monte_carlo: _mc,
             regime_analysis: _ra,
@@ -288,11 +281,9 @@ async fn main() -> Result<()> {
             fee_rate,
             risk_free_rate,
         } => {
-            let bars = load_bars(&data_file, &symbol, &interval).await?;
+            let bars = load_bars(&symbol, &interval).await?;
             let config = ValidationConfig {
-                data_source: data_file
-                    .clone()
-                    .unwrap_or_else(|| format!("database:{}", symbol)),
+                data_source: format!("database:{}", symbol),
                 symbol: symbol.clone(),
                 interval: interval.clone(),
                 walk_forward: WalkForwardConfig::default(),
@@ -406,7 +397,7 @@ async fn main() -> Result<()> {
             batch_file,
             symbols,
             interval,
-            data_dir,
+            data_dir: _,
             output_dir,
             format,
         } => {
@@ -437,23 +428,10 @@ async fn main() -> Result<()> {
 
             for strategy_name in strategy_names {
                 for symbol in &symbols_list {
-                    let data_file = format!("{}/{}.csv", data_dir, symbol);
-                    if !Path::new(&data_file).exists() {
-                        println!(
-                            "{}",
-                            format!(
-                                "Skipping {}/{} - data file not found: {}",
-                                strategy_name, symbol, data_file
-                            )
-                            .yellow()
-                        );
-                        continue;
-                    }
-
                     total_validations += 1;
                     println!("Validating {}/{}...", strategy_name, symbol);
 
-                    let bars = match load_bars_from_file(&data_file) {
+                    let bars = match load_bars(symbol, &interval).await {
                         Ok(b) => b,
                         Err(e) => {
                             println!(
@@ -469,7 +447,7 @@ async fn main() -> Result<()> {
                         }
                     };
                     let config = ValidationConfig {
-                        data_source: data_file.clone(),
+                        data_source: format!("database:{}", symbol),
                         symbol: symbol.to_string(),
                         interval: interval.clone(),
                         walk_forward: WalkForwardConfig::default(),
@@ -697,111 +675,36 @@ fn print_strategy_info(name: &str, metadata: &StrategyMetadata) {
     println!();
 }
 
-/// Load bars from database or file
-async fn load_bars(data_file: &Option<String>, symbol: &str, interval: &str) -> Result<Vec<Bar>> {
-    // Try to load from database if DATABASE_URL is set and no file specified
-    if data_file.is_none() {
-        println!("📡 Connecting to database...");
-        if let Ok(db) = alphafield_data::DatabaseClient::new_from_env().await {
-            println!("🔍 Checking if data exists in database...");
-            if db.exists(symbol, interval).await? {
-                println!("✅ Loading historical data from database...");
-                let bars = db.load_bars(symbol, interval).await?;
-                println!("Loaded {} bars from database", bars.len());
-                return Ok(bars);
-            } else {
-                println!("🌐 Data not in database, fetching from API...");
-                let client = alphafield_data::UnifiedDataClient::new_from_env();
-                let bars = client
-                    .get_bars(symbol, interval, None, None, Some(1000))
-                    .await
-                    .context("Failed to fetch data from API")?;
+/// Load bars from database
+async fn load_bars(symbol: &str, interval: &str) -> Result<Vec<Bar>> {
+    println!("📡 Connecting to database...");
+    let db = alphafield_data::DatabaseClient::new_from_env()
+        .await
+        .context(
+            "Failed to connect to database. Make sure DATABASE_URL is set in your .env file",
+        )?;
 
-                println!("💾 Saving {} bars to database...", bars.len());
-                db.save_bars(symbol, interval, &bars)
-                    .await
-                    .context("Failed to save data to database")?;
-                println!("✅ Saved {} bars to database", bars.len());
-                return Ok(bars);
-            }
-        } else {
-            return Err(anyhow::anyhow!(
-                "DATABASE_URL environment variable not set and no data file provided.\n\
-                 Either:\n\
-                 1. Set DATABASE_URL in .env file or environment\n\
-                 2. Provide --data-file <path> to use CSV/JSON file\n\
-                 3. Run database setup scripts"
-            ));
-        }
-    }
-
-    // Fall back to file loading
-    let path = data_file
-        .as_ref()
-        .ok_or_else(|| anyhow::anyhow!("data_file is None"))?;
-    println!("📂 Loading data from file: {}", path);
-    load_bars_from_file(path)
-}
-
-/// Load bars from file (CSV or JSON)
-fn load_bars_from_file(path: &str) -> Result<Vec<Bar>> {
-    let content =
-        fs::read_to_string(path).context(format!("Failed to read data file: {}", path))?;
-
-    if path.ends_with(".json") {
-        let bars: Vec<Bar> =
-            serde_json::from_str(&content).context("Failed to parse JSON data file")?;
+    println!("🔍 Checking if data exists in database...");
+    if db.exists(symbol, interval).await? {
+        println!("✅ Loading historical data from database...");
+        let bars = db.load_bars(symbol, interval).await?;
+        println!("Loaded {} bars from database", bars.len());
         Ok(bars)
     } else {
-        // Assume CSV format
-        parse_csv_bars(&content)
+        println!("🌐 Data not in database, fetching from API...");
+        let client = alphafield_data::UnifiedDataClient::new_from_env();
+        let bars = client
+            .get_bars(symbol, interval, None, None, Some(1000))
+            .await
+            .context("Failed to fetch data from API. Check your API keys.")?;
+
+        println!("💾 Saving {} bars to database...", bars.len());
+        db.save_bars(symbol, interval, &bars)
+            .await
+            .context("Failed to save data to database")?;
+        println!("✅ Saved {} bars to database", bars.len());
+        Ok(bars)
     }
-}
-
-/// Parse bars from CSV format
-fn parse_csv_bars(content: &str) -> Result<Vec<Bar>> {
-    let mut bars = Vec::new();
-
-    for line in content.lines().skip(1) {
-        // Skip empty lines
-        if line.trim().is_empty() {
-            continue;
-        }
-
-        let parts: Vec<&str> = line.split(',').collect();
-        if parts.len() < 6 {
-            continue;
-        }
-
-        let timestamp = parts[0]
-            .parse::<i64>()
-            .ok()
-            .and_then(|ts| DateTime::from_timestamp(ts, 0))
-            .unwrap_or_else(Utc::now);
-
-        let bar = Bar {
-            timestamp,
-            open: parts[1]
-                .parse::<f64>()
-                .context(format!("Failed to parse open price: {}", parts[1]))?,
-            high: parts[2]
-                .parse::<f64>()
-                .context(format!("Failed to parse high price: {}", parts[2]))?,
-            low: parts[3]
-                .parse::<f64>()
-                .context(format!("Failed to parse low price: {}", parts[3]))?,
-            close: parts[4]
-                .parse::<f64>()
-                .context(format!("Failed to parse close price: {}", parts[4]))?,
-            volume: parts[5]
-                .parse::<f64>()
-                .context(format!("Failed to parse volume: {}", parts[5]))?,
-        };
-
-        bars.push(bar);
-    }
-
-    Ok(bars)
 }
 
 /// Create strategy instance from name using the global factory registry
