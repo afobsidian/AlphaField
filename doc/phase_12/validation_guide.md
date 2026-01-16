@@ -35,30 +35,31 @@ Validate a single strategy with default settings:
 ./target/release/validate_strategy validate \
     --strategy golden_cross \
     --symbol BTC \
-    --interval 1h \
-    --data-file data/BTC_1h.csv
+    --interval 1h
 ```
 
 This will:
-1. Load historical OHLCV data from the CSV file
-2. Run backtest, walk-forward, Monte Carlo, and regime analysis
-3. Display a comprehensive terminal report
-4. Return exit code 0 (pass), 1 (fail/needs optimization), or 2 (error)
+1. Connect to the database and check for existing historical data
+2. Load data from database or fetch from API if not available
+3. Run backtest, walk-forward, Monte Carlo, and regime analysis
+4. Display a comprehensive terminal report
+5. Return exit code 0 (pass), 1 (fail/needs optimization), or 2 (error)
 
-### CSV Data Format
+### Database Setup
 
-Input data files should be in CSV format with the following columns:
+The validation tool uses TimescaleDB for data storage. Ensure your `.env` file contains:
 
+```env
+DATABASE_URL=postgres://user:pass@localhost:5432/alphafield
+BINANCE_API_KEYS=key1,key2
+COINGECKO_API_KEYS=key1
+COINLAYER_API_KEYS=key1
 ```
-timestamp,open,high,low,close,volume
-1640995200,46000.00,47000.00,45500.00,46800.00,1234.56
-1641081600,46800.00,47500.00,46000.00,47200.00,2345.67
-...
-```
 
-- **timestamp**: Unix timestamp in seconds
-- **open, high, low, close**: Price values
-- **volume**: Trading volume
+The tool will automatically:
+- Check the database for existing data
+- Fetch missing data from API if needed
+- Cache data in the database for future use
 
 ## CLI Commands
 
@@ -71,7 +72,6 @@ Validate a strategy with custom thresholds:
     --strategy golden_cross \
     --symbol BTC \
     --interval 4h \
-    --data-file data/BTC_4h.csv \
     --min-sharpe 1.5 \
     --max-drawdown 0.20 \
     --min-win-rate 0.65 \
@@ -105,14 +105,13 @@ Validate a strategy with custom thresholds:
 
 ### Batch Validation
 
-Validate multiple strategies across multiple symbols:
+Validate multiple strategies across multiple symbols with parallel processing:
 
 ```bash
 ./target/release/validate_strategy batch \
     --batch-file strategies.txt \
     --symbols BTC,ETH,SOL \
     --interval 1h \
-    --data-dir data/ \
     --output-dir reports/ \
     --format json
 ```
@@ -125,11 +124,15 @@ macd_strategy
 bollinger_bands
 ```
 
-This will generate individual reports for each strategy/symbol combination:
-- `reports/golden_cross_BTC.json`
-- `reports/golden_cross_ETH.json`
-- `reports/rsi_strategy_BTC.json`
-- ...
+This will:
+- Run validations in parallel for better performance
+- Load data from database (fetches from API if not available)
+- Generate individual reports for each strategy/symbol combination:
+  - `reports/golden_cross_BTC.json`
+  - `reports/golden_cross_ETH.json`
+  - `reports/rsi_strategy_BTC.json`
+  - ...
+- Display progress and final summary with pass/fail counts
 
 ## Understanding Validation Reports
 

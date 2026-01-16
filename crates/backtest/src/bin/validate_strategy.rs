@@ -32,6 +32,8 @@ use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 
 #[derive(Parser)]
 #[command(
@@ -132,10 +134,6 @@ enum Commands {
         /// Timeframe/interval
         #[arg(long)]
         interval: String,
-
-        /// Data directory (deprecated - data is loaded from database)
-        #[arg(long)]
-        data_dir: Option<String>,
 
         /// Output directory for reports
         #[arg(long)]
@@ -397,160 +395,257 @@ async fn main() -> Result<()> {
             batch_file,
             symbols,
             interval,
-            data_dir: _,
             output_dir,
             format,
         } => {
             let strategies = fs::read_to_string(&batch_file)
                 .context(format!("Failed to read batch file: {}", batch_file))?;
 
-            let symbols_list: Vec<&str> = symbols.split(',').map(|s| s.trim()).collect();
-            let strategy_names: Vec<&str> = strategies
+            let symbols_list: Vec<String> =
+                symbols.split(',').map(|s| s.trim().to_string()).collect();
+            let strategy_names: Vec<String> = strategies
                 .lines()
                 .filter(|line| !line.trim().is_empty())
-                .map(|line| line.trim())
+                .map(|line| line.trim().to_string())
                 .collect();
 
             // Create output directory if it doesn't exist
             fs::create_dir_all(&output_dir)
                 .context(format!("Failed to create output directory: {}", output_dir))?;
 
-            let mut total_validations = 0;
-            let mut passed_validations = 0;
-            let mut failed_validations = 0;
+            // Use atomic counters for thread-safe parallel processing
+            let total_validations = Arc::new(AtomicUsize::new(0));
+            let passed_validations = Arc::new(AtomicUsize::new(0));
+            let failed_validations = Arc::new(AtomicUsize::new(0));
 
-            println!("{}", "Starting batch validation...".blue().bold());
             println!(
-                "Strategies: {}, Symbols: {}\n",
+                "{}",
+                "Starting batch validation with parallel processing..."
+                    .blue()
+                    .bold()
+            );
+            println!(
+                "Strategies: {}, Symbols: {}, Total validations: {}\n",
                 strategy_names.len(),
-                symbols_list.len()
+                symbols_list.len(),
+                strategy_names.len() * symbols_list.len()
             );
 
+            // Collect all validation tasks
+            let mut tasks = Vec::new();
+
             for strategy_name in strategy_names {
-                for symbol in &symbols_list {
-                    total_validations += 1;
-                    println!("Validating {}/{}...", strategy_name, symbol);
+                for symbol in symbols_list.clone() {
+                    let interval_clone = interval.clone();
+                    let output_dir_clone = output_dir.clone();
+                    let format_clone = format.clone();
+                    let total = Arc::clone(&total_validations);
+                    let passed = Arc::clone(&passed_validations);
+                    let failed = Arc::clone(&failed_validations);
+                    let strategy_name_clone = strategy_name.clone();
 
-                    let bars = match load_bars(symbol, &interval).await {
-                        Ok(b) => b,
-                        Err(e) => {
-                            println!(
-                                "{}",
-                                format!(
-                                    "Failed to load data for {}/{}: {}",
-                                    strategy_name, symbol, e
-                                )
-                                .red()
-                            );
-                            failed_validations += 1;
-                            continue;
-                        }
-                    };
-                    let config = ValidationConfig {
-                        data_source: format!("database:{}", symbol),
-                        symbol: symbol.to_string(),
-                        interval: interval.clone(),
-                        walk_forward: WalkForwardConfig::default(),
-                        risk_free_rate: 0.02,
-                        thresholds: ValidationThresholds::default(),
-                        initial_capital: 10000.0,
-                        fee_rate: 0.001,
-                    };
+                    // Spawn validation task
+                    let task = tokio::spawn(async move {
+                        total.fetch_add(1, Ordering::SeqCst);
+                        println!("Validating {}/{}...", strategy_name_clone, symbol);
 
-                    let backtest_strategy = match create_strategy(strategy_name, symbol, 10000.0) {
-                        Ok(s) => s,
-                        Err(e) => {
-                            println!(
-                                "{}",
-                                format!("Failed to create strategy {}: {}", strategy_name, e).red()
-                            );
-                            failed_validations += 1;
-                            continue;
-                        }
-                    };
-
-                    backtest_strategy.metadata().map(|m| {
-                        // Convert core MarketRegime to validation MarketRegime
-                        m.expected_regimes.into_iter().map(|r| match r {
-                            alphafield_strategy::MarketRegime::Bull => BacktestRegime::Bull,
-                            alphafield_strategy::MarketRegime::Bear => BacktestRegime::Bear,
-                            alphafield_strategy::MarketRegime::Sideways => BacktestRegime::Sideways,
-                            alphafield_strategy::MarketRegime::HighVolatility => {
-                                BacktestRegime::HighVolatility
+                        let bars = match load_bars(&symbol, &interval_clone).await {
+                            Ok(b) => b,
+                            Err(e) => {
+                                println!(
+                                    "{}",
+                                    format!(
+                                        "Failed to load data for {}/{}: {}",
+                                        strategy_name_clone, symbol, e
+                                    )
+                                    .red()
+                                );
+                                failed.fetch_add(1, Ordering::SeqCst);
+                                return;
                             }
-                            alphafield_strategy::MarketRegime::LowVolatility => {
-                                BacktestRegime::LowVolatility
+                        };
+
+                        let config = ValidationConfig {
+                            data_source: format!("database:{}", symbol),
+                            symbol: symbol.clone(),
+                            interval: interval_clone.clone(),
+                            walk_forward: WalkForwardConfig::default(),
+                            risk_free_rate: 0.02,
+                            thresholds: ValidationThresholds::default(),
+                            initial_capital: 10000.0,
+                            fee_rate: 0.001,
+                        };
+
+                        // Look up strategy factory from registry for enhanced walk-forward
+                        let normalized_name = canonicalize_strategy_name(&strategy_name_clone);
+                        let (core_factory, metadata) =
+                            match STRATEGY_FACTORY_REGISTRY.get(&normalized_name) {
+                                Some(f) => f,
+                                None => {
+                                    println!(
+                                        "{}",
+                                        format!("Failed to find strategy: {}", strategy_name_clone)
+                                            .red()
+                                    );
+                                    failed.fetch_add(1, Ordering::SeqCst);
+                                    return;
+                                }
+                            };
+
+                        // Create wrapped factory that adds StrategyAdapter
+                        let symbol_for_factory = symbol.clone();
+                        let wrapped_factory = move || {
+                            let core_strategy = core_factory();
+                            Box::new(StrategyAdapter::new(
+                                core_strategy,
+                                &symbol_for_factory,
+                                10000.0,
+                            )) as Box<dyn Strategy>
+                        };
+
+                        // **ENHANCED**: Use validate_with_factory for proper walk-forward
+                        let validator = StrategyValidator::new(config);
+                        let report = match validator.validate_with_factory(
+                            wrapped_factory,
+                            &symbol,
+                            &bars,
+                        ) {
+                            Ok(r) => r,
+                            Err(e) => {
+                                println!(
+                                    "{}",
+                                    format!(
+                                        "Validation failed for {}/{}: {}",
+                                        strategy_name_clone, symbol, e
+                                    )
+                                    .red()
+                                );
+                                failed.fetch_add(1, Ordering::SeqCst);
+                                return;
                             }
-                            alphafield_strategy::MarketRegime::Trending => BacktestRegime::Trending,
-                            alphafield_strategy::MarketRegime::Ranging => BacktestRegime::Ranging,
-                        })
+                        };
+
+                        // Run regime analysis separately if strategy has metadata
+                        let report = {
+                            println!(
+                                "📊 Strategy has metadata, running regime analysis for {}/{}...",
+                                strategy_name_clone, symbol
+                            );
+
+                            // Convert core MarketRegime to validation MarketRegime
+                            let expected_regimes = metadata
+                                .expected_regimes
+                                .iter()
+                                .map(|r| match r {
+                                    alphafield_strategy::MarketRegime::Bull => BacktestRegime::Bull,
+                                    alphafield_strategy::MarketRegime::Bear => BacktestRegime::Bear,
+                                    alphafield_strategy::MarketRegime::Sideways => {
+                                        BacktestRegime::Sideways
+                                    }
+                                    alphafield_strategy::MarketRegime::HighVolatility => {
+                                        BacktestRegime::HighVolatility
+                                    }
+                                    alphafield_strategy::MarketRegime::LowVolatility => {
+                                        BacktestRegime::LowVolatility
+                                    }
+                                    alphafield_strategy::MarketRegime::Trending => {
+                                        BacktestRegime::Trending
+                                    }
+                                    alphafield_strategy::MarketRegime::Ranging => {
+                                        BacktestRegime::Ranging
+                                    }
+                                })
+                                .collect();
+
+                            // Run regime analysis
+                            let analyzer = RegimeAnalyzer::default();
+                            let regime_result = analyzer.analyze(&bars, expected_regimes);
+
+                            // Merge regime analysis into report
+                            ValidationReport {
+                                regime_analysis: regime_result.unwrap_or_default(),
+                                ..report
+                            }
+                        };
+
+                        // Save report
+                        let filename = format!(
+                            "{}/{}_{}.{}",
+                            output_dir_clone, strategy_name_clone, symbol, format_clone
+                        );
+                        let report_content = match format_clone {
+                            OutputFormat::Json => serde_json::to_string_pretty(&report).unwrap(),
+                            OutputFormat::Yaml => serde_yaml::to_string(&report).unwrap(),
+                            OutputFormat::Markdown => generate_markdown_report(&report).unwrap(),
+                            OutputFormat::Terminal => {
+                                // For terminal format, use JSON for batch
+                                serde_json::to_string_pretty(&report).unwrap()
+                            }
+                        };
+
+                        if let Err(e) = fs::write(&filename, report_content) {
+                            println!("{}", format!("Failed to write report: {}", e).red());
+                            failed.fetch_add(1, Ordering::SeqCst);
+                            return;
+                        }
+
+                        let verdict_color = match report.verdict {
+                            alphafield_backtest::ValidationVerdict::Pass => "green",
+                            alphafield_backtest::ValidationVerdict::NeedsOptimization => "yellow",
+                            alphafield_backtest::ValidationVerdict::Fail => "red",
+                        };
+
+                        println!(
+                            "{} (Score: {:.1}, Grade: {})\n",
+                            format!(
+                                "Verdict: {}",
+                                format!("{:?}", report.verdict).to_uppercase()
+                            )
+                            .color(verdict_color)
+                            .bold(),
+                            report.overall_score,
+                            report.grade
+                        );
+
+                        match report.verdict {
+                            alphafield_backtest::ValidationVerdict::Pass => {
+                                passed.fetch_add(1, Ordering::SeqCst);
+                            }
+                            _ => {
+                                failed.fetch_add(1, Ordering::SeqCst);
+                            }
+                        }
                     });
 
-                    let validator = StrategyValidator::new(config);
-                    let report = match validator.validate(backtest_strategy, symbol, &bars) {
-                        Ok(r) => r,
-                        Err(e) => {
-                            println!(
-                                "{}",
-                                format!(
-                                    "Validation failed for {}/{}: {}",
-                                    strategy_name, symbol, e
-                                )
-                                .red()
-                            );
-                            failed_validations += 1;
-                            continue;
-                        }
-                    };
-
-                    // Save report
-                    let filename =
-                        format!("{}/{}_{}.{}", output_dir, strategy_name, symbol, format);
-                    let report_content = match format {
-                        OutputFormat::Json => serde_json::to_string_pretty(&report)?,
-                        OutputFormat::Yaml => serde_yaml::to_string(&report)?,
-                        OutputFormat::Markdown => generate_markdown_report(&report)?,
-                        OutputFormat::Terminal => {
-                            // For terminal format, use JSON for batch
-                            serde_json::to_string_pretty(&report)?
-                        }
-                    };
-
-                    fs::write(&filename, report_content)
-                        .context(format!("Failed to write report: {}", filename))?;
-
-                    let verdict_color = match report.verdict {
-                        alphafield_backtest::ValidationVerdict::Pass => "green",
-                        alphafield_backtest::ValidationVerdict::NeedsOptimization => "yellow",
-                        alphafield_backtest::ValidationVerdict::Fail => "red",
-                    };
-
-                    println!(
-                        "{} (Score: {:.1}, Grade: {})\n",
-                        format!(
-                            "Verdict: {}",
-                            format!("{:?}", report.verdict).to_uppercase()
-                        )
-                        .color(verdict_color)
-                        .bold(),
-                        report.overall_score,
-                        report.grade
-                    );
-
-                    match report.verdict {
-                        alphafield_backtest::ValidationVerdict::Pass => passed_validations += 1,
-                        _ => failed_validations += 1,
-                    }
+                    tasks.push(task);
                 }
+            }
+
+            // Wait for all validation tasks to complete
+            for task in tasks {
+                let _ = task.await;
             }
 
             // Print summary
             println!("\n{}", "Batch Validation Summary".blue().bold());
-            println!("Total validations: {}", total_validations);
-            println!("{}", format!("Passed: {}", passed_validations).green());
-            println!("{}", format!("Failed: {}", failed_validations).red());
+            println!(
+                "Total validations: {}",
+                total_validations.load(Ordering::SeqCst)
+            );
+            println!(
+                "{}",
+                format!("Passed: {}", passed_validations.load(Ordering::SeqCst)).green()
+            );
+            println!(
+                "{}",
+                format!("Failed: {}", failed_validations.load(Ordering::SeqCst)).red()
+            );
 
-            std::process::exit(if failed_validations > 0 { 1 } else { 0 });
+            std::process::exit(if failed_validations.load(Ordering::SeqCst) > 0 {
+                1
+            } else {
+                0
+            });
         }
         Commands::ListStrategies { category } => {
             println!("{}", "Available Strategies".cyan().bold());
@@ -735,6 +830,7 @@ async fn load_bars(symbol: &str, interval: &str) -> Result<Vec<Bar>> {
 /// # Why Factories?
 /// Each validation/backtest needs a fresh strategy instance with clean state.
 /// The factory pattern ensures this without cloning complex strategy objects.
+#[allow(dead_code)]
 fn create_strategy(name: &str, symbol: &str, capital: f64) -> Result<Box<dyn Strategy>> {
     // Normalize strategy name before canonicalization
     // Handle common variations: underscores, dashes, spaces, etc.
