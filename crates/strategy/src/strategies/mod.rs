@@ -6,6 +6,7 @@
 pub mod golden_cross;
 pub mod mean_reversion;
 pub mod momentum;
+pub mod multi_indicator;
 pub mod rsi;
 pub mod sentiment;
 pub mod trend_following;
@@ -26,6 +27,9 @@ pub use momentum::*;
 
 // Re-export volatility strategies
 pub use volatility::*;
+
+// Re-export multi_indicator strategies
+pub use multi_indicator::*;
 
 // Re-export sentiment strategies
 pub use sentiment::*;
