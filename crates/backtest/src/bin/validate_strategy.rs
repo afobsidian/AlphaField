@@ -14,6 +14,9 @@ use alphafield_strategy::{
         canonicalize_strategy_name, MetadataStrategy, StrategyCategory, StrategyMetadata,
         StrategyWithMetadata,
     },
+    // Volatility strategies
+    ATRBreakoutStrategy,
+    ATRTrailingStrategy,
     // Multi-indicator strategies
     AdaptiveComboStrategy,
     // Trend following additional
@@ -268,6 +271,11 @@ lazy_static! {
         register_strategy!(RegimeSentimentStrategy);
         register_strategy!(SentimentMomentumStrategy);
 
+        // Register volatility strategies
+        // These strategies adapt to and trade volatility patterns
+        register_strategy!(ATRBreakoutStrategy);
+        register_strategy!(ATRTrailingStrategy);
+
         registry
     };
 }
@@ -479,9 +487,9 @@ async fn main() -> Result<()> {
             let passed_validations = Arc::new(AtomicUsize::new(0));
             let failed_validations = Arc::new(AtomicUsize::new(0));
 
-            // Create semaphore to limit concurrent database connections to 100
+            // Create semaphore to limit concurrent database connections to 75
             // (PostgreSQL default max_connections)
-            let semaphore = Arc::new(Semaphore::new(100));
+            let semaphore = Arc::new(Semaphore::new(75));
 
             println!(
                 "{}",

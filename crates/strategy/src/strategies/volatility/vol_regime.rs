@@ -179,6 +179,12 @@ pub struct VolRegimeStrategy {
     current_regime: VolatilityRegime,
 }
 
+impl Default for VolRegimeStrategy {
+    fn default() -> Self {
+        Self::from_config(VolRegimeConfig::default_config())
+    }
+}
+
 impl VolRegimeStrategy {
     /// Creates a new Volatility Regime strategy
     ///

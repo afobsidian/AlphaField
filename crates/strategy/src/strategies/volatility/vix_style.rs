@@ -142,6 +142,12 @@ pub struct VIXStyleStrategy {
     entry_vix: Option<f64>, // Track VIX level at entry
 }
 
+impl Default for VIXStyleStrategy {
+    fn default() -> Self {
+        Self::from_config(VIXStyleConfig::default_config())
+    }
+}
+
 impl VIXStyleStrategy {
     /// Creates a new VIX-Style strategy
     ///

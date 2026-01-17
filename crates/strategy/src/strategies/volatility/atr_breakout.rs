@@ -158,6 +158,7 @@ impl ATRBreakoutStrategy {
         &self.config
     }
 
+    /// Calculate upper breakout level
     /// Get the highest price in the lookback period
     fn get_lookback_high(&self) -> Option<f64> {
         if self.price_history.len() >= self.config.lookback_period {
@@ -212,7 +213,14 @@ impl ATRBreakoutStrategy {
                 return price > ma_value;
             }
         }
-        true // No trend filter or MA not ready
+        true // No trend filter configured
+    }
+}
+
+impl Default for ATRBreakoutStrategy {
+    fn default() -> Self {
+        // Default: 14-period ATR, 1.5x multiplier, 20-period lookback, 50-period trend MA, 1.5x volume multiplier, 8% TP, 4% SL
+        Self::from_config(ATRBreakoutConfig::default_config())
     }
 }
 

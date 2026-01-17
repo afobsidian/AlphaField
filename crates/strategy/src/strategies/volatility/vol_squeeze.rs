@@ -145,6 +145,12 @@ pub struct VolSqueezeStrategy {
     last_kk_lower: Option<f64>,
 }
 
+impl Default for VolSqueezeStrategy {
+    fn default() -> Self {
+        Self::from_config(VolSqueezeConfig::default_config())
+    }
+}
+
 impl VolSqueezeStrategy {
     /// Creates a new Volatility Squeeze strategy
     ///

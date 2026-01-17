@@ -162,6 +162,12 @@ pub struct VolSizingStrategy {
     entry_size_pct: Option<f64>,
 }
 
+impl Default for VolSizingStrategy {
+    fn default() -> Self {
+        Self::from_config(VolSizingConfig::default_config())
+    }
+}
+
 impl VolSizingStrategy {
     /// Creates a new Volatility-Adjusted Position Sizing strategy
     ///

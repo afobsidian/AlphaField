@@ -189,6 +189,13 @@ impl ATRTrailingStrategy {
     }
 }
 
+impl Default for ATRTrailingStrategy {
+    fn default() -> Self {
+        // Default: 14-period ATR, 2.0x multiplier, 10/30 fast/slow SMA, 1% min trailing, 10% TP
+        Self::from_config(ATRTrailingConfig::default_config())
+    }
+}
+
 impl MetadataStrategy for ATRTrailingStrategy {
     fn metadata(&self) -> StrategyMetadata {
         StrategyMetadata {

@@ -3,8 +3,8 @@
     "name": "AlphaField",
     "path": "C:\\Users\\adamf\\Documents\\Projects\\AlphaField",
     "db_path": ".code_index\\AlphaField",
-    "status": "ready",
+    "status": "indexing",
     "error": null,
-    "last_indexed": "2026-01-16T14:28:36.236977+00:00"
+    "started_at": "2026-01-17T09:29:03.320165+00:00"
   }
 }

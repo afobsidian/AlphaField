@@ -150,6 +150,12 @@ pub struct GARCHStrategy {
     entry_predicted_vol: Option<f64>,
 }
 
+impl Default for GARCHStrategy {
+    fn default() -> Self {
+        Self::from_config(GARCHConfig::default_config())
+    }
+}
+
 impl GARCHStrategy {
     /// Creates a new GARCH-Based strategy
     ///
