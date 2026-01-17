@@ -34,6 +34,7 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use tokio::sync::Semaphore;
 
 #[derive(Parser)]
 #[command(
@@ -418,6 +419,10 @@ async fn main() -> Result<()> {
             let passed_validations = Arc::new(AtomicUsize::new(0));
             let failed_validations = Arc::new(AtomicUsize::new(0));
 
+            // Create semaphore to limit concurrent database connections to 100
+            // (PostgreSQL default max_connections)
+            let semaphore = Arc::new(Semaphore::new(100));
+
             println!(
                 "{}",
                 "Starting batch validation with parallel processing..."
@@ -425,7 +430,7 @@ async fn main() -> Result<()> {
                     .bold()
             );
             println!(
-                "Strategies: {}, Symbols: {}, Total validations: {}\n",
+                "Strategies: {}, Symbols: {}, Total validations: {} (max concurrent: 100)\n",
                 strategy_names.len(),
                 symbols_list.len(),
                 strategy_names.len() * symbols_list.len()
@@ -443,9 +448,13 @@ async fn main() -> Result<()> {
                     let passed = Arc::clone(&passed_validations);
                     let failed = Arc::clone(&failed_validations);
                     let strategy_name_clone = strategy_name.clone();
+                    let semaphore = Arc::clone(&semaphore);
 
                     // Spawn validation task
                     let task = tokio::spawn(async move {
+                        // Acquire semaphore permit to limit concurrent database connections
+                        let _permit = semaphore.acquire().await.unwrap();
+
                         total.fetch_add(1, Ordering::SeqCst);
                         println!("Validating {}/{}...", strategy_name_clone, symbol);
 
