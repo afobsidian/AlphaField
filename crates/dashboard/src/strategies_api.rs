@@ -232,22 +232,6 @@ pub fn initialize_registry() -> Arc<StrategyRegistry> {
     // Other Strategy Families
     // ------------------------------------------------------------------------
 
-    // Register Momentum strategy
-    let momentum = Arc::new(alphafield_strategy::strategies::MACDStrategy::new(
-        50, 12, 26, 9,
-    )) as Arc<dyn StrategyWithMetadata>;
-    if let Err(e) = registry.register(momentum) {
-        eprintln!("Failed to register Momentum strategy: {}", e);
-    }
-
-    // Register RSI Mean Reversion strategy
-    let rsi = Arc::new(alphafield_strategy::strategies::RsiStrategy::new(
-        14, 30.0, 70.0,
-    )) as Arc<dyn StrategyWithMetadata>;
-    if let Err(e) = registry.register(rsi) {
-        eprintln!("Failed to register RSI Mean Reversion strategy: {}", e);
-    }
-
     // Register Bollinger Bands Mean Reversion strategy
     let mean_reversion =
         Arc::new(alphafield_strategy::strategies::BollingerBandsStrategy::new(20, 2.0))

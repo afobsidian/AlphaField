@@ -19,7 +19,7 @@ All indicators implement the `Indicator` trait for consistent usage.
 Strategies implement the `Strategy` trait defined in `alphafield_core`.
 
 - **GoldenCross**: Classic SMA crossover (e.g., 50/200).
-- **RsiStrategy**: Mean reversion based on overbought/oversold levels.
+- **RsiReversionStrategy**: Mean reversion based on overbought/oversold levels.
 - **MeanReversion**: Bollinger Band breakdown/breakout logic.
 - **Momentum**: MACD-based momentum following.
 - **TrendFollowing**: EMA trend confirmation with ADX filter.

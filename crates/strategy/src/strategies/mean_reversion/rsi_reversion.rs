@@ -81,6 +81,13 @@ impl RSIReversionConfig {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum RsiState {
+    Neutral,
+    Overbought,
+    Oversold,
+}
+
 impl fmt::Display for RSIReversionConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -98,6 +105,7 @@ pub struct RSIReversionStrategy {
     trend_sma: Option<Sma>,
     last_position: SignalType,
     entry_price: Option<f64>,
+    rsi_state: RsiState,
 }
 
 impl RSIReversionStrategy {
@@ -121,6 +129,7 @@ impl RSIReversionStrategy {
             config,
             last_position: SignalType::Hold,
             entry_price: None,
+            rsi_state: RsiState::Neutral,
         }
     }
 
@@ -180,13 +189,51 @@ impl Strategy for RSIReversionStrategy {
             if let Some(sma_value) = sma.update(price) {
                 price > sma_value // Only trade if price above 200 SMA
             } else {
-                false // Not enough data for trend filter
+                true // Not enough data for trend filter - allow trading
             }
         } else {
             true // Trend filter disabled
         };
 
-        // EXIT LOGIC
+        // Track RSI state and generate signals on transitions
+        let mut signals = Vec::new();
+        let current_state = if rsi_value >= self.config.overbought_threshold {
+            RsiState::Overbought
+        } else if rsi_value <= self.config.oversold_threshold {
+            RsiState::Oversold
+        } else {
+            RsiState::Neutral
+        };
+
+        // Generate sell signal when entering overbought territory
+        if current_state == RsiState::Overbought && self.rsi_state != RsiState::Overbought {
+            signals.push(Signal {
+                timestamp: bar.timestamp,
+                symbol: "UNKNOWN".to_string(),
+                signal_type: SignalType::Sell,
+                strength: 1.0,
+                metadata: Some(format!("RSI Overbought Signal: RSI = {:.1}", rsi_value)),
+            });
+        }
+
+        // Generate buy signal when entering oversold territory (trend filter applies)
+        if current_state == RsiState::Oversold
+            && self.rsi_state != RsiState::Oversold
+            && trend_allowed
+        {
+            signals.push(Signal {
+                timestamp: bar.timestamp,
+                symbol: "UNKNOWN".to_string(),
+                signal_type: SignalType::Buy,
+                strength: 1.0,
+                metadata: Some(format!("RSI Oversold Signal: RSI = {:.1}", rsi_value)),
+            });
+        }
+
+        // Update RSI state
+        self.rsi_state = current_state;
+
+        // EXIT LOGIC (position-based exits, separate from signal generation)
         if self.last_position == SignalType::Buy {
             if let Some(entry) = self.entry_price {
                 let profit_pct = (price - entry) / entry * 100.0;
@@ -195,62 +242,69 @@ impl Strategy for RSIReversionStrategy {
                 if profit_pct <= -self.config.stop_loss {
                     self.last_position = SignalType::Hold;
                     self.entry_price = None;
-                    return Some(vec![Signal {
+                    signals.push(Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
                         metadata: Some(format!("Stop Loss Exit: {:.1}% loss", profit_pct)),
-                    }]);
+                    });
                 }
 
                 // Exit condition 2: RSI overbought
                 if rsi_value >= self.config.overbought_threshold {
                     self.last_position = SignalType::Hold;
                     self.entry_price = None;
-                    return Some(vec![Signal {
+                    signals.push(Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
                         metadata: Some(format!("RSI Overbought Exit: RSI = {:.1}", rsi_value)),
-                    }]);
+                    });
                 }
 
                 // Exit condition 3: RSI returns to neutral
                 if rsi_value >= self.config.exit_threshold {
                     self.last_position = SignalType::Hold;
                     self.entry_price = None;
-                    return Some(vec![Signal {
+                    signals.push(Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 0.8,
                         metadata: Some(format!("RSI Neutral Exit: RSI = {:.1}", rsi_value)),
-                    }]);
+                    });
                 }
             }
         }
 
-        // ENTRY LOGIC - RSI oversold and trend filter passed
+        // ENTRY LOGIC - RSI oversold and trend filter passed (position-based entry)
+        // Only generate if we haven't already generated a Buy signal from state transition
+        let buy_signal_exists = signals.iter().any(|s| s.signal_type == SignalType::Buy);
         if self.last_position != SignalType::Buy
             && rsi_value <= self.config.oversold_threshold
             && trend_allowed
+            && !buy_signal_exists
         {
             self.last_position = SignalType::Buy;
             self.entry_price = Some(price);
             let strength =
                 (self.config.oversold_threshold - rsi_value) / self.config.oversold_threshold;
-            return Some(vec![Signal {
+            signals.push(Signal {
                 timestamp: bar.timestamp,
                 symbol: "UNKNOWN".to_string(),
                 signal_type: SignalType::Buy,
                 strength: strength.clamp(0.1, 1.0),
                 metadata: Some(format!("RSI Oversold Entry: RSI = {:.1}", rsi_value)),
-            }]);
+            });
         }
 
-        None
+        if signals.is_empty() {
+            None
+        } else {
+            Some(signals)
+        }
     }
 }
 

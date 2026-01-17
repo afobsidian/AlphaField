@@ -1,5 +1,5 @@
 use alphafield_backtest::{BacktestEngine, SlippageModel, StrategyAdapter};
-use alphafield_strategy::GoldenCrossStrategy;
+use alphafield_strategy::strategies::GoldenCrossStrategy;
 
 #[tokio::main]
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {

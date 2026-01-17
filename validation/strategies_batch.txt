@@ -1,22 +1,22 @@
-GoldenCross
-Breakout
-MACrossover
 AdaptiveMA
-TripleMA
-MacdTrend
-ParabolicSAR
-KeltnerReversion
-PriceChannel
-Rsi
-MeanReversion
-ZScoreReversion
-StatArb
-StochReversion
 AdxTrendStrategy
+ATRBreakout
+ATRTrailingStop
+Breakout
+Divergence
+GoldenCross
+KeltnerReversion
+MacdTrend
+MACrossover
+MeanReversion
 Momentum
 MomentumFactorStrategy
 MultiTfMomentumStrategy
+ParabolicSAR
+PriceChannel
+RSIReversion
 RocStrategy
+Rsi
 RsiMomentumStrategy
 VolumeMomentumStrategy
 ATRBreakout
@@ -24,3 +24,8 @@ ATRTrailingStop
 Divergence
 Regime Sentiment
 Sentiment Momentum
+StatArb
+StochReversion
+TripleMA
+VolumeMomentumStrategy
+ZScoreReversion

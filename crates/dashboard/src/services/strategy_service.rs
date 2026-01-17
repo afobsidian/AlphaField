@@ -2,7 +2,7 @@ use alphafield_backtest::{strategy::Strategy as BacktestStrategy, StrategyAdapte
 use alphafield_core::Strategy;
 use alphafield_strategy::{
     framework::canonicalize_strategy_name, macd_strategy::MomentumConfig, BollingerBandsStrategy,
-    GoldenCrossStrategy, MACDStrategy, RsiStrategy,
+    GoldenCrossStrategy, MACDStrategy,
 };
 use std::collections::HashMap;
 use tracing::debug;
@@ -147,8 +147,8 @@ impl StrategyFactory {
                 let period = params.get("period").copied().unwrap_or(14.0) as usize;
                 let lower = params.get("lower_bound").copied().unwrap_or(30.0);
                 let upper = params.get("upper_bound").copied().unwrap_or(70.0);
-                let tp = params.get("take_profit").copied().unwrap_or(3.0);
-                let sl = params.get("stop_loss").copied().unwrap_or(5.0);
+                let _tp = params.get("take_profit").copied().unwrap_or(3.0);
+                let _sl = params.get("stop_loss").copied().unwrap_or(5.0);
 
                 if period == 0 || lower >= upper {
                     debug!(
@@ -158,9 +158,25 @@ impl StrategyFactory {
                     return None;
                 }
 
-                let config =
-                    alphafield_strategy::config::RsiConfig::new(period, lower, upper, tp, sl);
-                Some(Box::new(RsiStrategy::from_config(config)))
+                let config = alphafield_strategy::strategies::mean_reversion::RSIReversionConfig {
+                    rsi_period: period,
+                    oversold_threshold: lower,
+                    overbought_threshold: upper,
+                    exit_threshold: 50.0,
+                    trend_filter: true,
+                    trend_period: 200,
+                    stop_loss: _sl,
+                };
+                config
+                    .validate()
+                    .map_err(|e| {
+                        debug!("Invalid RSI config: {}", e);
+                        e
+                    })
+                    .ok()?;
+                Some(Box::new(
+                    alphafield_strategy::strategies::mean_reversion::RSIReversionStrategy::from_config(config),
+                ))
             }
             "MeanReversion" => {
                 let period = params.get("period").copied().unwrap_or(20.0) as usize;
@@ -342,15 +358,30 @@ impl StrategyFactory {
                 let period = params.get("period").copied().unwrap_or(14.0) as usize;
                 let lower = params.get("lower_bound").copied().unwrap_or(30.0);
                 let upper = params.get("upper_bound").copied().unwrap_or(70.0);
-                let tp = params.get("take_profit").copied().unwrap_or(3.0);
-                let sl = params.get("stop_loss").copied().unwrap_or(5.0);
+                let _tp = params.get("take_profit").copied().unwrap_or(3.0);
+                let _sl = params.get("stop_loss").copied().unwrap_or(5.0);
 
                 if period == 0 || lower >= upper {
                     return None;
                 }
-                let config =
-                    alphafield_strategy::config::RsiConfig::new(period, lower, upper, tp, sl);
-                let strat = RsiStrategy::from_config(config);
+                let config = alphafield_strategy::strategies::mean_reversion::RSIReversionConfig {
+                    rsi_period: period,
+                    oversold_threshold: lower,
+                    overbought_threshold: upper,
+                    exit_threshold: 50.0,
+                    trend_filter: true,
+                    trend_period: 200,
+                    stop_loss: _sl,
+                };
+                config
+                    .validate()
+                    .map_err(|e| {
+                        debug!("Invalid RSI config: {}", e);
+                        e
+                    })
+                    .ok()?;
+                let strat =
+                    alphafield_strategy::strategies::mean_reversion::RSIReversionStrategy::from_config(config);
                 Some(Box::new(StrategyAdapter::new(strat, symbol, capital)))
             }
             "MeanReversion" => {

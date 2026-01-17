@@ -100,7 +100,16 @@ impl GoldenCrossStrategy {
     pub fn config(&self) -> &GoldenCrossConfig {
         &self.config
     }
+}
 
+impl Default for GoldenCrossStrategy {
+    fn default() -> Self {
+        // Default golden cross: 50-day and 200-day SMA with 5% TP/SL
+        Self::new(50, 200)
+    }
+}
+
+impl GoldenCrossStrategy {
     /// Check if MA separation meets minimum threshold
     fn check_separation(&self, fast: f64, slow: f64) -> bool {
         if self.config.min_separation <= 0.0 {

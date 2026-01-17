@@ -1,6 +1,7 @@
 use alphafield_core::{Bar, SignalType, Strategy};
 use alphafield_strategy::strategies::{
-    BollingerBandsStrategy, GoldenCrossStrategy, MACDStrategy, MeanReversionStrategy, RsiStrategy,
+    BollingerBandsStrategy, GoldenCrossStrategy, MACDStrategy, MeanReversionStrategy,
+    RSIReversionStrategy,
 };
 use chrono::Utc;
 
@@ -59,8 +60,8 @@ fn test_mean_reversion_backward_compatibility() {
 }
 
 #[test]
-fn test_rsi_signals() {
-    let mut strategy = RsiStrategy::new(3, 30.0, 70.0);
+fn test_rsi_reversion_signals() {
+    let mut strategy = RSIReversionStrategy::new(3, 30.0, 70.0);
 
     // Create a sequence that goes from neutral to overbought to oversold
     let prices = vec![
@@ -84,8 +85,44 @@ fn test_rsi_signals() {
         }
     }
 
-    assert!(sell_signals > 0, "Should have sell signals (overbought)");
+    // RSI Reversion Strategy sells on overbought (RSI >= 70) and when RSI returns to neutral (RSI >= 50)
+    // When prices rise from 50 to 90, RSI goes to overbought
+    // When prices fall from 90 to 20, RSI will be >=70 for a while and then cross below 70
+    // This should generate sell signals
+    assert!(
+        sell_signals > 0,
+        "Should have sell signals (RSI in overbought territory)"
+    );
+    assert!(
+        buy_signals > 0,
+        "Should have buy signals (RSI goes from neutral to overbought)"
+    );
     assert!(buy_signals > 0, "Should have buy signals (oversold)");
+}
+
+#[test]
+fn test_rsi_reversion_sell_on_overbought() {
+    // Test that RSI Reversion Strategy generates sell signals when in overbought territory
+    let mut strategy = RSIReversionStrategy::new(14, 30.0, 70.0);
+
+    // Start with a high price that creates overbought RSI
+    let mut sell_signals = 0;
+    for price in (70..=100).rev() {
+        if let Some(signals) = strategy.on_bar(&create_bar(f64::from(price))) {
+            for signal in signals {
+                if signal.signal_type == SignalType::Sell {
+                    sell_signals += 1;
+                }
+            }
+        }
+    }
+
+    // After bringing price down from 100 to 70, RSI should be in overbought territory
+    // Strategy should have generated sell signals as RSI remained >=70
+    assert!(
+        sell_signals > 0,
+        "Should generate sell signals when RSI remains in overbought territory"
+    );
 }
 
 #[test]

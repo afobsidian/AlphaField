@@ -19,21 +19,21 @@ use alphafield_strategy::{
     ATRTrailingStrategy,
     // Multi-indicator strategies
     AdaptiveComboStrategy,
-    // Trend following additional
+    // Trend following strategies
     AdaptiveMAStrategy,
-    // Momentum strategies
     AdxTrendStrategy,
+    // Mean reversion strategies
     BollingerBandsStrategy,
     BreakoutStrategy,
     ConfidenceWeightedStrategy,
     // Sentiment strategies
     DivergenceStrategy,
     EnsembleWeightedStrategy,
-    // Trend following strategies
+    GARCHStrategy,
     GoldenCrossStrategy,
-    // Mean reversion additional
     KeltnerReversionStrategy,
     MACDRSIComboStrategy,
+    // Momentum strategies
     MACDStrategy,
     MACrossoverStrategy,
     MLEnhancedStrategy,
@@ -48,12 +48,15 @@ use alphafield_strategy::{
     RocStrategy,
     RsiMomentumStrategy,
     // Mean reversion strategies
-    RsiStrategy,
     SentimentMomentumStrategy,
     StatArbStrategy,
     StochReversionStrategy,
     TrendMeanRevStrategy,
     TripleMAStrategy,
+    VIXStyleStrategy,
+    VolRegimeStrategy,
+    VolSizingStrategy,
+    VolSqueezeStrategy,
     VolumeMomentumStrategy,
     ZScoreReversionStrategy,
 };
@@ -236,7 +239,6 @@ lazy_static! {
 
         // Register mean reversion strategies
         // These strategies perform best in ranging/sideways markets
-        register_strategy!(RsiStrategy);
         register_strategy!(BollingerBandsStrategy);
         register_strategy!(KeltnerReversionStrategy);
         register_strategy!(PriceChannelStrategy);
@@ -275,6 +277,11 @@ lazy_static! {
         // These strategies adapt to and trade volatility patterns
         register_strategy!(ATRBreakoutStrategy);
         register_strategy!(ATRTrailingStrategy);
+        register_strategy!(GARCHStrategy);
+        register_strategy!(VIXStyleStrategy);
+        register_strategy!(VolRegimeStrategy);
+        register_strategy!(VolSizingStrategy);
+        register_strategy!(VolSqueezeStrategy);
 
         registry
     };
@@ -487,9 +494,9 @@ async fn main() -> Result<()> {
             let passed_validations = Arc::new(AtomicUsize::new(0));
             let failed_validations = Arc::new(AtomicUsize::new(0));
 
-            // Create semaphore to limit concurrent database connections to 75
+            // Create semaphore to limit concurrent database connections to 50
             // (PostgreSQL default max_connections)
-            let semaphore = Arc::new(Semaphore::new(75));
+            let semaphore = Arc::new(Semaphore::new(50));
 
             println!(
                 "{}",

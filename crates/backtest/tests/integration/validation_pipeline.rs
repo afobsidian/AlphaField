@@ -11,7 +11,7 @@ use alphafield_core::Bar;
 use alphafield_data::database::DatabaseClient;
 use alphafield_strategy::{
     BollingerBandsStrategy, DivergenceStrategy, GoldenCrossStrategy, MacdTrendStrategy,
-    RegimeSentimentStrategy, RsiStrategy, SentimentMomentumStrategy,
+    RegimeSentimentStrategy, RsiReversionStrategy, SentimentMomentumStrategy,
 };
 use chrono::{Duration, TimeZone, Utc};
 use std::env;
@@ -87,7 +87,10 @@ async fn setup_test_database() -> Result<DatabaseClient, Box<dyn std::error::Err
 fn create_backtest_strategy(name: &str, symbol: &str, capital: f64) -> Box<dyn Strategy> {
     match name {
         "golden_cross" => Box::new(StrategyAdapter::new(GoldenCrossStrategy::default(), symbol)),
-        "rsi" => Box::new(StrategyAdapter::new(RsiStrategy::default(), symbol)),
+        "rsi" => Box::new(StrategyAdapter::new(
+            RsiReversionStrategy::default(),
+            symbol,
+        )),
         "macd_trend" => Box::new(StrategyAdapter::new(MacdTrendStrategy::default(), symbol)),
         "bollinger_bands" => Box::new(StrategyAdapter::new(
             BollingerBandsStrategy::default(),

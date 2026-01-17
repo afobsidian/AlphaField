@@ -5,7 +5,7 @@
 
 use alphafield_backtest::{OptimizationWorkflow, ParameterRange, StrategyAdapter, WorkflowConfig};
 use alphafield_core::Bar;
-use alphafield_strategy::GoldenCrossStrategy;
+use alphafield_strategy::strategies::GoldenCrossStrategy;
 use chrono::{Duration, Utc};
 use std::collections::HashMap;
 

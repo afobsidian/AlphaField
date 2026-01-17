@@ -16,7 +16,7 @@ fn create_strategy(name: &str) -> Result<Box<dyn Strategy>> {
             GoldenCrossStrategy::default(), "BTCUSDT", 10000.0
         ))),
         "rsi" => Ok(Box::new(StrategyAdapter::new(
-            RsiStrategy::default(), "BTCUSDT", 10000.0
+            RsiReversionStrategy::default(), "BTCUSDT", 10000.0
         ))),
         // ... more hardcoded cases
         _ => Err(anyhow::anyhow!("Unknown strategy"))
@@ -59,7 +59,7 @@ lazy_static! {
         
         // Register strategies
         register_strategy!(GoldenCrossStrategy);
-        register_strategy!(RsiStrategy);
+        register_strategy!(RsiReversionStrategy);
         // ... more strategies
     };
 }
