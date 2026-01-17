@@ -145,6 +145,13 @@ impl RsiMomentumStrategy {
     }
 }
 
+impl Default for RsiMomentumStrategy {
+    fn default() -> Self {
+        // Default: 14-period RSI, 50 momentum/60 strength thresholds, 5% TP, 3% SL
+        Self::from_config(RsiMomentumConfig::default_config())
+    }
+}
+
 impl MetadataStrategy for RsiMomentumStrategy {
     fn metadata(&self) -> StrategyMetadata {
         StrategyMetadata {
@@ -152,7 +159,7 @@ impl MetadataStrategy for RsiMomentumStrategy {
             category: StrategyCategory::Momentum,
             sub_type: Some("rsi_momentum".to_string()),
             description: format!(
-                "RSI Momentum strategy using {} period RSI. Enters when RSI crosses above {} (momentum threshold) 
+                "RSI Momentum strategy using {} period RSI. Enters when RSI crosses above {} (momentum threshold)
                 with strong momentum (>{}). Uses {:.1}% TP and {:.1}% SL.",
                 self.config.rsi_period,
                 self.config.momentum_threshold,

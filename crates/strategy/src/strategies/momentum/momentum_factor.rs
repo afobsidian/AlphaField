@@ -108,6 +108,13 @@ pub struct MomentumFactorStrategy {
     entry_price: Option<f64>,
 }
 
+impl Default for MomentumFactorStrategy {
+    fn default() -> Self {
+        // Default: 20-period lookback, 14-period RSI, require 2/3 factors, 5% TP, 3% SL
+        Self::from_config(MomentumFactorConfig::default_config())
+    }
+}
+
 impl MomentumFactorStrategy {
     /// Creates a new Momentum Factor strategy
     pub fn new(

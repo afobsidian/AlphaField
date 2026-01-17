@@ -260,6 +260,13 @@ pub struct MLEnhancedStrategy {
     last_rsi: Option<f64>,
 }
 
+impl Default for MLEnhancedStrategy {
+    fn default() -> Self {
+        // Default: 20/50 EMA, 12/26/9 MACD, 14 RSI, 14 ATR, default feature weights
+        Self::from_config(MLEnhancedConfig::default_config())
+    }
+}
+
 impl MLEnhancedStrategy {
     /// Creates a new ML-Enhanced Multi-Indicator strategy
     pub fn new(

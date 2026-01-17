@@ -264,6 +264,13 @@ pub struct AdaptiveComboStrategy {
     last_rsi: Option<f64>,
 }
 
+impl Default for AdaptiveComboStrategy {
+    fn default() -> Self {
+        // Default: 20/50 EMA, 12/26/9 MACD, 14 RSI, default weights and thresholds
+        Self::from_config(AdaptiveComboConfig::default_config())
+    }
+}
+
 impl AdaptiveComboStrategy {
     /// Creates a new Adaptive Combination strategy
     pub fn new(

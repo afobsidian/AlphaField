@@ -173,6 +173,13 @@ pub struct TrendMeanRevStrategy {
     last_rsi: Option<f64>,
 }
 
+impl Default for TrendMeanRevStrategy {
+    fn default() -> Self {
+        // Default: 20/50 EMA, 14 RSI, default thresholds, 5% TP, 5% SL
+        Self::from_config(TrendMeanRevConfig::default_config())
+    }
+}
+
 impl TrendMeanRevStrategy {
     /// Creates a new Trend + Mean Reversion Hybrid strategy
     pub fn new(ema_fast: usize, ema_slow: usize, rsi_period: usize) -> Self {

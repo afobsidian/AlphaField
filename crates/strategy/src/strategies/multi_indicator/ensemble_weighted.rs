@@ -346,6 +346,13 @@ pub struct EnsembleWeightedStrategy {
     entry_votes: Vec<(usize, f64)>, // (strategy_index, vote) at entry
 }
 
+impl Default for EnsembleWeightedStrategy {
+    fn default() -> Self {
+        // Default: 10-trade performance lookback, 5 strategies, default weights and thresholds
+        Self::from_config(EnsembleWeightedConfig::default_config())
+    }
+}
+
 impl EnsembleWeightedStrategy {
     /// Creates a new Ensemble Weighted strategy
     pub fn new(performance_lookback: usize, num_strategies: usize) -> Self {

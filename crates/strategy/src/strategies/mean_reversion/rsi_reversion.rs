@@ -129,6 +129,13 @@ impl RSIReversionStrategy {
     }
 }
 
+impl Default for RSIReversionStrategy {
+    fn default() -> Self {
+        // Default: 14-period RSI, 30/70 thresholds, 200-period SMA trend filter, 5% SL
+        Self::from_config(RSIReversionConfig::default_config())
+    }
+}
+
 impl MetadataStrategy for RSIReversionStrategy {
     fn metadata(&self) -> StrategyMetadata {
         StrategyMetadata {
@@ -136,8 +143,8 @@ impl MetadataStrategy for RSIReversionStrategy {
             category: StrategyCategory::MeanReversion,
             sub_type: Some("rsi_reversion".to_string()),
             description: format!(
-                "RSI-based mean reversion strategy with period {}, oversold {:.0}, overbought {:.0}. 
-                {} {:.0}-period SMA trend filter. Buys on oversold RSI (not in strong downtrend), 
+                "RSI-based mean reversion strategy with period {}, oversold {:.0}, overbought {:.0}.
+                {} {:.0}-period SMA trend filter. Buys on oversold RSI (not in strong downtrend),
                 sells on neutral RSI or overbought.",
                 self.config.rsi_period, self.config.oversold_threshold, self.config.overbought_threshold,
                 if self.config.trend_filter { "Uses" } else { "No" }, self.config.trend_period

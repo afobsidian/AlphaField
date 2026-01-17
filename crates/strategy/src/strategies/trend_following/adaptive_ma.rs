@@ -45,6 +45,13 @@ pub struct AdaptiveMAStrategy {
     position_size: f64,
 }
 
+impl Default for AdaptiveMAStrategy {
+    fn default() -> Self {
+        // Default: 10/30 fast/slow periods, 10 price period, default filters and thresholds
+        Self::from_config(AdaptiveMAConfig::default_config())
+    }
+}
+
 impl AdaptiveMAStrategy {
     /// Creates a new Adaptive MA strategy with specified periods
     ///

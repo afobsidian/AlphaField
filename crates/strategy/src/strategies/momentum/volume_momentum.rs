@@ -111,6 +111,13 @@ pub struct VolumeMomentumStrategy {
     last_volume: Option<f64>,
 }
 
+impl Default for VolumeMomentumStrategy {
+    fn default() -> Self {
+        // Default: 20-period price EMA, 20-period volume average, 1.5x volume multiplier, 5% TP, 3% SL
+        Self::from_config(VolumeMomentumConfig::default_config())
+    }
+}
+
 impl VolumeMomentumStrategy {
     /// Creates a new Volume Momentum strategy
     pub fn new(

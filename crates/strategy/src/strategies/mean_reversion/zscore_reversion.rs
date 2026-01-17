@@ -86,6 +86,13 @@ pub struct ZScoreReversionStrategy {
     entry_price: Option<f64>,
 }
 
+impl Default for ZScoreReversionStrategy {
+    fn default() -> Self {
+        // Default: 20-period lookback, -2.0 entry z-score, 0.0 exit z-score, 1% min price change, 3% SL
+        Self::from_config(ZScoreReversionConfig::default_config())
+    }
+}
+
 impl ZScoreReversionStrategy {
     pub fn new(lookback_period: usize) -> Self {
         let config = ZScoreReversionConfig::new(lookback_period, -2.0, 0.0);
@@ -163,8 +170,8 @@ impl MetadataStrategy for ZScoreReversionStrategy {
             category: StrategyCategory::MeanReversion,
             sub_type: Some("zscore_reversion".to_string()),
             description: format!(
-                "Statistical z-score mean reversion strategy with {}-period lookback. 
-                Entry z-score {:.1}, exit z-score {:.1}. Requires minimum {:.1}% price change to avoid flat markets. 
+                "Statistical z-score mean reversion strategy with {}-period lookback.
+                Entry z-score {:.1}, exit z-score {:.1}. Requires minimum {:.1}% price change to avoid flat markets.
                 Buys when price is > {:.0} standard deviations below mean, sells when returns to mean.",
                 self.config.lookback_period, self.config.entry_zscore, self.config.exit_zscore,
                 self.config.min_price_change, self.config.entry_zscore.abs()

@@ -157,6 +157,13 @@ impl MomentumStrategy {
     }
 }
 
+impl Default for MomentumStrategy {
+    fn default() -> Self {
+        // Default: 50 EMA, 12/26/9 MACD, 5% TP, 5% SL
+        Self::from_config(MomentumConfig::default_config())
+    }
+}
+
 impl MetadataStrategy for MomentumStrategy {
     fn metadata(&self) -> StrategyMetadata {
         StrategyMetadata {

@@ -175,6 +175,13 @@ pub struct MACDRSIComboStrategy {
     last_signal: Option<f64>,
 }
 
+impl Default for MACDRSIComboStrategy {
+    fn default() -> Self {
+        // Default: 12/26/9 MACD, 14 RSI, 70/30 thresholds, 5% TP, 5% SL
+        Self::from_config(MACDRSIConfig::default_config())
+    }
+}
+
 impl MACDRSIComboStrategy {
     /// Creates a new MACD + RSI Combo strategy with default thresholds
     pub fn new(macd_fast: usize, macd_slow: usize, macd_signal: usize, rsi_period: usize) -> Self {

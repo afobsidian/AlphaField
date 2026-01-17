@@ -105,6 +105,13 @@ pub struct RocStrategy {
     last_roc: Option<f64>,
 }
 
+impl Default for RocStrategy {
+    fn default() -> Self {
+        // Default: 10-period ROC, 2% entry, -1% exit, 5% TP, 3% SL
+        Self::from_config(RocConfig::default_config())
+    }
+}
+
 impl RocStrategy {
     /// Creates a new ROC strategy
     pub fn new(

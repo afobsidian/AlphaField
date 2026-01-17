@@ -119,6 +119,13 @@ impl StochReversionStrategy {
     }
 }
 
+impl Default for StochReversionStrategy {
+    fn default() -> Self {
+        // Default: 14-period %K, 3-period %D, 3 smooth, 20/80 thresholds, 5% SL
+        Self::from_config(StochReversionConfig::default_config())
+    }
+}
+
 impl MetadataStrategy for StochReversionStrategy {
     fn metadata(&self) -> StrategyMetadata {
         StrategyMetadata {
@@ -126,8 +133,8 @@ impl MetadataStrategy for StochReversionStrategy {
             category: StrategyCategory::MeanReversion,
             sub_type: Some("stochastic_reversion".to_string()),
             description: format!(
-                "Stochastic oscillator mean reversion strategy with %K period {}, %D period {}, smooth period {}. 
-                Oversold {:.0}, overbought {:.0}. Buys when %K drops below oversold, 
+                "Stochastic oscillator mean reversion strategy with %K period {}, %D period {}, smooth period {}.
+                Oversold {:.0}, overbought {:.0}. Buys when %K drops below oversold,
                 sells when %K rises above overbought or crosses below %D.",
                 self.config.k_period, self.config.d_period, self.config.smooth_period,
                 self.config.oversold, self.config.overbought

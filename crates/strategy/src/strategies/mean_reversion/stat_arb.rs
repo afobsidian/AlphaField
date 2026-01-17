@@ -91,6 +91,13 @@ pub struct StatArbStrategy {
     entry_price: Option<f64>,
 }
 
+impl Default for StatArbStrategy {
+    fn default() -> Self {
+        // Default: 30-period lookback, 2.0 entry z-score, 0.0 exit z-score, 0.8 min correlation, 3% SL
+        Self::from_config(StatArbConfig::default_config())
+    }
+}
+
 impl StatArbStrategy {
     pub fn new(lookback_period: usize) -> Self {
         let config = StatArbConfig::new(lookback_period, 2.0, 0.0);
@@ -111,7 +118,6 @@ impl StatArbStrategy {
     pub fn config(&self) -> &StatArbConfig {
         &self.config
     }
-
     /// Calculate mean of prices
     fn calculate_mean(&self) -> Option<f64> {
         if self.prices.is_empty() {
@@ -155,9 +161,9 @@ impl MetadataStrategy for StatArbStrategy {
             category: StrategyCategory::MeanReversion,
             sub_type: Some("statistical_arbitrage".to_string()),
             description: format!(
-                "Statistical arbitrage mean reversion strategy with {}-period lookback. 
-                Entry z-score {:.1}, exit z-score {:.1}. 
-                Adapted for spot-only trading using price deviation from mean. 
+                "Statistical arbitrage mean reversion strategy with {}-period lookback.
+                Entry z-score {:.1}, exit z-score {:.1}.
+                Adapted for spot-only trading using price deviation from mean.
                 In a full implementation, this would trade pairs based on correlation and spread z-scores.",
                 self.config.lookback_period, self.config.entry_zscore, self.config.exit_zscore
             ),

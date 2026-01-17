@@ -105,6 +105,13 @@ pub struct MultiTfMomentumStrategy {
     last_fast_above_slow: Option<bool>,
 }
 
+impl Default for MultiTfMomentumStrategy {
+    fn default() -> Self {
+        // Default: 20/50 EMA, 5% TP, 3% SL
+        Self::from_config(MultiTfMomentumConfig::default_config())
+    }
+}
+
 impl MultiTfMomentumStrategy {
     /// Creates a new Multi-Timeframe Momentum strategy
     pub fn new(

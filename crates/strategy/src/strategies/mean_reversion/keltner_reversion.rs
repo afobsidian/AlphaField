@@ -89,6 +89,13 @@ pub struct KeltnerReversionStrategy {
     entry_price: Option<f64>,
 }
 
+impl Default for KeltnerReversionStrategy {
+    fn default() -> Self {
+        // Default: 20-period EMA, 10-period ATR, 2.0x multiplier, 1.5x volume multiplier, 3% SL
+        Self::from_config(KeltnerReversionConfig::default_config())
+    }
+}
+
 impl KeltnerReversionStrategy {
     pub fn new(ema_period: usize, atr_period: usize, atr_multiplier: f64) -> Self {
         let config = KeltnerReversionConfig::new(ema_period, atr_period, atr_multiplier);
@@ -129,9 +136,9 @@ impl MetadataStrategy for KeltnerReversionStrategy {
             category: StrategyCategory::MeanReversion,
             sub_type: Some("keltner_reversion".to_string()),
             description: format!(
-                "Keltner channel mean reversion strategy with EMA period {}, ATR period {}, multiplier {:.1}. 
-                Requires volume >= {:.1}x average for entry confirmation. 
-                Buys when price touches lower channel (EMA - {}*ATR) with high volume, 
+                "Keltner channel mean reversion strategy with EMA period {}, ATR period {}, multiplier {:.1}.
+                Requires volume >= {:.1}x average for entry confirmation.
+                Buys when price touches lower channel (EMA - {}*ATR) with high volume,
                 exits at middle band (EMA) or upper channel.",
                 self.config.ema_period, self.config.atr_period, self.config.atr_multiplier,
                 self.config.volume_multiplier, self.config.atr_multiplier

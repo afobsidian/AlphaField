@@ -354,6 +354,13 @@ pub struct RegimeSwitchingStrategy {
     last_slow_ema: Option<f64>,
 }
 
+impl Default for RegimeSwitchingStrategy {
+    fn default() -> Self {
+        // Default: 20/50 EMA, 14 ATR, 14 RSI, default thresholds
+        Self::from_config(RegimeSwitchingConfig::default_config())
+    }
+}
+
 impl RegimeSwitchingStrategy {
     /// Creates a new Regime-Switching strategy
     pub fn new(ema_fast: usize, ema_slow: usize, atr_period: usize, rsi_period: usize) -> Self {

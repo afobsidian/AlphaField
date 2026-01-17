@@ -112,6 +112,13 @@ pub struct AdxTrendStrategy {
     trend_direction: Option<i8>, // +1 for up, -1 for down, 0 for neutral
 }
 
+impl Default for AdxTrendStrategy {
+    fn default() -> Self {
+        // Default: 14-period ADX, 25 strong/20 weak thresholds, 5% TP, 3% SL
+        Self::from_config(AdxTrendConfig::default_config())
+    }
+}
+
 impl AdxTrendStrategy {
     /// Creates a new ADX Trend strategy
     pub fn new(

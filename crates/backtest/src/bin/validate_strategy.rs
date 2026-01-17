@@ -14,16 +14,45 @@ use alphafield_strategy::{
         canonicalize_strategy_name, MetadataStrategy, StrategyCategory, StrategyMetadata,
         StrategyWithMetadata,
     },
+    // Multi-indicator strategies
+    AdaptiveComboStrategy,
+    // Trend following additional
+    AdaptiveMAStrategy,
+    // Momentum strategies
+    AdxTrendStrategy,
     BollingerBandsStrategy,
+    BreakoutStrategy,
+    ConfidenceWeightedStrategy,
     // Sentiment strategies
     DivergenceStrategy,
+    EnsembleWeightedStrategy,
     // Trend following strategies
     GoldenCrossStrategy,
+    // Mean reversion additional
+    KeltnerReversionStrategy,
+    MACDRSIComboStrategy,
+    MACDStrategy,
+    MACrossoverStrategy,
+    MLEnhancedStrategy,
     MacdTrendStrategy,
+    MomentumFactorStrategy,
+    MultiTfMomentumStrategy,
+    ParabolicSARStrategy,
+    PriceChannelStrategy,
+    RSIReversionStrategy,
     RegimeSentimentStrategy,
+    RegimeSwitchingStrategy,
+    RocStrategy,
+    RsiMomentumStrategy,
     // Mean reversion strategies
     RsiStrategy,
     SentimentMomentumStrategy,
+    StatArbStrategy,
+    StochReversionStrategy,
+    TrendMeanRevStrategy,
+    TripleMAStrategy,
+    VolumeMomentumStrategy,
+    ZScoreReversionStrategy,
 };
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
@@ -192,17 +221,48 @@ lazy_static! {
             };
         }
 
-        // Register trend following strategies (only those with Default implementation)
+        // Register trend following strategies
         // These strategies perform best in trending markets
         register_strategy!(GoldenCrossStrategy);
         register_strategy!(MacdTrendStrategy);
+        register_strategy!(AdaptiveMAStrategy);
+        register_strategy!(BreakoutStrategy);
+        register_strategy!(MACrossoverStrategy);
+        register_strategy!(ParabolicSARStrategy);
+        register_strategy!(TripleMAStrategy);
 
-        // Register mean reversion strategies (only those with Default implementation)
+        // Register mean reversion strategies
         // These strategies perform best in ranging/sideways markets
         register_strategy!(RsiStrategy);
         register_strategy!(BollingerBandsStrategy);
+        register_strategy!(KeltnerReversionStrategy);
+        register_strategy!(PriceChannelStrategy);
+        register_strategy!(RSIReversionStrategy);
+        register_strategy!(StatArbStrategy);
+        register_strategy!(StochReversionStrategy);
+        register_strategy!(ZScoreReversionStrategy);
 
-        // Register sentiment strategies (only those with Default implementation)
+        // Register momentum strategies
+        // These strategies identify and follow strong price trends
+        register_strategy!(AdxTrendStrategy);
+        register_strategy!(MACDStrategy);
+        register_strategy!(MomentumFactorStrategy);
+        register_strategy!(MultiTfMomentumStrategy);
+        register_strategy!(RocStrategy);
+        register_strategy!(RsiMomentumStrategy);
+        register_strategy!(VolumeMomentumStrategy);
+
+        // Register multi-indicator strategies
+        // These strategies combine multiple indicators in sophisticated ways
+        register_strategy!(AdaptiveComboStrategy);
+        register_strategy!(ConfidenceWeightedStrategy);
+        register_strategy!(EnsembleWeightedStrategy);
+        register_strategy!(MACDRSIComboStrategy);
+        register_strategy!(MLEnhancedStrategy);
+        register_strategy!(RegimeSwitchingStrategy);
+        register_strategy!(TrendMeanRevStrategy);
+
+        // Register sentiment strategies
         // These strategies combine technical indicators with market sentiment
         register_strategy!(DivergenceStrategy);
         register_strategy!(RegimeSentimentStrategy);

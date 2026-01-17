@@ -53,6 +53,13 @@ pub struct BreakoutStrategy {
     tp3_hit: bool,
 }
 
+impl Default for BreakoutStrategy {
+    fn default() -> Self {
+        // Default: 20-period lookback, 1.5x volume multiplier, 1% min ATR, 3x ATR stop, 2.5% trailing stop
+        Self::from_config(BreakoutConfig::default_config())
+    }
+}
+
 impl BreakoutStrategy {
     /// Creates a new Breakout strategy with specified lookback period
     ///

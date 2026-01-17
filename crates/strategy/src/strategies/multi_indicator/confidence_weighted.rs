@@ -212,6 +212,13 @@ pub struct ConfidenceWeightedStrategy {
     last_signal: Option<f64>,
 }
 
+impl Default for ConfidenceWeightedStrategy {
+    fn default() -> Self {
+        // Default: 20/50 EMA, 12/26/9 MACD, 14 RSI, default weights and thresholds
+        Self::from_config(ConfidenceWeightedConfig::default_config())
+    }
+}
+
 impl ConfidenceWeightedStrategy {
     /// Creates a new Confidence-Weighted strategy
     pub fn new(

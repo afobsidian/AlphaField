@@ -63,6 +63,15 @@ impl ParabolicSarConfig {
     pub fn strategy_name(&self) -> &'static str {
         "Parabolic SAR"
     }
+
+    pub fn default_config() -> Self {
+        Self {
+            step: 0.02,
+            max_step: 0.2,
+            trend_filter_enabled: true,
+            trend_sma_period: 50,
+        }
+    }
 }
 
 /// Internal Parabolic SAR state machine.
@@ -237,6 +246,13 @@ pub struct ParabolicSARStrategy {
 
     in_position: bool,
     entry_price: Option<f64>,
+}
+
+impl Default for ParabolicSARStrategy {
+    fn default() -> Self {
+        // Default: 0.02 step, 0.2 max_step, 50-period SMA trend filter
+        Self::from_config(ParabolicSarConfig::default_config())
+    }
 }
 
 impl ParabolicSARStrategy {

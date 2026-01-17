@@ -48,6 +48,13 @@ pub struct TripleMAStrategy {
     position_size: f64,
 }
 
+impl Default for TripleMAStrategy {
+    fn default() -> Self {
+        // Default: 5/15/30 fast/medium/slow SMA periods, default filters and thresholds
+        Self::from_config(TripleMAConfig::default_config())
+    }
+}
+
 impl TripleMAStrategy {
     /// Creates a new Triple MA strategy with specified periods
     ///

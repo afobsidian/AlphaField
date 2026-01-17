@@ -73,6 +73,13 @@ pub struct PriceChannelStrategy {
     entry_price: Option<f64>,
 }
 
+impl Default for PriceChannelStrategy {
+    fn default() -> Self {
+        // Default: 20-period lookback, 50% exit, 3% SL
+        Self::from_config(PriceChannelConfig::default_config())
+    }
+}
+
 impl PriceChannelStrategy {
     pub fn new(lookback_period: usize) -> Self {
         let config = PriceChannelConfig::new(lookback_period);
@@ -133,8 +140,8 @@ impl MetadataStrategy for PriceChannelStrategy {
             category: StrategyCategory::MeanReversion,
             sub_type: Some("price_channel".to_string()),
             description: format!(
-                "Donchian price channel mean reversion strategy with {}-period lookback. 
-                Buys when price touches lowest low, exits at {:.0}% of channel range or highest high. 
+                "Donchian price channel mean reversion strategy with {}-period lookback.
+                Buys when price touches lowest low, exits at {:.0}% of channel range or highest high.
                 Uses {:.1}% stop loss.",
                 self.config.lookback_period, self.config.exit_percent, self.config.stop_loss
             ),

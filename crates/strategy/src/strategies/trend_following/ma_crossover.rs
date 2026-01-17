@@ -47,6 +47,13 @@ pub struct MACrossoverStrategy {
     position_size: f64,
 }
 
+impl Default for MACrossoverStrategy {
+    fn default() -> Self {
+        // Default: 10/30 fast/slow SMA periods, 2% separation, default filters and thresholds
+        Self::from_config(MACrossoverConfig::default_config())
+    }
+}
+
 impl MACrossoverStrategy {
     /// Creates a new MA Crossover strategy with specified periods
     ///
