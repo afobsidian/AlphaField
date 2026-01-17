@@ -355,7 +355,18 @@ async fn main() -> Result<()> {
             fee_rate,
             risk_free_rate,
         } => {
-            let bars = load_bars(&symbol, &interval).await?;
+            // Create a shared database connection pool
+            println!("📡 Connecting to database...");
+            let db = match alphafield_data::DatabaseClient::new_from_env().await {
+                Ok(client) => Arc::new(client),
+                Err(e) => {
+                    eprintln!("{} {}", "Failed to connect to database:".red(), e);
+                    eprintln!("Ensure DATABASE_URL is set in .env and Postgres is running.");
+                    return Err(e.into());
+                }
+            };
+
+            let bars = load_bars(&symbol, &interval, Arc::clone(&db)).await?;
             let config = ValidationConfig {
                 data_source: format!("database:{}", symbol),
                 symbol: symbol.clone(),
@@ -494,6 +505,18 @@ async fn main() -> Result<()> {
             let passed_validations = Arc::new(AtomicUsize::new(0));
             let failed_validations = Arc::new(AtomicUsize::new(0));
 
+            // Create a shared database connection pool for all tasks
+            // This prevents connection pool exhaustion from creating multiple pools
+            println!("📡 Initializing shared database connection pool...");
+            let db = match alphafield_data::DatabaseClient::new_from_env().await {
+                Ok(client) => Arc::new(client),
+                Err(e) => {
+                    eprintln!("{} {}", "Failed to connect to database:".red(), e);
+                    eprintln!("Ensure DATABASE_URL is set in .env and Postgres is running.");
+                    return Err(e.into());
+                }
+            };
+
             // Create semaphore to limit concurrent database connections to 50
             // (PostgreSQL default max_connections)
             let semaphore = Arc::new(Semaphore::new(50));
@@ -524,6 +547,7 @@ async fn main() -> Result<()> {
                     let failed = Arc::clone(&failed_validations);
                     let strategy_name_clone = strategy_name.clone();
                     let semaphore = Arc::clone(&semaphore);
+                    let db = Arc::clone(&db);
 
                     // Spawn validation task
                     let task = tokio::spawn(async move {
@@ -533,7 +557,8 @@ async fn main() -> Result<()> {
                         total.fetch_add(1, Ordering::SeqCst);
                         println!("Validating {}/{}...", strategy_name_clone, symbol);
 
-                        let bars = match load_bars(&symbol, &interval_clone).await {
+                        let bars = match load_bars(&symbol, &interval_clone, Arc::clone(&db)).await
+                        {
                             Ok(b) => b,
                             Err(e) => {
                                 println!(
@@ -855,14 +880,11 @@ fn print_strategy_info(name: &str, metadata: &StrategyMetadata) {
 }
 
 /// Load bars from database
-async fn load_bars(symbol: &str, interval: &str) -> Result<Vec<Bar>> {
-    println!("📡 Connecting to database...");
-    let db = alphafield_data::DatabaseClient::new_from_env()
-        .await
-        .context(
-            "Failed to connect to database. Make sure DATABASE_URL is set in your .env file",
-        )?;
-
+async fn load_bars(
+    symbol: &str,
+    interval: &str,
+    db: Arc<alphafield_data::DatabaseClient>,
+) -> Result<Vec<Bar>> {
     println!("🔍 Checking if data exists in database...");
     if db.exists(symbol, interval).await? {
         println!("✅ Loading historical data from database...");
