@@ -65,6 +65,33 @@ impl Default for FeatureWeights {
     }
 }
 
+impl FeatureWeights {
+    /// Validates that feature weights sum to 1.0
+    pub fn validate(&self) -> Result<(), String> {
+        let sum =
+            self.trend_weight + self.momentum_weight + self.meanrev_weight + self.volatility_weight;
+        if (sum - 1.0).abs() > 0.001 {
+            return Err(format!("Feature weights must sum to 1.0, got {:.4}", sum));
+        }
+
+        // Check for negative weights
+        if self.trend_weight < 0.0 {
+            return Err("Trend weight must be non-negative".to_string());
+        }
+        if self.momentum_weight < 0.0 {
+            return Err("Momentum weight must be non-negative".to_string());
+        }
+        if self.meanrev_weight < 0.0 {
+            return Err("Mean reversion weight must be non-negative".to_string());
+        }
+        if self.volatility_weight < 0.0 {
+            return Err("Volatility weight must be non-negative".to_string());
+        }
+
+        Ok(())
+    }
+}
+
 impl MLEnhancedConfig {
     pub fn new(
         ema_fast: usize,
@@ -128,6 +155,10 @@ impl MLEnhancedConfig {
         if self.stop_loss <= 0.0 {
             return Err("Stop loss must be greater than 0".to_string());
         }
+
+        // Validate feature weights
+        self.feature_weights.validate()?;
+
         Ok(())
     }
 }
@@ -584,6 +615,68 @@ mod tests {
         assert_eq!(weights.momentum_weight, 0.35);
         assert_eq!(weights.meanrev_weight, 0.20);
         assert_eq!(weights.volatility_weight, 0.15);
+    }
+
+    #[test]
+    fn test_feature_weights_valid() {
+        let weights = FeatureWeights {
+            trend_weight: 0.25,
+            momentum_weight: 0.30,
+            meanrev_weight: 0.25,
+            volatility_weight: 0.20,
+        };
+        assert!(weights.validate().is_ok());
+    }
+
+    #[test]
+    fn test_feature_weights_invalid_sum() {
+        // Sum > 1.0
+        let weights = FeatureWeights {
+            trend_weight: 0.40,
+            momentum_weight: 0.40,
+            meanrev_weight: 0.20,
+            volatility_weight: 0.10,
+        };
+        assert!(weights.validate().is_err());
+        assert!(weights.validate().unwrap_err().contains("must sum to 1.0"));
+
+        // Sum < 1.0
+        let weights2 = FeatureWeights {
+            trend_weight: 0.20,
+            momentum_weight: 0.20,
+            meanrev_weight: 0.20,
+            volatility_weight: 0.20,
+        };
+        assert!(weights2.validate().is_err());
+    }
+
+    #[test]
+    fn test_feature_weights_negative() {
+        // Negative trend weight
+        let weights = FeatureWeights {
+            trend_weight: -0.10,
+            momentum_weight: 0.50,
+            meanrev_weight: 0.30,
+            volatility_weight: 0.30,
+        };
+        assert!(weights.validate().is_err());
+        assert!(weights
+            .validate()
+            .unwrap_err()
+            .contains("Trend weight must be non-negative"));
+
+        // Negative volatility weight
+        let weights2 = FeatureWeights {
+            trend_weight: 0.35,
+            momentum_weight: 0.35,
+            meanrev_weight: 0.35,
+            volatility_weight: -0.05,
+        };
+        assert!(weights2.validate().is_err());
+        assert!(weights2
+            .validate()
+            .unwrap_err()
+            .contains("Volatility weight must be non-negative"));
     }
 
     #[test]
