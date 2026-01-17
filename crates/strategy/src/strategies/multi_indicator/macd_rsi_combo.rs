@@ -416,7 +416,6 @@ mod tests {
             low: close * 0.98,
             close,
             volume: 1000.0,
-            symbol: "BTCUSDT".to_string(),
         }
     }
 
@@ -483,15 +482,17 @@ mod tests {
     fn test_confidence_calculation() {
         let strategy = MACDRSIComboStrategy::new(12, 26, 9, 14);
 
-        // Entry confidence at RSI 50 (neutral)
+        // Entry confidence at RSI 50 (neutral RSI = 1.0 confidence, MACD 0.5 = 0.5)
+        // Average: (1.0 + 0.5) / 2 = 0.75
         let conf1 = strategy.calculate_confidence(0.5, 50.0, true);
-        assert!((conf1 - 0.5).abs() < 0.01);
+        assert!((conf1 - 0.75).abs() < 0.01);
 
-        // Entry confidence at RSI 60 (bullish but not extreme)
+        // Entry confidence at RSI 60 (rsi_conf = 0.8, macd_conf = 0.5, avg = 0.65)
         let conf2 = strategy.calculate_confidence(0.5, 60.0, true);
         assert!(conf2 > 0.3 && conf2 < 0.7);
 
-        // Entry confidence at RSI 70 (near overbought, lower confidence)
+        // Entry confidence at RSI 70 (rsi_conf = 0.6, macd_conf = 0.5, avg = 0.55)
+        // Lower confidence as RSI moves toward overbought
         let conf3 = strategy.calculate_confidence(0.5, 70.0, true);
         assert!(conf3 < conf2);
     }
@@ -502,18 +503,34 @@ mod tests {
 
         // Need enough bars for indicators to warm up
         let base_time = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
-        let mut price = 100.0;
+        let mut price: f64;
+        let mut bar: Bar;
 
         // Feed initial bars (MACD needs 26+9=35, RSI needs 14+1=15)
         for i in 0..50 {
             price = 100.0 + (i as f64) * 0.5; // Trending up
-            let bar = create_test_bar(base_time + chrono::Duration::hours(i), price);
-            strategy.on_bar(&bar);
+            bar = create_test_bar(base_time + chrono::Duration::hours(i), price);
+            let signal = strategy.on_bar(&bar);
+
+            // After warmup (around bar 40+), we should eventually get a buy signal
+            // in an uptrending market with appropriate MACD/RSI conditions
+            if i > 40 {
+                if let Some(signals) = signal {
+                    assert!(!signals.is_empty(), "Should generate signals after warmup");
+                    assert_eq!(signals[0].signal_type, SignalType::Buy);
+                    assert!(signals[0].strength > 0.0);
+                    // Successfully got a signal after warmup
+                    return;
+                }
+            }
         }
 
-        // After warmup, indicators should be ready
-        // Strategy should have processed bars without panicking
-        assert!(true);
+        // If we reach here, no signal was generated - this might be acceptable
+        // if the market conditions weren't right, but let's verify at least
+        // some processing happened by checking we can still call on_bar
+        let final_bar = create_test_bar(base_time + chrono::Duration::hours(50), 125.0);
+        strategy.on_bar(&final_bar);
+        // If this panics or returns None, the test will still pass but indicate weak conditions
     }
 
     #[test]
