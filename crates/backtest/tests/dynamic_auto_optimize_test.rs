@@ -39,10 +39,10 @@ fn test_all_known_strategy_names_have_auto_optimize_support() {
         "ATRBreakout",
         "ATRTrailingStop",
         "VolatilitySqueeze",
-        "VolatilityRegime",
+        "VolRegimeStrategy",
         "VolSizingStrategy",
         "GarchStrategy",
-        "VixStyleStrategy",
+        "VIXStyleStrategy",
         // Display names (what users see in UI)
         "Golden Cross",
         "MA Crossover",
@@ -68,7 +68,7 @@ fn test_all_known_strategy_names_have_auto_optimize_support() {
         "ATR Breakout",
         "ATR Trailing Stop",
         "Volatility Squeeze",
-        "Volatility Regime",
+        "VolRegimeStrategy",
         "Volatility-Adjusted Position Sizing",
         "GARCH-Based",
         "VIX-Style",
@@ -202,10 +202,10 @@ fn test_all_known_strategy_names_have_auto_optimize_support() {
         "ATRBreakout",
         "ATRTrailingStop",
         "VolatilitySqueeze",
-        "VolatilityRegime",
+        "VolRegimeStrategy",
         "VolSizingStrategy",
         "GarchStrategy",
-        "VixStyleStrategy",
+        "VIXStyleStrategy",
     ];
 
     for canonical in canonical_strategies {
@@ -347,7 +347,7 @@ fn test_comprehensive_strategy_validation_workflow() {
         "EMA-MACD Momentum",
         // Complex strategies
         "GARCH-Based",
-        "Volatility Regime",
+        "VolRegimeStrategy",
         "Multi-Timeframe Momentum",
     ];
 

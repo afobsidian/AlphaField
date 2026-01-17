@@ -486,7 +486,7 @@ pub fn get_strategy_bounds(strategy_name: &str) -> Vec<ParamBounds> {
             ParamBounds::new("take_profit", 3.0, 10.0, 2.0),
             ParamBounds::new("stop_loss", 2.0, 6.0, 1.0),
         ],
-        "VolatilityRegime" => vec![
+        "VolRegimeStrategy" => vec![
             ParamBounds::new("atr_period", 10.0, 20.0, 2.0),
             ParamBounds::new("regime_period", 50.0, 150.0, 25.0),
             ParamBounds::new("low_threshold", 20.0, 40.0, 10.0),
@@ -509,7 +509,7 @@ pub fn get_strategy_bounds(strategy_name: &str) -> Vec<ParamBounds> {
             ParamBounds::new("take_profit", 3.0, 10.0, 2.0),
             ParamBounds::new("stop_loss", 2.0, 6.0, 1.0),
         ],
-        "VixStyleStrategy" => vec![
+        "VIXStyleStrategy" => vec![
             ParamBounds::new("atr_period", 10.0, 20.0, 2.0),
             ParamBounds::new("high_threshold", 25.0, 40.0, 5.0),
             ParamBounds::new("low_threshold", 15.0, 25.0, 5.0),

@@ -271,6 +271,64 @@ The `crates/dashboard` crate serves a Vanilla JS frontend at `http://localhost:8
 
 ---
 
+## 🧪 Strategy Validation
+
+The `validate_strategy` binary provides comprehensive strategy validation through backtesting, walk-forward analysis, Monte Carlo simulation, and regime-based performance analysis.
+
+### Batch Validation
+
+Validate multiple strategies against multiple symbols in parallel:
+
+```bash
+cargo run --bin validate_strategy -- batch \
+  --batch-file validation/strategies_batch.txt \
+  --symbols "BTC,ETH,SOL,BNB,XRP" \
+  --interval 1h \
+  --output-dir validation/reports \
+  --format json \
+  --max-concurrent 4
+```
+
+**⚠️ Important**: Use `--max-concurrent` to limit parallel validation and prevent CPU overload. Each validation runs multiple CPU-intensive operations:
+- Full backtest over historical data
+- Walk-forward analysis (5-10 windows × 2 backtests each)
+- Monte Carlo simulation (thousands of trade sequences)
+- Regime analysis
+
+Recommended values:
+- **Conservative**: `--max-concurrent 2` (lowest CPU usage, slower execution)
+- **Balanced**: `--max-concurrent 4` or `num_cores/2` (good balance of speed and CPU usage)
+- **Aggressive**: `--max-concurrent num_cores` (default, fastest but highest CPU usage)
+
+**Batch File Format**: One strategy name per line
+```
+RSIReversion
+GoldenCross
+AdaptiveMA
+MacdTrend
+```
+
+### List Available Strategies
+
+```bash
+# View all strategies
+cargo run --bin validate_strategy -- list-strategies
+
+# Filter by category
+cargo run --bin validate_strategy -- list-strategies --category mean_reversion
+```
+
+### Validate Single Strategy
+
+```bash
+cargo run --bin validate_strategy -- validate \
+  --strategy RSIReversion \
+  --symbol BTC \
+  --interval 1h \
+  --output validation_report.json \
+  --format json
+```
+
 ## 🚀 Getting Started
 
 ### Prerequisites

@@ -178,6 +178,10 @@ enum Commands {
         /// Output format (json, yaml, markdown)
         #[arg(long, default_value = "json")]
         format: OutputFormat,
+
+        /// Maximum concurrent validations (default: number of CPU cores)
+        #[arg(long)]
+        max_concurrent: Option<usize>,
     },
 
     /// List all available strategies
@@ -484,6 +488,7 @@ async fn main() -> Result<()> {
             interval,
             output_dir,
             format,
+            max_concurrent,
         } => {
             let strategies = fs::read_to_string(&batch_file)
                 .context(format!("Failed to read batch file: {}", batch_file))?;
@@ -517,9 +522,18 @@ async fn main() -> Result<()> {
                 }
             };
 
-            // Create semaphore to limit concurrent database connections to 50
-            // (PostgreSQL default max_connections)
-            let semaphore = Arc::new(Semaphore::new(50));
+            // Create semaphore to limit concurrent database connections to 90
+            // (PostgreSQL default max_connections = 100)
+            let db_semaphore = Arc::new(Semaphore::new(90));
+
+            // Create semaphore to limit concurrent validations (CPU-intensive work)
+            // Use provided value or default to number of CPU cores
+            let max_concurrent_val = max_concurrent.unwrap_or_else(|| {
+                std::thread::available_parallelism()
+                    .map(|n| n.get())
+                    .unwrap_or(4)
+            });
+            let cpu_semaphore = Arc::new(Semaphore::new(max_concurrent_val));
 
             println!(
                 "{}",
@@ -527,11 +541,13 @@ async fn main() -> Result<()> {
                     .blue()
                     .bold()
             );
+            let max_concurrent = cpu_semaphore.available_permits();
             println!(
-                "Strategies: {}, Symbols: {}, Total validations: {} (max concurrent: 100)\n",
+                "Strategies: {}, Symbols: {}, Total validations: {} (max concurrent: {})\n",
                 strategy_names.len(),
                 symbols_list.len(),
-                strategy_names.len() * symbols_list.len()
+                strategy_names.len() * symbols_list.len(),
+                max_concurrent
             );
 
             // Collect all validation tasks
@@ -546,13 +562,17 @@ async fn main() -> Result<()> {
                     let passed = Arc::clone(&passed_validations);
                     let failed = Arc::clone(&failed_validations);
                     let strategy_name_clone = strategy_name.clone();
-                    let semaphore = Arc::clone(&semaphore);
+                    let db_semaphore = Arc::clone(&db_semaphore);
+                    let cpu_semaphore = Arc::clone(&cpu_semaphore);
                     let db = Arc::clone(&db);
 
                     // Spawn validation task
                     let task = tokio::spawn(async move {
-                        // Acquire semaphore permit to limit concurrent database connections
-                        let _permit = semaphore.acquire().await.unwrap();
+                        // Acquire CPU semaphore permit to limit concurrent validations
+                        let _cpu_permit = cpu_semaphore.acquire().await.unwrap();
+
+                        // Acquire DB semaphore permit to limit database connections
+                        let _db_permit = db_semaphore.acquire().await.unwrap();
 
                         total.fetch_add(1, Ordering::SeqCst);
                         println!("Validating {}/{}...", strategy_name_clone, symbol);

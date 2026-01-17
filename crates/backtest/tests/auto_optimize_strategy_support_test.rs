@@ -39,7 +39,7 @@ const UI_STRATEGIES: &[&str] = &[
     "ATR Breakout",
     "ATR Trailing Stop",
     "Volatility Squeeze",
-    "Volatility Regime",
+    "VolRegimeStrategy",
     "Volatility-Adjusted Position Sizing",
     "GARCH-Based",
     "VIX-Style",

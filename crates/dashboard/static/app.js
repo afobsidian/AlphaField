@@ -166,7 +166,7 @@ const STRATEGY_UI_OVERRIDES = {
     displayName: "ATR Trailing Stop",
     description: "ATR-based trailing stop strategy",
   },
-  GARCHStrategy: {
+  GarchStrategy: {
     displayName: "GARCH Volatility",
     description: "GARCH model-based volatility trading",
   },
@@ -182,7 +182,7 @@ const STRATEGY_UI_OVERRIDES = {
     displayName: "Volatility Sizing",
     description: "Volatility-adjusted position sizing",
   },
-  VolSqueezeStrategy: {
+  VolatilitySqueeze: {
     displayName: "Volatility Squeeze",
     description: "Volatility squeeze breakout strategy",
   },

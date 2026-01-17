@@ -517,37 +517,57 @@ impl StrategyRegistry {
 /// ```
 pub fn canonicalize_strategy_name(name: &str) -> String {
     match name.trim() {
-        // Existing "core" strategies (display name → key)
-        "Golden Cross" => "GoldenCross".to_string(),
-        "RSI Mean Reversion" => "Rsi".to_string(),
-        "Bollinger Bands Mean Reversion" => "MeanReversion".to_string(),
-        "EMA-MACD Momentum" => "Momentum".to_string(),
-        "EMA-MACD" => "Momentum".to_string(),
+        // Batch file names → Registry keys (remove "Strategy" suffix if present)
+        // Batch file names → Registry keys
+        "AdaptiveMA" => "AdaptiveMA".to_string(),
+        "AdxTrendStrategy" => "AdxTrendStrategy".to_string(),
+        "ATRBreakout" => "ATRBreakout".to_string(),
+        "Breakout" => "Breakout".to_string(),
+        "Divergence" => "Divergence".to_string(),
+        "GoldenCross" => "GoldenCross".to_string(),
+        "KeltnerReversion" => "KeltnerReversion".to_string(),
+        "MacdTrend" => "MacdTrend".to_string(),
+        "MACrossover" => "MACrossover".to_string(),
+        "MeanReversion" => "MeanReversion".to_string(),
+        "Momentum" => "Momentum".to_string(),
+        "MomentumFactorStrategy" => "MomentumFactorStrategy".to_string(),
+        "MultiTfMomentumStrategy" => "MultiTfMomentumStrategy".to_string(),
+        "ParabolicSAR" => "ParabolicSAR".to_string(),
+        "PriceChannel" => "PriceChannel".to_string(),
+        "RSIReversion" => "RSIReversion".to_string(),
+        "RocStrategy" => "RocStrategy".to_string(),
+        "RsiMomentumStrategy" => "RsiMomentumStrategy".to_string(),
+        "VolumeMomentumStrategy" => "VolumeMomentumStrategy".to_string(),
+        "StatArb" => "StatArb".to_string(),
+        "RegimeSentiment" => "RegimeSentiment".to_string(),
+        "SentimentMomentum" => "SentimentMomentum".to_string(),
+        "StochReversion" => "StochReversion".to_string(),
+        "TripleMA" => "TripleMA".to_string(),
+        "ZScoreReversion" => "ZScoreReversion".to_string(),
+        "BollingerBands" => "BollingerBands".to_string(),
 
-        // Phase 12.2 trend-following strategies (display name → key)
+        // Display names from strategy metadata → Registry keys
+        "Golden Cross" => "GoldenCross".to_string(),
         "Adaptive MA" => "AdaptiveMA".to_string(),
         "MA Crossover" => "MACrossover".to_string(),
         "MACD Trend" => "MacdTrend".to_string(),
         "Parabolic SAR" => "ParabolicSAR".to_string(),
         "Triple MA" => "TripleMA".to_string(),
-
-        // Phase 12.3 mean reversion strategies (display name → key)
         "Bollinger Bands" => "BollingerBands".to_string(),
         "RSI Reversion" => "RSIReversion".to_string(),
+        "Keltner Channel" => "KeltnerReversion".to_string(),
+        "Price Channel (Donchian)" => "PriceChannel".to_string(),
         "Stochastic Reversion" => "StochReversion".to_string(),
         "Stochastic Mean Reversion" => "StochReversion".to_string(),
         "Z-Score Reversion" => "ZScoreReversion".to_string(),
         "Z-Score Mean Reversion" => "ZScoreReversion".to_string(),
-        "Price Channel (Donchian)" => "PriceChannel".to_string(),
         "Price Channel Mean Reversion" => "PriceChannel".to_string(),
-        "Keltner Channel" => "KeltnerReversion".to_string(),
         "Keltner Channel Mean Reversion" => "KeltnerReversion".to_string(),
         "Statistical Arbitrage" => "StatArb".to_string(),
         "Statistical Arbitrage Mean Reversion" => "StatArb".to_string(),
-
-        // Phase 12.4 momentum strategies (display name → key)
+        "RSI Mean Reversion" => "RSIReversion".to_string(),
         "RSI Momentum" => "RsiMomentumStrategy".to_string(),
-        "MACD Momentum" => "MACDStrategy".to_string(),
+        "MACD Momentum" => "RocStrategy".to_string(),
         "Rate of Change (ROC)" => "RocStrategy".to_string(),
         "ROC Momentum" => "RocStrategy".to_string(),
         "ADX Trend" => "AdxTrendStrategy".to_string(),
@@ -555,22 +575,23 @@ pub fn canonicalize_strategy_name(name: &str) -> String {
         "Volume Momentum" => "VolumeMomentumStrategy".to_string(),
         "Multi-Timeframe Momentum" => "MultiTfMomentumStrategy".to_string(),
         "Multi-TF Momentum" => "MultiTfMomentumStrategy".to_string(),
-
-        // Volatility-based strategies (display name → key)
         "ATR Breakout" => "ATRBreakout".to_string(),
         "ATR Trailing Stop" => "ATRTrailingStop".to_string(),
         "Volatility Squeeze" => "VolatilitySqueeze".to_string(),
-        "Volatility Regime" => "VolatilityRegime".to_string(),
+        "Volatility Regime" => "VolRegimeStrategy".to_string(),
         "Volatility-Adjusted Position Sizing" => "VolSizingStrategy".to_string(),
         "GARCH-Based" => "GarchStrategy".to_string(),
-        "VIX-Style" => "VixStyleStrategy".to_string(),
+        "VIX-Style" => "VIXStyleStrategy".to_string(),
+        "Regime Sentiment" => "RegimeSentiment".to_string(),
+        "Sentiment Momentum" => "SentimentMomentum".to_string(),
 
-        // Baseline strategies (display name → key)
+        // Existing "core" strategies (display name → key)
+        "Bollinger Bands Mean Reversion" => "BollingerBands".to_string(),
+        "EMA-MACD Momentum" => "Momentum".to_string(),
+        "EMA-MACD" => "Momentum".to_string(),
         "HODL Baseline" => "HODL_Baseline".to_string(),
         "Market Average Baseline" => "Market_Average_Baseline".to_string(),
-
-        // Strategy variations (display name → key)
-        "RSI" => "Rsi".to_string(),
+        "RSI" => "RSIReversion".to_string(),
         "Stochastic" => "StochReversion".to_string(),
         "Z Score" => "ZScoreReversion".to_string(),
         "Donchian" => "PriceChannel".to_string(),
@@ -578,7 +599,7 @@ pub fn canonicalize_strategy_name(name: &str) -> String {
         "Stat Arb" => "StatArb".to_string(),
         "ATR" => "ATRBreakout".to_string(),
         "GARCH" => "GarchStrategy".to_string(),
-        "VIX" => "VixStyleStrategy".to_string(),
+        "VIX" => "VIXStyleStrategy".to_string(),
         "EMA MACD" => "Momentum".to_string(),
         "Rate of Change" => "RocStrategy".to_string(),
         "ADX" => "AdxTrendStrategy".to_string(),
@@ -587,7 +608,10 @@ pub fn canonicalize_strategy_name(name: &str) -> String {
         "EMA" => "Momentum".to_string(),
         "SMA" => "Breakout".to_string(),
 
-        // Strategy + "Strategy" suffix (display name → key)
+        // Volatility-based strategy variations
+        "Volatility" => "ATRBreakout".to_string(),
+
+        // Strategy + "Strategy" suffix variations
         "Golden Cross Strategy" => "GoldenCross".to_string(),
         "MA Crossover Strategy" => "MACrossover".to_string(),
         "Breakout Strategy" => "Breakout".to_string(),
@@ -639,10 +663,13 @@ mod tests {
     #[test]
     fn test_canonicalize_core_strategies_display_names() {
         assert_eq!(canonicalize_strategy_name("Golden Cross"), "GoldenCross");
-        assert_eq!(canonicalize_strategy_name("RSI Mean Reversion"), "Rsi");
+        assert_eq!(
+            canonicalize_strategy_name("RSI Mean Reversion"),
+            "RSIReversion"
+        );
         assert_eq!(
             canonicalize_strategy_name("Bollinger Bands Mean Reversion"),
-            "MeanReversion"
+            "BollingerBands"
         );
         assert_eq!(canonicalize_strategy_name("EMA-MACD Momentum"), "Momentum");
     }
