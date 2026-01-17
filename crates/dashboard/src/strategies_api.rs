@@ -470,6 +470,72 @@ pub fn initialize_registry() -> Arc<StrategyRegistry> {
         eprintln!("Failed to register Regime-Based Sentiment strategy: {}", e);
     }
 
+    // ------------------------------------------------------------------------
+    // Multi-Indicator Strategies (Phase 12.8)
+    // ------------------------------------------------------------------------
+
+    // Register MACD + RSI Combo strategy
+    let macd_rsi_combo = Arc::new(alphafield_strategy::strategies::MACDRSIComboStrategy::new(
+        12, 26, 9, 14,
+    )) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(macd_rsi_combo) {
+        eprintln!("Failed to register MACD + RSI Combo strategy: {}", e);
+    }
+
+    // Register Trend + Mean Reversion Hybrid strategy
+    let trend_mean_rev = Arc::new(alphafield_strategy::strategies::TrendMeanRevStrategy::new(
+        20, 50, 14,
+    )) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(trend_mean_rev) {
+        eprintln!(
+            "Failed to register Trend + Mean Reversion Hybrid strategy: {}",
+            e
+        );
+    }
+
+    // Register Confidence-Weighted strategy
+    let confidence_weighted = Arc::new(
+        alphafield_strategy::strategies::ConfidenceWeightedStrategy::new(20, 50, 12, 26, 9, 14),
+    ) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(confidence_weighted) {
+        eprintln!("Failed to register Confidence-Weighted strategy: {}", e);
+    }
+
+    // Register Adaptive Combination strategy
+    let adaptive_combo = Arc::new(alphafield_strategy::strategies::AdaptiveComboStrategy::new(
+        20, 50, 12, 26, 9, 14,
+    )) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(adaptive_combo) {
+        eprintln!("Failed to register Adaptive Combination strategy: {}", e);
+    }
+
+    // Register Ensemble Weighted strategy
+    let ensemble_weighted =
+        Arc::new(alphafield_strategy::strategies::EnsembleWeightedStrategy::new(10, 5))
+            as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(ensemble_weighted) {
+        eprintln!("Failed to register Ensemble Weighted strategy: {}", e);
+    }
+
+    // Register Regime-Switching strategy
+    let regime_switching =
+        Arc::new(alphafield_strategy::strategies::RegimeSwitchingStrategy::new(20, 50, 14, 14))
+            as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(regime_switching) {
+        eprintln!("Failed to register Regime-Switching strategy: {}", e);
+    }
+
+    // Register ML-Enhanced Multi-Indicator strategy
+    let ml_enhanced = Arc::new(alphafield_strategy::strategies::MLEnhancedStrategy::new(
+        20, 50, 12, 26, 9, 14, 14,
+    )) as Arc<dyn StrategyWithMetadata>;
+    if let Err(e) = registry.register(ml_enhanced) {
+        eprintln!(
+            "Failed to register ML-Enhanced Multi-Indicator strategy: {}",
+            e
+        );
+    }
+
     registry
 }
 
