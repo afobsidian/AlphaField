@@ -546,6 +546,22 @@ pub fn canonicalize_strategy_name(name: &str) -> String {
         "ZScoreReversion" => "ZScoreReversion".to_string(),
         "BollingerBands" => "BollingerBands".to_string(),
 
+        // Multi-Indicator Strategies (canonical name → canonical name)
+        "TrendMeanRev" => "TrendMeanRev".to_string(),
+        "MACDRSICombo" => "MACDRSICombo".to_string(),
+        "AdaptiveCombo" => "AdaptiveCombo".to_string(),
+        "ConfidenceWeighted" => "ConfidenceWeighted".to_string(),
+        "EnsembleWeighted" => "EnsembleWeighted".to_string(),
+        "MLEnhanced" => "MLEnhanced".to_string(),
+        "RegimeSwitching" => "RegimeSwitching".to_string(),
+        "TrendMeanRevStrategy" => "TrendMeanRev".to_string(),
+        "MACDRSIComboStrategy" => "MACDRSICombo".to_string(),
+        "AdaptiveComboStrategy" => "AdaptiveCombo".to_string(),
+        "ConfidenceWeightedStrategy" => "ConfidenceWeighted".to_string(),
+        "EnsembleWeightedStrategy" => "EnsembleWeighted".to_string(),
+        "MLEnhancedStrategy" => "MLEnhanced".to_string(),
+        "RegimeSwitchingStrategy" => "RegimeSwitching".to_string(),
+
         // Display names from strategy metadata → Registry keys
         "Golden Cross" => "GoldenCross".to_string(),
         "Adaptive MA" => "AdaptiveMA".to_string(),
@@ -584,6 +600,18 @@ pub fn canonicalize_strategy_name(name: &str) -> String {
         "VIX-Style" => "VIXStyleStrategy".to_string(),
         "Regime Sentiment" => "RegimeSentiment".to_string(),
         "Sentiment Momentum" => "SentimentMomentum".to_string(),
+        "Divergence Strategy" => "Divergence".to_string(),
+        "Regime Sentiment Strategy" => "RegimeSentiment".to_string(),
+        "Sentiment Momentum Strategy" => "SentimentMomentum".to_string(),
+
+        // Multi-Indicator Strategies (display name → key)
+        "Trend+Mean Reversion Hybrid" => "TrendMeanRev".to_string(),
+        "MACD+RSI Combo" => "MACDRSICombo".to_string(),
+        "Adaptive Combination" => "AdaptiveCombo".to_string(),
+        "Confidence-Weighted" => "ConfidenceWeighted".to_string(),
+        "Ensemble Weighted" => "EnsembleWeighted".to_string(),
+        "ML-Enhanced Multi-Indicator" => "MLEnhanced".to_string(),
+        "Regime-Switching" => "RegimeSwitching".to_string(),
 
         // Existing "core" strategies (display name → key)
         "Bollinger Bands Mean Reversion" => "BollingerBands".to_string(),
