@@ -3821,9 +3821,14 @@ async function runAutoOptimize() {
         </span>
     `;
 
-  // Disable button
-  const btn = document.querySelector("button[onclick='runAutoOptimize()']");
-  if (btn) btn.disabled = true;
+  // Disable button with more robust selector
+  const btn = document.querySelector('button[onclick*="runAutoOptimize"]');
+  if (!btn) {
+    console.error("Auto-Optimize button not found");
+    return;
+  }
+  btn.disabled = true;
+  btn.innerHTML = "⏳ Optimizing...";
 
   try {
     // Get symbols from selected asset category
@@ -4106,7 +4111,10 @@ async function runAutoOptimize() {
                 <button class="btn-primary" style="margin-top: 16px;" onclick="runAutoOptimize()">Try Again</button>
             </div>`;
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = "🎯 Auto-Optimize";
+    }
   }
 }
 
