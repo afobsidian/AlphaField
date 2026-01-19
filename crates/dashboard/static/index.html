@@ -1017,6 +1017,140 @@
                                     </div>
                                 </div>
 
+                                <!-- Monte Carlo Simulation Results -->
+                                <div
+                                    style="
+                                        margin-top: 24px;
+                                        padding: 16px;
+                                        background: rgba(16, 185, 129, 0.1);
+                                        border-radius: 8px;
+                                    "
+                                >
+                                    <h4
+                                        style="
+                                            margin-bottom: 12px;
+                                            color: #10b981;
+                                        "
+                                    >
+                                        🎲 Monte Carlo Simulation
+                                        <span
+                                            id="mc-status"
+                                            style="
+                                                font-size: 12px;
+                                                font-weight: normal;
+                                                margin-left: 10px;
+                                            "
+                                        >
+                                            (Not Run)
+                                        </span>
+                                    </h4>
+                                    <div id="mc-results" class="metrics-grid">
+                                        <div class="metric">
+                                            <span class="metric-label"
+                                                >Probability of Profit</span
+                                            >
+                                            <span
+                                                class="metric-value"
+                                                id="mc-prob-profit"
+                                                >—</span
+                                            >
+                                        </div>
+                                        <div class="metric">
+                                            <span class="metric-label"
+                                                >Equity (5th)</span
+                                            >
+                                            <span
+                                                class="metric-value"
+                                                id="mc-equity-5th"
+                                                >—</span
+                                            >
+                                        </div>
+                                        <div class="metric">
+                                            <span class="metric-label"
+                                                >Equity (50th)</span
+                                            >
+                                            <span
+                                                class="metric-value"
+                                                id="mc-equity-50th"
+                                                >—</span
+                                            >
+                                        </div>
+                                        <div class="metric">
+                                            <span class="metric-label"
+                                                >Equity (95th)</span
+                                            >
+                                            <span
+                                                class="metric-value"
+                                                id="mc-equity-95th"
+                                                >—</span
+                                            >
+                                        </div>
+                                        <div class="metric">
+                                            <span class="metric-label"
+                                                >Return (5th)</span
+                                            >
+                                            <span
+                                                class="metric-value"
+                                                id="mc-return-5th"
+                                                >—</span
+                                            >
+                                        </div>
+                                        <div class="metric">
+                                            <span class="metric-label"
+                                                >Return (50th)</span
+                                            >
+                                            <span
+                                                class="metric-value"
+                                                id="mc-return-50th"
+                                                >—</span
+                                            >
+                                        </div>
+                                        <div class="metric">
+                                            <span class="metric-label"
+                                                >Return (95th)</span
+                                            >
+                                            <span
+                                                class="metric-value"
+                                                id="mc-return-95th"
+                                                >—</span
+                                            >
+                                        </div>
+                                        <div class="metric">
+                                            <span class="metric-label"
+                                                >DD (95th)</span
+                                            >
+                                            <span
+                                                class="metric-value"
+                                                id="mc-dd-95th"
+                                                >—</span
+                                            >
+                                        </div>
+                                        <div class="metric">
+                                            <span class="metric-label"
+                                                >Simulations</span
+                                            >
+                                            <span
+                                                class="metric-value"
+                                                id="mc-simulations"
+                                                >—</span
+                                            >
+                                        </div>
+                                    </div>
+                                    <div
+                                        id="mc-empty"
+                                        style="
+                                            display: none;
+                                            text-align: center;
+                                            color: #888;
+                                            font-style: italic;
+                                            margin-top: 10px;
+                                        "
+                                    >
+                                        No trades generated - Monte Carlo
+                                        skipped
+                                    </div>
+                                </div>
+
                                 <!-- Optimized Parameters -->
                                 <div
                                     class="param-summary"

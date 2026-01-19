@@ -3475,6 +3475,51 @@ async function runComprehensiveWorkflow() {
     document.getElementById("comp-iterations").textContent =
       data.sweep_results.length;
 
+    // Display Monte Carlo results
+    const mcStatus = document.getElementById("mc-status");
+    const mcEmpty = document.getElementById("mc-empty");
+    const mcResults = document.getElementById("mc-results");
+
+    if (data.monte_carlo && data.monte_carlo.num_simulations > 0) {
+      // Monte Carlo ran successfully
+      mcStatus.textContent = `(Ran ${data.monte_carlo.num_simulations} simulations)`;
+      mcStatus.style.color = "#10b981";
+      mcEmpty.style.display = "none";
+      mcResults.style.display = "grid";
+
+      // Update Monte Carlo metrics
+      document.getElementById("mc-prob-profit").textContent =
+        (data.monte_carlo.probability_of_profit * 100).toFixed(1) + "%";
+      document.getElementById("mc-equity-5th").textContent =
+        data.monte_carlo.equity_5th.toFixed(2);
+      document.getElementById("mc-equity-50th").textContent =
+        data.monte_carlo.equity_50th.toFixed(2);
+      document.getElementById("mc-equity-95th").textContent =
+        data.monte_carlo.equity_95th.toFixed(2);
+      document.getElementById("mc-return-5th").textContent =
+        (data.monte_carlo.return_5th * 100).toFixed(2) + "%";
+      document.getElementById("mc-return-50th").textContent =
+        (data.monte_carlo.return_50th * 100).toFixed(2) + "%";
+      document.getElementById("mc-return-95th").textContent =
+        (data.monte_carlo.return_95th * 100).toFixed(2) + "%";
+      document.getElementById("mc-dd-95th").textContent =
+        (data.monte_carlo.drawdown_95th * 100).toFixed(2) + "%";
+      document.getElementById("mc-simulations").textContent =
+        data.monte_carlo.num_simulations;
+    } else if (data.monte_carlo && data.monte_carlo.num_simulations === 0) {
+      // Monte Carlo ran but no simulations (edge case)
+      mcStatus.textContent = "(No simulations)";
+      mcStatus.style.color = "#f59e0b";
+      mcEmpty.style.display = "block";
+      mcResults.style.display = "none";
+    } else {
+      // Monte Carlo not run
+      mcStatus.textContent = "(Not Run)";
+      mcStatus.style.color = "#888";
+      mcEmpty.style.display = "block";
+      mcResults.style.display = "none";
+    }
+
     // Show optimized parameters
     const paramSummary = document.getElementById("comp-param-summary");
     let paramsHtml =
@@ -3886,6 +3931,51 @@ async function runAutoOptimize() {
     const wfStability = data.walk_forward_stability_score ?? 0;
     document.getElementById("comp-wf-stability").textContent =
       wfStability.toFixed(2);
+
+    // Display Monte Carlo results
+    const mcStatus = document.getElementById("mc-status");
+    const mcEmpty = document.getElementById("mc-empty");
+    const mcResults = document.getElementById("mc-results");
+
+    if (data.monte_carlo && data.monte_carlo.num_simulations > 0) {
+      // Monte Carlo ran successfully
+      mcStatus.textContent = `(Ran ${data.monte_carlo.num_simulations} simulations)`;
+      mcStatus.style.color = "#10b981";
+      mcEmpty.style.display = "none";
+      mcResults.style.display = "grid";
+
+      // Update Monte Carlo metrics
+      document.getElementById("mc-prob-profit").textContent =
+        (data.monte_carlo.probability_of_profit * 100).toFixed(1) + "%";
+      document.getElementById("mc-equity-5th").textContent =
+        data.monte_carlo.equity_5th.toFixed(2);
+      document.getElementById("mc-equity-50th").textContent =
+        data.monte_carlo.equity_50th.toFixed(2);
+      document.getElementById("mc-equity-95th").textContent =
+        data.monte_carlo.equity_95th.toFixed(2);
+      document.getElementById("mc-return-5th").textContent =
+        (data.monte_carlo.return_5th * 100).toFixed(2) + "%";
+      document.getElementById("mc-return-50th").textContent =
+        (data.monte_carlo.return_50th * 100).toFixed(2) + "%";
+      document.getElementById("mc-return-95th").textContent =
+        (data.monte_carlo.return_95th * 100).toFixed(2) + "%";
+      document.getElementById("mc-dd-95th").textContent =
+        (data.monte_carlo.drawdown_95th * 100).toFixed(2) + "%";
+      document.getElementById("mc-simulations").textContent =
+        data.monte_carlo.num_simulations;
+    } else if (data.monte_carlo && data.monte_carlo.num_simulations === 0) {
+      // Monte Carlo ran but no simulations (edge case)
+      mcStatus.textContent = "(No simulations)";
+      mcStatus.style.color = "#f59e0b";
+      mcEmpty.style.display = "block";
+      mcResults.style.display = "none";
+    } else {
+      // Monte Carlo not run
+      mcStatus.textContent = "(Not Run)";
+      mcStatus.style.color = "#888";
+      mcEmpty.style.display = "block";
+      mcResults.style.display = "none";
+    }
 
     // Parameter dispersion
     const disp = data.parameter_dispersion || {};

@@ -643,6 +643,8 @@ pub struct WorkflowResponse {
     pub walk_forward_validation: Option<alphafield_backtest::WalkForwardResult>,
     /// Parameter dispersion statistics
     pub parameter_dispersion: ParameterDispersion,
+    /// Monte Carlo simulation results (path dependency robustness testing)
+    pub monte_carlo: Option<alphafield_backtest::MonteCarloResult>,
     /// Overall robustness score (0-100)
     pub robustness_score: f64,
     /// All tested parameter combinations for visualization
@@ -701,6 +703,7 @@ pub async fn run_optimization_workflow(
                 walk_forward_windows: 0,
                 walk_forward_validation: None,
                 parameter_dispersion: ParameterDispersion::default(),
+                monte_carlo: None,
                 robustness_score: 0.0,
                 sweep_results: vec![],
                 sensitivity_heatmap: None,
@@ -727,11 +730,12 @@ pub async fn run_optimization_workflow(
             walk_forward_windows: 0,
             walk_forward_validation: None,
             parameter_dispersion: ParameterDispersion::default(),
+            monte_carlo: None,
             robustness_score: 0.0,
             sweep_results: vec![],
             sensitivity_heatmap: None,
             elapsed_ms: start.elapsed().as_millis() as u64,
-            error: Some("No data available for optimization".to_string()),
+            error: Some("No data available for specified date range".to_string()),
         });
     }
 
@@ -754,11 +758,12 @@ pub async fn run_optimization_workflow(
             walk_forward_windows: 0,
             walk_forward_validation: None,
             parameter_dispersion: ParameterDispersion::default(),
+            monte_carlo: None,
             robustness_score: 0.0,
             sweep_results: vec![],
             sensitivity_heatmap: None,
             elapsed_ms: start.elapsed().as_millis() as u64,
-            error: Some(format!("Unknown strategy: {}", req.strategy)),
+            error: Some("No parameter bounds specified".to_string()),
         });
     }
 
@@ -789,6 +794,7 @@ pub async fn run_optimization_workflow(
         },
         include_3d_sensitivity: req.include_3d_sensitivity.unwrap_or(true),
         train_test_split_ratio: 0.70, // Use default 70/30 split
+        monte_carlo_config: Some(alphafield_backtest::MonteCarloConfig::default()), // Monte Carlo enabled by default
     };
 
     // 5. Determine sensitivity parameters (first two from bounds for 3D visualization)
@@ -858,6 +864,7 @@ pub async fn run_optimization_workflow(
                 walk_forward_windows: result.walk_forward_validation.windows.len(),
                 walk_forward_validation: Some(result.walk_forward_validation),
                 parameter_dispersion: result.parameter_dispersion,
+                monte_carlo: result.monte_carlo,
                 robustness_score: result.robustness_score,
                 sweep_results: result.optimization.all_results,
                 sensitivity_heatmap: result.sensitivity_3d.and_then(|s| s.heatmap),
@@ -883,6 +890,7 @@ pub async fn run_optimization_workflow(
                 walk_forward_windows: 0,
                 walk_forward_validation: None,
                 parameter_dispersion: ParameterDispersion::default(),
+                monte_carlo: None,
                 robustness_score: 0.0,
                 sweep_results: vec![],
                 sensitivity_heatmap: None,
@@ -908,11 +916,12 @@ pub async fn run_optimization_workflow(
                 walk_forward_windows: 0,
                 walk_forward_validation: None,
                 parameter_dispersion: ParameterDispersion::default(),
+                monte_carlo: None,
                 robustness_score: 0.0,
                 sweep_results: vec![],
                 sensitivity_heatmap: None,
                 elapsed_ms: start.elapsed().as_millis() as u64,
-                error: Some(format!("Internal error: {}", e)),
+                error: Some("Workflow task panicked".to_string()),
             })
         }
     }
