@@ -185,7 +185,8 @@ Combines grid search optimization, parameter dispersion analysis, walk-forward v
   "days": 730,
   "include_3d_sensitivity": true,
   "train_window_days": 252,
-  "test_window_days": 63
+  "test_window_days": 63,
+  "risk_free_rate": 0.02
 }
 ```
 
@@ -203,6 +204,17 @@ Combines grid search optimization, parameter dispersion analysis, walk-forward v
     "positive_sharpe_pct": 68.5
   },
   "walk_forward_stability_score": 0.72,
+  "monte_carlo": {
+    "num_simulations": 1000,
+    "probability_of_profit": 0.72,
+    "equity_5th": 95000.0,
+    "equity_50th": 102500.0,
+    "equity_95th": 112000.0,
+    "return_5th": -0.05,
+    "return_50th": 0.025,
+    "return_95th": 0.12,
+    "drawdown_95th": 0.15
+  },
   "sensitivity_heatmap": {...},
   "elapsed_ms": 45230
 }

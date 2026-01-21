@@ -616,6 +616,8 @@ pub struct WorkflowRequest {
     pub train_window_days: Option<usize>,
     /// Optional: Testing window for walk-forward (in days, default: 63)
     pub test_window_days: Option<usize>,
+    /// Optional: Risk-free rate for Sharpe ratio calculation (default: 0.02)
+    pub risk_free_rate: Option<f64>,
 }
 
 #[derive(Serialize)]
@@ -795,6 +797,7 @@ pub async fn run_optimization_workflow(
         include_3d_sensitivity: req.include_3d_sensitivity.unwrap_or(true),
         train_test_split_ratio: 0.70, // Use default 70/30 split
         monte_carlo_config: Some(alphafield_backtest::MonteCarloConfig::default()), // Monte Carlo enabled by default
+        risk_free_rate: req.risk_free_rate.unwrap_or(0.02), // Default 2% risk-free rate
     };
 
     // 5. Determine sensitivity parameters (first two from bounds for 3D visualization)

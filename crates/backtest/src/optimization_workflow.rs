@@ -44,6 +44,8 @@ pub struct WorkflowConfig {
     pub train_test_split_ratio: f64,
     /// Monte Carlo simulation configuration (optional, None = skip)
     pub monte_carlo_config: Option<MonteCarloConfig>,
+    /// Risk-free rate for Sharpe ratio calculation (default: 0.02)
+    pub risk_free_rate: f64,
 }
 
 impl Default for WorkflowConfig {
@@ -56,6 +58,7 @@ impl Default for WorkflowConfig {
             include_3d_sensitivity: true,
             train_test_split_ratio: 0.70,
             monte_carlo_config: Some(MonteCarloConfig::default()),
+            risk_free_rate: 0.02,
         }
     }
 }
@@ -436,7 +439,7 @@ impl OptimizationWorkflow {
         let metrics = PerformanceMetrics::calculate_with_trades(
             &engine.portfolio.equity_history,
             &trades,
-            0.02, // Default 2% risk-free rate
+            self.config.risk_free_rate,
         );
 
         Ok((metrics, trades))
@@ -445,10 +448,11 @@ impl OptimizationWorkflow {
     /// Calculate overall robustness score (0-100)
     ///
     /// Combines multiple factors with configurable weights:
-    /// - Walk-forward stability score (30%)
-    /// - Parameter dispersion score (30% - inverse of CV, lower CV is better)
-    /// - Percentage of positive parameter combinations (20%)
-    /// - Out-of-sample win rate from walk-forward (20%)
+    /// - Walk-forward stability score (25%)
+    /// - Parameter dispersion score (25% - inverse of CV, lower CV is better)
+    /// - Percentage of positive parameter combinations (15%)
+    /// - Out-of-sample win rate from walk-forward (15%)
+    /// - Monte Carlo simulation robustness (20%)
     fn calculate_robustness_score(
         &self,
         dispersion: &ParameterDispersion,

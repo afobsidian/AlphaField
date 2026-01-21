@@ -76,6 +76,7 @@ fn test_optimization_workflow_basic() {
         include_3d_sensitivity: false, // Disable for faster testing
         train_test_split_ratio: 0.70,
         monte_carlo_config: None, // Monte Carlo disabled for testing
+        risk_free_rate: 0.02,
     };
 
     let workflow = OptimizationWorkflow::new(config);
@@ -189,6 +190,7 @@ fn test_optimization_workflow_with_sensitivity() {
         include_3d_sensitivity: true,
         train_test_split_ratio: 0.70,
         monte_carlo_config: None, // Monte Carlo disabled for testing
+        risk_free_rate: 0.02,
     };
 
     let workflow = OptimizationWorkflow::new(config);
@@ -295,6 +297,7 @@ fn test_optimization_workflow_with_monte_carlo() {
             initial_capital: 100_000.0,
             seed: Some(42), // Reproducible results
         }),
+        risk_free_rate: 0.02,
     };
 
     let workflow = OptimizationWorkflow::new(config);
