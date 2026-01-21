@@ -218,6 +218,60 @@ const STRATEGY_UI_OVERRIDES = {
   },
 };
 
+// ===========================
+// Utility Functions
+// ===========================
+
+/**
+ * Display Monte Carlo simulation results in the UI
+ * @param {Object} monteCarloData - The monte_carlo object from API response
+ */
+function displayMonteCarloResults(monteCarloData) {
+  const mcStatus = document.getElementById("mc-status");
+  const mcEmpty = document.getElementById("mc-empty");
+  const mcResults = document.getElementById("mc-results");
+
+  if (monteCarloData && monteCarloData.num_simulations > 0) {
+    // Monte Carlo ran successfully
+    mcStatus.textContent = `(Ran ${monteCarloData.num_simulations} simulations)`;
+    mcStatus.style.color = "#10b981";
+    mcEmpty.style.display = "none";
+    mcResults.style.display = "grid";
+
+    // Update Monte Carlo metrics
+    document.getElementById("mc-prob-profit").textContent =
+      (monteCarloData.probability_of_profit * 100).toFixed(1) + "%";
+    document.getElementById("mc-equity-5th").textContent =
+      monteCarloData.equity_5th.toFixed(2);
+    document.getElementById("mc-equity-50th").textContent =
+      monteCarloData.equity_50th.toFixed(2);
+    document.getElementById("mc-equity-95th").textContent =
+      monteCarloData.equity_95th.toFixed(2);
+    document.getElementById("mc-return-5th").textContent =
+      (monteCarloData.return_5th * 100).toFixed(2) + "%";
+    document.getElementById("mc-return-50th").textContent =
+      (monteCarloData.return_50th * 100).toFixed(2) + "%";
+    document.getElementById("mc-return-95th").textContent =
+      (monteCarloData.return_95th * 100).toFixed(2) + "%";
+    document.getElementById("mc-dd-95th").textContent =
+      (monteCarloData.drawdown_95th * 100).toFixed(2) + "%";
+    document.getElementById("mc-simulations").textContent =
+      monteCarloData.num_simulations;
+  } else if (monteCarloData && monteCarloData.num_simulations === 0) {
+    // Monte Carlo ran but no simulations (edge case)
+    mcStatus.textContent = "(No simulations)";
+    mcStatus.style.color = "#f59e0b";
+    mcEmpty.style.display = "block";
+    mcResults.style.display = "none";
+  } else {
+    // Monte Carlo not run
+    mcStatus.textContent = "(Not Run)";
+    mcStatus.style.color = "#888";
+    mcEmpty.style.display = "block";
+    mcResults.style.display = "none";
+  }
+}
+
 // Best-effort param schema generator based on common parameter names used by StrategyFactory on the backend.
 // For strategies that aren’t mapped here, we’ll show no params (and send an empty params object). The backend
 // should either use defaults or reject invalid/missing parameters depending on the endpoint.
@@ -3475,6 +3529,9 @@ async function runComprehensiveWorkflow() {
     document.getElementById("comp-iterations").textContent =
       data.sweep_results.length;
 
+    // Display Monte Carlo results
+    displayMonteCarloResults(data.monte_carlo);
+
     // Show optimized parameters
     const paramSummary = document.getElementById("comp-param-summary");
     let paramsHtml =
@@ -3776,9 +3833,14 @@ async function runAutoOptimize() {
         </span>
     `;
 
-  // Disable button
-  const btn = document.querySelector("button[onclick='runAutoOptimize()']");
-  if (btn) btn.disabled = true;
+  // Disable button with more robust selector
+  const btn = document.querySelector('button[onclick*="runAutoOptimize"]');
+  if (!btn) {
+    console.error("Auto-Optimize button not found");
+    return;
+  }
+  btn.disabled = true;
+  btn.innerHTML = "⏳ Optimizing...";
 
   try {
     // Get symbols from selected asset category
@@ -3886,6 +3948,9 @@ async function runAutoOptimize() {
     const wfStability = data.walk_forward_stability_score ?? 0;
     document.getElementById("comp-wf-stability").textContent =
       wfStability.toFixed(2);
+
+    // Display Monte Carlo results
+    displayMonteCarloResults(data.monte_carlo);
 
     // Parameter dispersion
     const disp = data.parameter_dispersion || {};
@@ -4016,7 +4081,10 @@ async function runAutoOptimize() {
                 <button class="btn-primary" style="margin-top: 16px;" onclick="runAutoOptimize()">Try Again</button>
             </div>`;
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = "🎯 Auto-Optimize";
+    }
   }
 }
 

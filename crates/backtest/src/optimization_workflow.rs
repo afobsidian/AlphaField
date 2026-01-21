@@ -12,11 +12,15 @@
 use crate::engine::BacktestEngine;
 use crate::exchange::SlippageModel;
 use crate::metrics::PerformanceMetrics;
+use crate::monte_carlo::{
+    MonteCarloConfig, MonteCarloResult, MonteCarloSimulator, Trade as McTrade,
+};
 use crate::optimizer::{OptimizationResult, ParamBounds, ParameterOptimizer};
 use crate::sensitivity::{
     ParameterRange, SensitivityAnalyzer, SensitivityConfig, SensitivityResult,
 };
 use crate::strategy::Strategy;
+use crate::trade::Trade;
 use crate::walk_forward::{WalkForwardAnalyzer, WalkForwardConfig, WalkForwardResult};
 use alphafield_core::Bar;
 use serde::{Deserialize, Serialize};
@@ -38,6 +42,10 @@ pub struct WorkflowConfig {
     pub include_3d_sensitivity: bool,
     /// Data split ratio for in-sample/out-of-sample (default: 0.70)
     pub train_test_split_ratio: f64,
+    /// Monte Carlo simulation configuration (optional, None = skip)
+    pub monte_carlo_config: Option<MonteCarloConfig>,
+    /// Risk-free rate for Sharpe ratio calculation (default: 0.02)
+    pub risk_free_rate: f64,
 }
 
 impl Default for WorkflowConfig {
@@ -49,6 +57,8 @@ impl Default for WorkflowConfig {
             walk_forward_config: WalkForwardConfig::default(),
             include_3d_sensitivity: true,
             train_test_split_ratio: 0.70,
+            monte_carlo_config: Some(MonteCarloConfig::default()),
+            risk_free_rate: 0.02,
         }
     }
 }
@@ -174,6 +184,8 @@ pub struct WorkflowResult {
     pub parameter_dispersion: ParameterDispersion,
     /// 3D sensitivity analysis (optional, can be expensive)
     pub sensitivity_3d: Option<SensitivityResult>,
+    /// Monte Carlo simulation (optional, tests robustness to trade sequence randomness)
+    pub monte_carlo: Option<MonteCarloResult>,
     /// In-sample performance with optimized parameters
     pub in_sample_metrics: PerformanceMetrics,
     /// Robustness score (0-100, higher is better)
@@ -329,18 +341,54 @@ impl OptimizationWorkflow {
 
         // Phase 5: Calculate in-sample metrics with optimized parameters
         info!("Phase 5: Calculating in-sample performance metrics");
-        let in_sample_metrics = self.run_backtest(
+        let (in_sample_metrics, trades) = self.run_backtest(
             in_sample_data,
             symbol,
             &optimization_result.best_params,
             strategy_factory,
         )?;
 
+        // Phase 5b: Monte Carlo simulation (optional)
+        let monte_carlo = if let Some(mc_config) = &self.config.monte_carlo_config {
+            if !trades.is_empty() {
+                info!("Phase 5b: Running Monte Carlo simulation");
+
+                // Convert backtest trades to Monte Carlo trades
+                let mc_trades: Vec<McTrade> = trades
+                    .iter()
+                    .map(|t| McTrade {
+                        symbol: t.symbol.clone(),
+                        pnl: t.pnl,
+                        return_pct: t.return_pct(),
+                        duration: (t.duration_secs / 3600) as usize, // Convert seconds to hours/bars
+                    })
+                    .collect();
+
+                let simulator = MonteCarloSimulator::new(mc_config.clone());
+                let result = simulator.simulate(&mc_trades);
+
+                info!(
+                    simulations = result.num_simulations,
+                    prob_profit = result.probability_of_profit * 100.0,
+                    "Monte Carlo simulation complete"
+                );
+
+                Some(result)
+            } else {
+                warn!("No trades found for Monte Carlo simulation");
+                None
+            }
+        } else {
+            info!("Skipping Monte Carlo simulation (not configured)");
+            None
+        };
+
         // Phase 6: Calculate robustness score
         let robustness_score = self.calculate_robustness_score(
             &parameter_dispersion,
             &walk_forward_result,
             &in_sample_metrics,
+            &monte_carlo,
         );
 
         info!(
@@ -353,6 +401,7 @@ impl OptimizationWorkflow {
             walk_forward_validation: walk_forward_result,
             parameter_dispersion,
             sensitivity_3d,
+            monte_carlo,
             in_sample_metrics,
             robustness_score,
         })
@@ -365,7 +414,7 @@ impl OptimizationWorkflow {
         symbol: &str,
         params: &HashMap<String, f64>,
         strategy_factory: &F,
-    ) -> Result<PerformanceMetrics, String>
+    ) -> Result<(PerformanceMetrics, Vec<Trade>), String>
     where
         F: Fn(&HashMap<String, f64>) -> Option<Box<dyn Strategy>>,
     {
@@ -381,27 +430,42 @@ impl OptimizationWorkflow {
         engine.add_data(symbol, data.to_vec());
         engine.set_strategy(strategy);
 
-        engine.run().map_err(|e| e.to_string())
+        engine.run().map_err(|e| e.to_string())?;
+
+        // Extract trades from portfolio
+        let trades = engine.portfolio.trades.clone();
+
+        // Calculate performance metrics
+        let metrics = PerformanceMetrics::calculate_with_trades(
+            &engine.portfolio.equity_history,
+            &trades,
+            self.config.risk_free_rate,
+        );
+
+        Ok((metrics, trades))
     }
 
     /// Calculate overall robustness score (0-100)
     ///
     /// Combines multiple factors with configurable weights:
-    /// - Walk-forward stability score (30%)
-    /// - Parameter dispersion score (30% - inverse of CV, lower CV is better)
-    /// - Percentage of positive parameter combinations (20%)
-    /// - Out-of-sample win rate from walk-forward (20%)
+    /// - Walk-forward stability score (25%)
+    /// - Parameter dispersion score (25% - inverse of CV, lower CV is better)
+    /// - Percentage of positive parameter combinations (15%)
+    /// - Out-of-sample win rate from walk-forward (15%)
+    /// - Monte Carlo simulation robustness (20%)
     fn calculate_robustness_score(
         &self,
         dispersion: &ParameterDispersion,
         walk_forward: &WalkForwardResult,
         _in_sample: &PerformanceMetrics,
+        monte_carlo: &Option<MonteCarloResult>,
     ) -> f64 {
         // Robustness score component weights
-        const WEIGHT_WF_STABILITY: f64 = 0.30;
-        const WEIGHT_DISPERSION: f64 = 0.30;
-        const WEIGHT_POSITIVE_COMBOS: f64 = 0.20;
-        const WEIGHT_OOS_WIN_RATE: f64 = 0.20;
+        const WEIGHT_WF_STABILITY: f64 = 0.25;
+        const WEIGHT_DISPERSION: f64 = 0.25;
+        const WEIGHT_POSITIVE_COMBOS: f64 = 0.15;
+        const WEIGHT_OOS_WIN_RATE: f64 = 0.15;
+        const WEIGHT_MONTE_CARLO: f64 = 0.20;
 
         // Component 1: Walk-forward stability (0-1 scale, higher is better)
         let wf_score = walk_forward.stability_score;
@@ -421,11 +485,26 @@ impl OptimizationWorkflow {
         // Component 4: Out-of-sample win rate from walk-forward
         let oos_win_rate = walk_forward.aggregate_oos.win_rate;
 
+        // Component 5: Monte Carlo robustness (probability of profit and drawdown resilience)
+        let mc_score = if let Some(mc) = monte_carlo {
+            if mc.num_simulations > 0 {
+                // Combine probability of profit with drawdown resilience
+                // Higher drawdown_95th means worse worst-case scenario (lower score)
+                let drawdown_resilience = (1.0 - mc.drawdown_95th).clamp(0.0, 1.0);
+                mc.probability_of_profit * 0.6 + drawdown_resilience * 0.4
+            } else {
+                0.5 // Neutral score if no simulations run
+            }
+        } else {
+            0.5 // Neutral score if Monte Carlo not configured
+        };
+
         // Weighted combination (all weights sum to 1.0)
         let combined_score = (wf_score * WEIGHT_WF_STABILITY
             + cv_score * WEIGHT_DISPERSION
             + positive_score * WEIGHT_POSITIVE_COMBOS
-            + oos_win_rate * WEIGHT_OOS_WIN_RATE)
+            + oos_win_rate * WEIGHT_OOS_WIN_RATE
+            + mc_score * WEIGHT_MONTE_CARLO)
             .clamp(0.0, 1.0);
 
         // Scale to 0-100
@@ -497,5 +576,12 @@ mod tests {
         assert_eq!(config.initial_capital, 100_000.0);
         assert_eq!(config.fee_rate, 0.001);
         assert!(config.include_3d_sensitivity);
+        assert!(config.monte_carlo_config.is_some());
+
+        // Verify default Monte Carlo config
+        let mc_config = config.monte_carlo_config.unwrap();
+        assert_eq!(mc_config.num_simulations, 1000);
+        assert_eq!(mc_config.initial_capital, 10_000.0);
+        assert!(mc_config.seed.is_none());
     }
 }
