@@ -85,11 +85,11 @@ migrate-status-docker:
 
 ## Reset database and run migrations
 reset-db:
-	cd scripts && cargo clean && run_migrations.bat
+	cd scripts && cargo clean && ./run_migrations.sh
 
 ## Reset database and run migrations (Docker)
 reset-db-docker:
-	cd scripts && cargo clean && run_migrations.bat --docker
+	cd scripts && cargo clean && ./run_migrations.sh --docker
 
 # --- Maintenance ---
 
