@@ -84,9 +84,7 @@ jobs:
             Commit: ${{ steps.context.outputs.commit }} - ${{ steps.context.outputs.commit_message }}
 
             Error logs:
-              ```plaintext
             ${{ steps.fetch_logs.outputs.log_content }}
-            ```
 
             If fixable via code, output ONLY shell commands (sed, printf, patch).
             If not fixable via code, output: UNFIXABLE: <reason>
@@ -160,9 +158,7 @@ jobs:
             - **Commit**: `${{ steps.context.outputs.commit }}`
 
             ### AI Analysis & Fix
-            ```bash
             ${{ steps.ai_fix.outputs.response }}
-            ```
 
             ### ⚠️ Review Required
             This is an automated fix. Please carefully review the changes before merging.
