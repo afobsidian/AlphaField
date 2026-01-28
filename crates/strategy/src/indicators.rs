@@ -215,6 +215,7 @@ impl Rsi {
     }
 }
 
+#[allow(clippy::unnecessary_unwrap)]
 impl Indicator for Rsi {
     fn update(&mut self, value: f64) -> Option<f64> {
         let change = match self.prev_value {
