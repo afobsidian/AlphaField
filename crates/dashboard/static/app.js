@@ -19,6 +19,7 @@ const AppState = {
   optimizeResults: null,
   isTrading: false,
   currentTab: "build",
+  trading_mode: "Spot",
   // ML Enhancement State
   mlEnabled: false,
   mlModelType: "linear",
@@ -1702,6 +1703,17 @@ function initStrategySelection() {
   updateParamsUI();
 }
 
+// ===========================
+// Trading Mode Selection
+// ===========================
+function updateTradingMode(mode) {
+  // Update AppState with selected trading mode
+  AppState.trading_mode = mode;
+
+  // Log the mode change for debugging
+  console.log(`Trading mode changed to: ${mode}`);
+}
+
 function updateParamsUI() {
   const container = document.getElementById("build-params");
 
@@ -2182,6 +2194,7 @@ async function runBacktest() {
         days: AppState.backtestDays,
         params: params,
         include_benchmark: true,
+        trading_mode: AppState.trading_mode,
       }),
     });
 

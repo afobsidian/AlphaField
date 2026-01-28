@@ -517,6 +517,38 @@
                                         1d
                                     </button>
                                 </div>
+
+                                <!-- Trading Mode Selector -->
+                                <div class="form-group">
+                                    <label>Trading Mode</label>
+                                    <div class="trading-mode-selector">
+                                        <label>
+                                            <input
+                                                type="radio"
+                                                name="trading_mode"
+                                                value="Spot"
+                                                checked
+                                                id="trading-mode-spot"
+                                                onchange="
+                                                    updateTradingMode('Spot')
+                                                "
+                                            />
+                                            Spot Mode (Long Only)
+                                        </label>
+                                        <label>
+                                            <input
+                                                type="radio"
+                                                name="trading_mode"
+                                                value="Margin"
+                                                id="trading-mode-margin"
+                                                onchange="
+                                                    updateTradingMode('Margin')
+                                                "
+                                            />
+                                            Margin Mode (Long + Short)
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="button-group">

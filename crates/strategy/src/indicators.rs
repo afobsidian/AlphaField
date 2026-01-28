@@ -627,7 +627,9 @@ impl Adx {
                         self.current_adx = Some(sum_dx / self.period as f64);
                     } else {
                         // Smoothed ADX
-                        let prev_adx = self.current_adx.unwrap();
+                        let prev_adx = self
+                            .current_adx
+                            .expect("current_adx should be Some in else branch");
                         let new_adx =
                             (prev_adx * (self.period as f64 - 1.0) + dx) / self.period as f64;
                         self.current_adx = Some(new_adx);

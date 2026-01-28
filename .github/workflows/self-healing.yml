@@ -1,0 +1,173 @@
+name: Copilot Pipeline Healer
+
+on:
+  workflow_run:
+    workflows: ["Main CI Build"]
+    types: [completed]
+
+jobs:
+  heal:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+      models: read
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0 # Full history for better context
+
+      - name: Fetch Failed Workflow Logs
+        id: fetch_logs
+        run: |
+          echo "Fetching logs from failed run..."
+          gh run view ${{ github.event.workflow_run.id }} --log-failed > failure.log || {
+            echo "Failed to fetch logs"
+            exit 1
+          }
+
+          # Validate log file exists and has content
+          if [ ! -s failure.log ]; then
+            echo "Error: Log file is empty"
+            exit 1
+          fi
+
+          # Truncate logs if too large (keep last 5000 lines for context)
+          if [ $(wc -l < failure.log) -gt 5000 ]; then
+            tail -n 5000 failure.log > failure_truncated.log
+            mv failure_truncated.log failure.log
+          fi
+
+          echo "Log file size: $(wc -l < failure.log) lines"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get Workflow Context
+        id: context
+        run: |
+          # Gather additional context for better AI analysis
+          echo "workflow_name=${{ github.event.workflow_run.name }}" >> $GITHUB_OUTPUT
+          echo "branch=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
+          echo "commit=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "commit_message=$(git log -1 --pretty=%B)" >> $GITHUB_OUTPUT
+
+      - name: AI Root Cause Analysis & Fix Generation
+        id: ai_fix
+        uses: actions/ai-inference@v1
+        with:
+          model: gpt-4o
+          prompt: |
+            You are an expert DevOps engineer analyzing a failed GitHub Actions workflow.
+
+            **Context:**
+            - Workflow: ${{ steps.context.outputs.workflow_name }}
+            - Branch: ${{ steps.context.outputs.branch }}
+            - Commit: ${{ steps.context.outputs.commit }}
+            - Commit Message: ${{ steps.context.outputs.commit_message }}
+
+            **Failed Workflow Logs:**
+
+            $(cat failure.log)
+
+            **Instructions:**
+            1. Identify the root cause of the failure
+            2. Determine if this is fixable via code changes (not infrastructure/secrets issues)
+            3. If fixable, provide ONLY executable shell commands to apply the fix
+            4. Use safe commands like `sed -i`, `printf`, or `patch`
+            5. Do NOT include explanatory text, only commands
+            6. If unfixable via code, output: "UNFIXABLE: <reason>"
+
+            **Output format:**
+            If fixable, output shell commands only.
+            If not fixable, output: UNFIXABLE: <brief reason>
+
+      - name: Validate AI Response
+        id: validate
+        run: |
+          response="${{ steps.ai_fix.outputs.response }}"
+
+          if [ -z "$response" ]; then
+            echo "AI returned empty response"
+            echo "can_fix=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Check if AI determined issue is unfixable
+          if echo "$response" | grep -q "^UNFIXABLE:"; then
+            echo "AI determined issue is not code-fixable"
+            echo "can_fix=false" >> $GITHUB_OUTPUT
+            echo "reason=$(echo "$response" | sed 's/^UNFIXABLE: //')" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "can_fix=true" >> $GITHUB_OUTPUT
+
+          # Save commands to file for execution
+          echo "$response" > fix_commands.sh
+          chmod +x fix_commands.sh
+
+      - name: Apply AI-Generated Fix
+        if: steps.validate.outputs.can_fix == 'true'
+        run: |
+          echo "Applying AI-generated fix..."
+          bash -x fix_commands.sh || {
+            echo "Fix application failed"
+            exit 1
+          }
+
+          # Check if any files were modified
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "No files were modified by the fix"
+            exit 1
+          fi
+
+      - name: Create Remediation PR
+        if: steps.validate.outputs.can_fix == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "fix: AI-automated remediation for workflow failure #${{ github.event.workflow_run.id }}"
+          branch: ai-heal/run-${{ github.event.workflow_run.id }}
+          delete-branch: true
+          title: "🤖 AI Remediation: Fix for workflow failure in run #${{ github.event.workflow_run.id }}"
+          body: |
+            ## 🛠️ Automated Pipeline Repair
+
+            This PR contains an AI-generated fix for the failed workflow run.
+
+            ### Failure Details
+            - **Workflow**: ${{ steps.context.outputs.workflow_name }}
+            - **Failed Run**: [${{ github.event.workflow_run.id }}](${{ github.event.workflow_run.html_url }})
+            - **Branch**: `${{ steps.context.outputs.branch }}`
+            - **Commit**: `${{ steps.context.outputs.commit }}`
+
+            ### AI Analysis & Fix
+            ${{ steps.ai_fix.outputs.response }}
+
+            ### ⚠️ Review Required
+            This is an automated fix. Please carefully review the changes before merging.
+
+            ---
+            *Generated by AI Pipeline Healer*
+          labels: |
+            automated-fix
+            ai-generated
+            needs-review
+          draft: true # Create as draft PR for safety
+
+      - name: Comment on Unfixable Issues
+        if: steps.validate.outputs.can_fix == 'false' && steps.validate.outputs.reason != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.repos.createCommitComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              commit_sha: '${{ steps.context.outputs.commit }}',
+              body: `### 🤖 AI Pipeline Healer Analysis\n\nThe failed workflow cannot be automatically fixed:\n\n**Reason**: ${{ steps.validate.outputs.reason }}\n\n**Failed Run**: [#${{ github.event.workflow_run.id }}](${{ github.event.workflow_run.html_url }})\n\nManual intervention required.`
+            });
