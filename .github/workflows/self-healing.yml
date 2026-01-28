@@ -2,7 +2,7 @@ name: Copilot Pipeline Healer
 
 on:
   workflow_run:
-    workflows: ["Main CI Build"]
+    workflows: ["CI"]
     types: [completed]
 
 jobs:
