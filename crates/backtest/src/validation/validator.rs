@@ -101,6 +101,11 @@ impl StrategyValidator {
             monte_carlo: monte_carlo_result.clone(),
             regime: regime_result.clone(),
             config: self.config.clone(),
+            // Phase 13: Optional advanced validation results
+            statistical_significance: None,
+            robustness: None,
+            temporal_validation: None,
+            regime_testing: None,
         };
 
         let calculator = ScoreCalculator::new();
@@ -128,6 +133,11 @@ impl StrategyValidator {
             walk_forward: walk_forward_result,
             monte_carlo: monte_carlo_result,
             regime_analysis: regime_result,
+            // Phase 13: Optional advanced validation results
+            statistical_significance: None,
+            robustness: None,
+            temporal_validation: None,
+            regime_testing: None,
             risk_assessment,
             recommendations,
         })
@@ -215,6 +225,11 @@ impl StrategyValidator {
             monte_carlo: monte_carlo_result.clone(),
             regime: regime_result.clone(),
             config: self.config.clone(),
+            // Phase 13: Optional advanced validation results
+            statistical_significance: None,
+            robustness: None,
+            temporal_validation: None,
+            regime_testing: None,
         };
 
         let calculator = ScoreCalculator::new();
@@ -242,6 +257,11 @@ impl StrategyValidator {
             walk_forward: walk_forward_result,
             monte_carlo: monte_carlo_result,
             regime_analysis: regime_result,
+            // Phase 13: Optional advanced validation results
+            statistical_significance: None,
+            robustness: None,
+            temporal_validation: None,
+            regime_testing: None,
             risk_assessment,
             recommendations,
         })

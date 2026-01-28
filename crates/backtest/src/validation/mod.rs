@@ -5,7 +5,11 @@
 //! regime-based performance analysis.
 
 pub mod regime;
+pub mod regime_testing;
+pub mod robustness;
 pub mod scoring;
+pub mod statistical_significance;
+pub mod temporal;
 pub mod validator;
 
 use chrono::{DateTime, Utc};
@@ -114,6 +118,12 @@ pub struct ValidationReport {
     pub monte_carlo: MonteCarloResult,
     pub regime_analysis: RegimeAnalysisResult,
 
+    /// Phase 13 Advanced Validation
+    pub statistical_significance: Option<statistical_significance::StatisticalSignificanceResult>,
+    pub robustness: Option<robustness::RobustnessResult>,
+    pub temporal_validation: Option<temporal::TemporalValidationResult>,
+    pub regime_testing: Option<regime_testing::RegimeTestingResult>,
+
     /// Risk assessment
     pub risk_assessment: RiskAssessment,
 
@@ -214,9 +224,22 @@ pub struct ValidationComponents {
     pub monte_carlo: MonteCarloResult,
     pub regime: RegimeAnalysisResult,
     pub config: ValidationConfig,
+    // Phase 13 components
+    pub statistical_significance: Option<statistical_significance::StatisticalSignificanceResult>,
+    pub robustness: Option<robustness::RobustnessResult>,
+    pub temporal_validation: Option<temporal::TemporalValidationResult>,
+    pub regime_testing: Option<regime_testing::RegimeTestingResult>,
 }
 
 // Re-export regime module types
 pub use regime::{MarketRegime, RegimeAnalysisResult, RegimeAnalyzer, RegimePerformance};
 pub use scoring::{RecommendationsGenerator, ScoreCalculator, ScoreWeights};
 pub use validator::StrategyValidator;
+
+// Re-export Phase 13 advanced validation modules
+pub use regime_testing::{validate_regime_testing, RegimeTestingResult};
+pub use robustness::{validate_robustness, RobustnessResult, StrategyParams};
+pub use statistical_significance::{
+    validate_statistical_significance, StatisticalSignificanceResult,
+};
+pub use temporal::{validate_temporal, TemporalValidationResult};
