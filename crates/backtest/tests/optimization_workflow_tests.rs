@@ -4,7 +4,7 @@
 //! with a simple strategy and mock data.
 
 use alphafield_backtest::{OptimizationWorkflow, ParameterRange, StrategyAdapter, WorkflowConfig};
-use alphafield_core::Bar;
+use alphafield_core::{Bar, TradingMode};
 use alphafield_strategy::strategies::GoldenCrossStrategy;
 use chrono::{Duration, Utc};
 use std::collections::HashMap;
@@ -77,6 +77,7 @@ fn test_optimization_workflow_basic() {
         train_test_split_ratio: 0.70,
         monte_carlo_config: None, // Monte Carlo disabled for testing
         risk_free_rate: 0.02,
+        trading_mode: TradingMode::Spot,
     };
 
     let workflow = OptimizationWorkflow::new(config);
@@ -171,6 +172,99 @@ fn test_optimization_workflow_basic() {
 }
 
 #[test]
+fn test_optimization_workflow_trading_mode_margin() {
+    // Generate 300 days of mock data
+    let data = generate_mock_data(300);
+    assert!(!data.is_empty());
+
+    // Create workflow with Margin trading mode
+    use alphafield_core::TradingMode;
+
+    let config = WorkflowConfig {
+        initial_capital: 100_000.0,
+        fee_rate: 0.001,
+        slippage: alphafield_backtest::SlippageModel::FixedPercent(0.0005),
+        walk_forward_config: alphafield_backtest::WalkForwardConfig {
+            train_window: 80,
+            test_window: 40,
+            step_size: 30,
+            initial_capital: 100_000.0,
+            fee_rate: 0.001,
+        },
+        include_3d_sensitivity: false, // Disable for faster testing
+        train_test_split_ratio: 0.70,
+        monte_carlo_config: None,
+        risk_free_rate: 0.02,
+        trading_mode: TradingMode::Margin, // Test Margin mode
+    };
+
+    let workflow = OptimizationWorkflow::new(config);
+
+    // Use simple parameter bounds for GoldenCross
+    let bounds = vec![
+        alphafield_backtest::ParamBounds::new("fast_period", 5.0, 15.0, 5.0),
+        alphafield_backtest::ParamBounds::new("slow_period", 20.0, 40.0, 10.0),
+    ];
+
+    // Factory that creates GoldenCross strategies wrapped in adapter
+    let symbol = "TEST";
+    let factory = |params: &HashMap<String, f64>| {
+        let fast_period = params.get("fast_period").copied().unwrap_or(10.0) as usize;
+        let slow_period = params.get("slow_period").copied().unwrap_or(30.0) as usize;
+
+        if fast_period >= slow_period {
+            return None;
+        }
+
+        let strategy = GoldenCrossStrategy::new(fast_period, slow_period);
+        let adapter = StrategyAdapter::new(strategy, symbol, 100_000.0);
+
+        Some(Box::new(adapter) as Box<dyn alphafield_backtest::strategy::Strategy>)
+    };
+
+    // Run workflow
+    let result = workflow.run(&data, symbol, &factory, &bounds, None);
+
+    // Verify workflow completed successfully
+    assert!(
+        result.is_ok(),
+        "Workflow with Margin mode should complete successfully: {:?}",
+        result.err()
+    );
+
+    let workflow_result = result.unwrap();
+
+    // Verify optimization was attempted
+    assert!(
+        workflow_result.optimization.iterations_tested > 0,
+        "Should test at least one iteration"
+    );
+
+    // Verify all metrics are in valid ranges
+    assert!(
+        workflow_result.robustness_score >= 0.0 && workflow_result.robustness_score <= 100.0,
+        "Robustness score should be in valid range"
+    );
+
+    assert!(
+        workflow_result.walk_forward_validation.stability_score >= 0.0
+            && workflow_result.walk_forward_validation.stability_score <= 1.0,
+        "Stability score should be in valid range"
+    );
+
+    println!("✓ Margin mode workflow completed successfully");
+    println!("  - Trading mode: Margin",);
+    println!(
+        "  - Iterations tested: {}",
+        workflow_result.optimization.iterations_tested
+    );
+    println!(
+        "  - Robustness score: {:.2}",
+        workflow_result.robustness_score
+    );
+}
+
+#[test]
 fn test_optimization_workflow_with_sensitivity() {
     // Generate 300 days of mock data (less data for faster 3D sensitivity)
     let data = generate_mock_data(300);
@@ -191,6 +285,7 @@ fn test_optimization_workflow_with_sensitivity() {
         train_test_split_ratio: 0.70,
         monte_carlo_config: None, // Monte Carlo disabled for testing
         risk_free_rate: 0.02,
+        trading_mode: TradingMode::Spot,
     };
 
     let workflow = OptimizationWorkflow::new(config);
@@ -298,6 +393,7 @@ fn test_optimization_workflow_with_monte_carlo() {
             seed: Some(42), // Reproducible results
         }),
         risk_free_rate: 0.02,
+        trading_mode: TradingMode::Spot,
     };
 
     let workflow = OptimizationWorkflow::new(config);

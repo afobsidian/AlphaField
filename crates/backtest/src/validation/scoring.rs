@@ -542,6 +542,14 @@ mod tests {
             win_rate: 0.70,
             profit_factor: 3.0,
             trades: Vec::new(),
+            long_trades_count: 0,
+            short_trades_count: 0,
+            long_win_rate: 0.0,
+            short_win_rate: 0.0,
+            avg_long_profit: 0.0,
+            avg_short_profit: 0.0,
+            total_long_profit: 0.0,
+            total_short_profit: 0.0,
         }
     }
 

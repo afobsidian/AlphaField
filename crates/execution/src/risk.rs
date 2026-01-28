@@ -1,4 +1,4 @@
-use alphafield_core::{ExecutionService, Order, OrderSide, QuantError, Result};
+use alphafield_core::{ExecutionService, Order, OrderSide, QuantError, Result, TradingMode};
 use async_trait::async_trait;
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -38,6 +38,8 @@ impl RiskCheck for MaxOrderValue {
 pub struct RiskManager<S: ExecutionService> {
     service: S,
     checks: Vec<Box<dyn RiskCheck>>,
+    /// Trading mode (Spot or Margin)
+    trading_mode: TradingMode,
 }
 
 impl<S: ExecutionService> RiskManager<S> {
@@ -45,24 +47,75 @@ impl<S: ExecutionService> RiskManager<S> {
         Self {
             service,
             checks: Vec::new(),
+            trading_mode: TradingMode::Spot,
         }
     }
 
     pub fn add_check<C: RiskCheck + 'static>(&mut self, check: C) {
         self.checks.push(Box::new(check));
     }
+
+    /// Set the trading mode (Spot or Margin)
+    pub fn with_trading_mode(mut self, trading_mode: TradingMode) -> Self {
+        self.trading_mode = trading_mode;
+        self
+    }
 }
 
 /// Risk check that prevents short/sell orders in spot-only mode.
-pub struct NoShorts;
+/// Risk check that prevents short positions in Spot mode
+pub struct NoShorts {
+    pub mode: TradingMode,
+}
+
+impl NoShorts {
+    pub fn new(mode: TradingMode) -> Self {
+        Self { mode }
+    }
+}
 
 impl RiskCheck for NoShorts {
     fn check(&self, order: &Order) -> Result<()> {
-        if order.side == OrderSide::Sell || order.quantity < 0.0 {
+        // Only block shorts in Spot mode
+        if self.mode == TradingMode::Spot && (order.side == OrderSide::Sell || order.quantity < 0.0)
+        {
             return Err(QuantError::DataValidation(format!(
-                "Short selling is disabled for symbol {}",
+                "Short selling is disabled for symbol {} in Spot mode",
                 order.symbol
             )));
+        }
+        Ok(())
+    }
+}
+
+/// Risk check that limits the size of short positions
+pub struct MaxShortPosition {
+    pub max_value: f64,
+}
+
+impl MaxShortPosition {
+    pub fn new(max_value: f64) -> Self {
+        Self { max_value }
+    }
+}
+
+impl RiskCheck for MaxShortPosition {
+    fn check(&self, order: &Order) -> Result<()> {
+        // Only check for short positions (Sell orders)
+        if order.side == OrderSide::Sell || order.quantity < 0.0 {
+            // Need a price to calculate position value
+            let price = match order.price {
+                Some(p) if p > 0.0 => p,
+                _ => return Ok(()), // Can't check without price
+            };
+
+            let position_value = (order.quantity.abs() * price).abs();
+            if position_value > self.max_value {
+                return Err(QuantError::DataValidation(format!(
+                    "Short position value {} exceeds maximum allowed {} for symbol {}",
+                    position_value, self.max_value, order.symbol
+                )));
+            }
         }
         Ok(())
     }
@@ -494,6 +547,305 @@ mod tests {
             symbol: "BTCUSDT".to_string(),
             side: OrderSide::Buy,
             quantity: 0.01,
+            price: Some(50000.0),
+            order_type: alphafield_core::OrderType::Limit,
+            timestamp: chrono::Utc::now(),
+            id: String::new(),
+            status: alphafield_core::OrderStatus::New,
+            oco_group_id: None,
+            iceberg_hidden_qty: None,
+            stop_loss: None,
+            take_profit: None,
+            parent_order_id: None,
+            limit_chase_amount: None,
+        };
+
+        assert!(check.check(&order).is_ok());
+    }
+
+    // Mock execution service for testing RiskManager
+    struct MockExecutionService;
+
+    #[async_trait::async_trait]
+    impl ExecutionService for MockExecutionService {
+        async fn submit_order(&self, _order: &Order) -> Result<String> {
+            Ok("order_1".to_string())
+        }
+
+        async fn cancel_order(&self, _order_id: &str, _symbol: &str) -> Result<()> {
+            Ok(())
+        }
+
+        async fn get_order(&self, _order_id: &str, _symbol: &str) -> Result<Order> {
+            Ok(Order {
+                id: "1".to_string(),
+                symbol: _symbol.to_string(),
+                side: OrderSide::Buy,
+                quantity: 1.0,
+                price: Some(50000.0),
+                order_type: alphafield_core::OrderType::Market,
+                timestamp: chrono::Utc::now(),
+                status: alphafield_core::OrderStatus::Filled,
+                oco_group_id: None,
+                iceberg_hidden_qty: None,
+                stop_loss: None,
+                take_profit: None,
+                parent_order_id: None,
+                limit_chase_amount: None,
+            })
+        }
+
+        async fn submit_oco_order(&self, _oco: &alphafield_core::OcoOrder) -> Result<String> {
+            Ok("oco_1".to_string())
+        }
+
+        async fn cancel_oco_order(&self, _group_id: &str) -> Result<()> {
+            Ok(())
+        }
+
+        async fn submit_bracket_order(
+            &self,
+            _bracket: &alphafield_core::BracketOrder,
+        ) -> Result<String> {
+            Ok("bracket_1".to_string())
+        }
+
+        async fn submit_iceberg_order(
+            &self,
+            _iceberg: &alphafield_core::IcebergOrder,
+        ) -> Result<String> {
+            Ok("iceberg_1".to_string())
+        }
+
+        async fn submit_limit_chase(
+            &self,
+            _chase: &alphafield_core::LimitChaseOrder,
+        ) -> Result<String> {
+            Ok("chase_1".to_string())
+        }
+
+        async fn modify_order(
+            &self,
+            _order_id: &str,
+            _symbol: &str,
+            _new_price: Option<f64>,
+            _new_quantity: Option<f64>,
+        ) -> Result<Order> {
+            Ok(Order {
+                id: _order_id.to_string(),
+                symbol: _symbol.to_string(),
+                side: OrderSide::Buy,
+                quantity: _new_quantity.unwrap_or(1.0),
+                price: _new_price,
+                order_type: alphafield_core::OrderType::Market,
+                timestamp: chrono::Utc::now(),
+                status: alphafield_core::OrderStatus::New,
+                oco_group_id: None,
+                iceberg_hidden_qty: None,
+                stop_loss: None,
+                take_profit: None,
+                parent_order_id: None,
+                limit_chase_amount: None,
+            })
+        }
+
+        async fn cancel_all_orders(&self, _symbol: &str) -> Result<()> {
+            Ok(())
+        }
+
+        async fn get_pending_orders(&self) -> Result<Vec<Order>> {
+            Ok(Vec::new())
+        }
+    }
+
+    #[test]
+    fn test_risk_manager_default_trading_mode_is_spot() {
+        let service = MockExecutionService;
+        let manager = RiskManager::new(service);
+        assert_eq!(manager.trading_mode, TradingMode::Spot);
+    }
+
+    #[test]
+    fn test_risk_manager_with_trading_mode() {
+        let service = MockExecutionService;
+        let manager = RiskManager::new(service).with_trading_mode(TradingMode::Margin);
+        assert_eq!(manager.trading_mode, TradingMode::Margin);
+    }
+
+    #[test]
+    fn test_risk_manager_trading_mode_spot() {
+        let service = MockExecutionService;
+        let manager = RiskManager::new(service).with_trading_mode(TradingMode::Spot);
+        assert_eq!(manager.trading_mode, TradingMode::Spot);
+    }
+
+    #[test]
+    fn test_no_shorts_spot_mode_blocks_sell() {
+        let check = NoShorts::new(TradingMode::Spot);
+
+        let order = Order {
+            symbol: "BTCUSDT".to_string(),
+            side: OrderSide::Sell,
+            quantity: 0.1,
+            price: Some(50000.0),
+            order_type: alphafield_core::OrderType::Limit,
+            timestamp: chrono::Utc::now(),
+            id: String::new(),
+            status: alphafield_core::OrderStatus::New,
+            oco_group_id: None,
+            iceberg_hidden_qty: None,
+            stop_loss: None,
+            take_profit: None,
+            parent_order_id: None,
+            limit_chase_amount: None,
+        };
+
+        let result = check.check(&order);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Short selling is disabled"));
+    }
+
+    #[test]
+    fn test_no_shorts_spot_mode_blocks_negative_quantity() {
+        let check = NoShorts::new(TradingMode::Spot);
+
+        let order = Order {
+            symbol: "BTCUSDT".to_string(),
+            side: OrderSide::Buy,
+            quantity: -0.1,
+            price: Some(50000.0),
+            order_type: alphafield_core::OrderType::Limit,
+            timestamp: chrono::Utc::now(),
+            id: String::new(),
+            status: alphafield_core::OrderStatus::New,
+            oco_group_id: None,
+            iceberg_hidden_qty: None,
+            stop_loss: None,
+            take_profit: None,
+            parent_order_id: None,
+            limit_chase_amount: None,
+        };
+
+        let result = check.check(&order);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Short selling is disabled"));
+    }
+
+    #[test]
+    fn test_no_shorts_margin_mode_allows_sell() {
+        let check = NoShorts::new(TradingMode::Margin);
+
+        let order = Order {
+            symbol: "BTCUSDT".to_string(),
+            side: OrderSide::Sell,
+            quantity: 0.1,
+            price: Some(50000.0),
+            order_type: alphafield_core::OrderType::Limit,
+            timestamp: chrono::Utc::now(),
+            id: String::new(),
+            status: alphafield_core::OrderStatus::New,
+            oco_group_id: None,
+            iceberg_hidden_qty: None,
+            stop_loss: None,
+            take_profit: None,
+            parent_order_id: None,
+            limit_chase_amount: None,
+        };
+
+        assert!(check.check(&order).is_ok());
+    }
+
+    #[test]
+    fn test_no_shorts_margin_mode_allows_negative_quantity() {
+        let check = NoShorts::new(TradingMode::Margin);
+
+        let order = Order {
+            symbol: "BTCUSDT".to_string(),
+            side: OrderSide::Buy,
+            quantity: -0.1,
+            price: Some(50000.0),
+            order_type: alphafield_core::OrderType::Limit,
+            timestamp: chrono::Utc::now(),
+            id: String::new(),
+            status: alphafield_core::OrderStatus::New,
+            oco_group_id: None,
+            iceberg_hidden_qty: None,
+            stop_loss: None,
+            take_profit: None,
+            parent_order_id: None,
+            limit_chase_amount: None,
+        };
+
+        assert!(check.check(&order).is_ok());
+    }
+
+    #[test]
+    fn test_max_short_position_blocks_oversized_short() {
+        let check = MaxShortPosition::new(1000.0);
+
+        let order = Order {
+            symbol: "BTCUSDT".to_string(),
+            side: OrderSide::Sell,
+            quantity: 0.1,
+            price: Some(20000.0),
+            order_type: alphafield_core::OrderType::Limit,
+            timestamp: chrono::Utc::now(),
+            id: String::new(),
+            status: alphafield_core::OrderStatus::New,
+            oco_group_id: None,
+            iceberg_hidden_qty: None,
+            stop_loss: None,
+            take_profit: None,
+            parent_order_id: None,
+            limit_chase_amount: None,
+        };
+
+        let result = check.check(&order);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Short position value"));
+    }
+
+    #[test]
+    fn test_max_short_position_allows_small_short() {
+        let check = MaxShortPosition::new(10000.0);
+
+        let order = Order {
+            symbol: "BTCUSDT".to_string(),
+            side: OrderSide::Sell,
+            quantity: 0.1,
+            price: Some(50000.0),
+            order_type: alphafield_core::OrderType::Limit,
+            timestamp: chrono::Utc::now(),
+            id: String::new(),
+            status: alphafield_core::OrderStatus::New,
+            oco_group_id: None,
+            iceberg_hidden_qty: None,
+            stop_loss: None,
+            take_profit: None,
+            parent_order_id: None,
+            limit_chase_amount: None,
+        };
+
+        assert!(check.check(&order).is_ok());
+    }
+
+    #[test]
+    fn test_max_short_position_ignores_long_position() {
+        let check = MaxShortPosition::new(10.0);
+
+        let order = Order {
+            symbol: "BTCUSDT".to_string(),
+            side: OrderSide::Buy,
+            quantity: 10.0,
             price: Some(50000.0),
             order_type: alphafield_core::OrderType::Limit,
             timestamp: chrono::Utc::now(),

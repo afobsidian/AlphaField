@@ -1,5 +1,6 @@
 use crate::error::{BacktestError, Result};
 use crate::trade::{Trade, TradeSide};
+use alphafield_core::TradingMode;
 use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -71,6 +72,8 @@ pub struct Portfolio {
     /// Current timestamp for trade tracking
     #[serde(skip)]
     current_timestamp: i64,
+    /// Trading mode (Spot or Margin)
+    pub trading_mode: TradingMode,
 }
 
 impl Portfolio {
@@ -82,7 +85,14 @@ impl Portfolio {
             trades: Vec::new(),
             open_trades: HashMap::new(),
             current_timestamp: 0,
+            trading_mode: TradingMode::Spot,
         }
+    }
+
+    /// Set the trading mode (Spot or Margin)
+    pub fn with_trading_mode(mut self, trading_mode: TradingMode) -> Self {
+        self.trading_mode = trading_mode;
+        self
     }
 
     /// Set current timestamp for trade tracking
@@ -127,8 +137,8 @@ impl Portfolio {
     ) -> Result<()> {
         let cost = quantity * price;
 
-        // Prevent selling more than currently held (no shorting in spot-only mode)
-        if quantity < 0.0 {
+        // In Spot mode, prevent selling more than currently held (no shorting)
+        if self.trading_mode == TradingMode::Spot && quantity < 0.0 {
             let available_qty = self
                 .positions
                 .get(symbol)
@@ -269,5 +279,72 @@ impl Portfolio {
         self.update_open_trades(current_prices);
         let equity = self.total_equity(current_prices);
         self.equity_history.push((timestamp, equity));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_portfolio_default_trading_mode_is_spot() {
+        let portfolio = Portfolio::new(10000.0);
+        assert_eq!(portfolio.trading_mode, TradingMode::Spot);
+    }
+
+    #[test]
+    fn test_portfolio_with_trading_mode() {
+        let portfolio = Portfolio::new(10000.0).with_trading_mode(TradingMode::Margin);
+        assert_eq!(portfolio.trading_mode, TradingMode::Margin);
+    }
+
+    #[test]
+    fn test_portfolio_trading_mode_spot() {
+        let portfolio = Portfolio::new(10000.0).with_trading_mode(TradingMode::Spot);
+        assert_eq!(portfolio.trading_mode, TradingMode::Spot);
+    }
+
+    // Phase 2: Test short position behavior
+    #[test]
+    fn test_spot_mode_prevents_short() {
+        let mut portfolio = Portfolio::new(10000.0).with_trading_mode(TradingMode::Spot);
+
+        // Try to sell (open short) when flat - should fail
+        let result = portfolio.update_from_fill("BTCUSDT", -0.1, 50000.0, 5.0, None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Insufficient position"));
+    }
+
+    #[test]
+    fn test_margin_mode_allows_short() {
+        let mut portfolio = Portfolio::new(10000.0).with_trading_mode(TradingMode::Margin);
+
+        // Sell to open short - should succeed
+        let result = portfolio.update_from_fill("BTCUSDT", -0.1, 50000.0, 5.0, None);
+        assert!(result.is_ok());
+
+        // Check that position is negative
+        let position = portfolio.positions.get("BTCUSDT").unwrap();
+        assert_eq!(position.quantity, -0.1);
+    }
+
+    #[test]
+    fn test_margin_requirement_check() {
+        let mut portfolio = Portfolio::new(10000.0).with_trading_mode(TradingMode::Margin);
+
+        // Sell to open short
+        portfolio
+            .update_from_fill("BTCUSDT", -0.1, 50000.0, 5.0, None)
+            .unwrap();
+
+        // Check cash increased (from selling)
+        assert!(portfolio.cash > 10000.0);
+
+        // Position should be negative
+        let position = portfolio.positions.get("BTCUSDT").unwrap();
+        assert_eq!(position.quantity, -0.1);
     }
 }

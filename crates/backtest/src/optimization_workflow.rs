@@ -22,7 +22,7 @@ use crate::sensitivity::{
 use crate::strategy::Strategy;
 use crate::trade::Trade;
 use crate::walk_forward::{WalkForwardAnalyzer, WalkForwardConfig, WalkForwardResult};
-use alphafield_core::Bar;
+use alphafield_core::{Bar, TradingMode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::{info, warn};
@@ -46,6 +46,8 @@ pub struct WorkflowConfig {
     pub monte_carlo_config: Option<MonteCarloConfig>,
     /// Risk-free rate for Sharpe ratio calculation (default: 0.02)
     pub risk_free_rate: f64,
+    /// Trading mode (Spot or Margin) for the backtest
+    pub trading_mode: TradingMode,
 }
 
 impl Default for WorkflowConfig {
@@ -59,6 +61,7 @@ impl Default for WorkflowConfig {
             train_test_split_ratio: 0.70,
             monte_carlo_config: Some(MonteCarloConfig::default()),
             risk_free_rate: 0.02,
+            trading_mode: TradingMode::Spot,
         }
     }
 }
@@ -425,7 +428,8 @@ impl OptimizationWorkflow {
             self.config.initial_capital,
             self.config.fee_rate,
             self.config.slippage.clone(),
-        );
+        )
+        .with_trading_mode(self.config.trading_mode);
 
         engine.add_data(symbol, data.to_vec());
         engine.set_strategy(strategy);

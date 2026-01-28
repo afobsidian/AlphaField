@@ -3,6 +3,7 @@
 //! Extracts features from OHLCV bar data for ML models.
 //! Includes technical indicators, price-derived features, and lagged values.
 
+use crate::adapter::PositionState;
 use alphafield_core::Bar;
 use serde::{Deserialize, Serialize};
 
@@ -355,6 +356,50 @@ impl FeatureExtractor {
 
         vol
     }
+
+    /// Extract features from a single bar with position state (for ML strategy use)
+    ///
+    /// This method extracts features for a single bar and includes one-hot encoded
+    /// position state to help ML models learn position-dependent signals.
+    ///
+    /// # Arguments
+    /// * `bar` - Single OHLCV bar
+    /// * `position_state` - Current position state (Flat/Long/Short)
+    ///
+    /// # Returns
+    /// Feature vector with technical features + position state encoding
+    pub fn extract_with_position(&self, bar: &Bar, position_state: PositionState) -> Vec<f64> {
+        let mut features = vec![
+            bar.open,
+            bar.high,
+            bar.low,
+            bar.close,
+            bar.volume,
+            (bar.close - bar.open).abs() / bar.close, // body ratio
+            (bar.high - bar.low) / bar.close,         // range ratio
+        ];
+
+        // Add RSI if configured
+        if self.config.rsi_period > 0 {
+            // Note: Can't compute RSI from single bar, using neutral value
+            // In practice, this would come from precomputed indicators
+            features.push(0.5); // Neutral RSI (normalized)
+        }
+
+        // Add volume ratio if configured
+        if self.config.include_volume {
+            features.push(1.0); // Default value (would use moving average in practice)
+        }
+
+        // Add position state as one-hot encoding
+        match position_state {
+            PositionState::Flat => features.extend_from_slice(&[1.0, 0.0, 0.0]),
+            PositionState::Long => features.extend_from_slice(&[0.0, 1.0, 0.0]),
+            PositionState::Short => features.extend_from_slice(&[0.0, 0.0, 1.0]),
+        }
+
+        features
+    }
 }
 
 /// Convert regression labels to classification labels (-1, 0, 1)
@@ -440,5 +485,52 @@ mod tests {
             + 2; // range + body ratio
 
         assert_eq!(names.len(), expected);
+    }
+
+    #[test]
+    fn test_extract_with_position() {
+        use crate::adapter::PositionState;
+
+        // Create test bar
+        let test_bar = Bar {
+            timestamp: Utc::now(),
+            open: 100.0,
+            high: 105.0,
+            low: 95.0,
+            close: 102.0,
+            volume: 1000.0,
+        };
+
+        let extractor = FeatureExtractor::default_config();
+
+        // Test Flat position state
+        let features_flat = extractor.extract_with_position(&test_bar, PositionState::Flat);
+        assert!(!features_flat.is_empty());
+        // Last 3 features should be [1.0, 0.0, 0.0] for Flat
+        let flat_encoding = &features_flat[features_flat.len() - 3..];
+        assert_eq!(flat_encoding, &[1.0, 0.0, 0.0]);
+
+        // Test Long position state
+        let features_long = extractor.extract_with_position(&test_bar, PositionState::Long);
+        // Last 3 features should be [0.0, 1.0, 0.0] for Long
+        let long_encoding = &features_long[features_long.len() - 3..];
+        assert_eq!(long_encoding, &[0.0, 1.0, 0.0]);
+
+        // Test Short position state
+        let features_short = extractor.extract_with_position(&test_bar, PositionState::Short);
+        // Last 3 features should be [0.0, 0.0, 1.0] for Short
+        let short_encoding = &features_short[features_short.len() - 3..];
+        assert_eq!(short_encoding, &[0.0, 0.0, 1.0]);
+
+        // All other features should be the same (before position encoding)
+        let technical_len = features_flat.len() - 3;
+        assert_eq!(
+            features_flat[..technical_len],
+            features_long[..technical_len]
+        );
+        assert_eq!(
+            features_flat[..technical_len],
+            features_short[..technical_len]
+        );
     }
 }

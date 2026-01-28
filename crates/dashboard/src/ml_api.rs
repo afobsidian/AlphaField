@@ -453,6 +453,7 @@ pub struct ValidateRequest {
     pub model_type: String,
     pub train_window_days: Option<usize>,
     pub test_window_days: Option<usize>,
+    pub trading_mode: String,
 }
 
 #[derive(Serialize)]
@@ -537,7 +538,11 @@ pub async fn validate_model(
     let train_window = req.train_window_days.unwrap_or(100);
     let test_window = req.test_window_days.unwrap_or(30);
 
-    let validator = MLValidation::new(train_window, test_window, test_window / 2);
+    let trading_mode = match req.trading_mode.as_str() {
+        "Margin" => alphafield_core::TradingMode::Margin,
+        _ => alphafield_core::TradingMode::Spot,
+    };
+    let validator = MLValidation::new(train_window, test_window, test_window / 2, trading_mode);
 
     let model_type = match req.model_type.to_lowercase().as_str() {
         "linear" | "linearregression" => MLModelType::LinearRegression,

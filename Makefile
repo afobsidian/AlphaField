@@ -16,22 +16,22 @@ docker-build:
 
 ## Start Docker database
 docker-db-up:
-	docker-compose up -d timescaledb
+	docker compose up -d timescaledb
 
 ## Stop Docker database
 docker-db-down:
-	docker-compose down -v timescaledb
+	docker compose down -v timescaledb
 
 ## Start Docker environment
 docker-up:
-	docker-compose up -d
+	docker compose up -d
 
 ## Stop Docker environment
 docker-down:
-	docker-compose down
+	docker compose down
 
 docker-reset:
-	docker-compose down -v
+	docker compose down -v
 
 # --- Development ---
 

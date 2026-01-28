@@ -53,6 +53,8 @@ pub struct PositionUpdate {
     pub current_price: f64,
     pub pnl: f64,
     pub pnl_percent: f64,
+    /// Position side: "Long" or "Short"
+    pub side: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

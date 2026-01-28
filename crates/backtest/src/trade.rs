@@ -22,7 +22,7 @@ pub struct Trade {
     pub side: TradeSide,
     /// Entry timestamp
     pub entry_time: DateTime<Utc>,
-    /// Exit timestamp  
+    /// Exit timestamp
     pub exit_time: DateTime<Utc>,
     /// Entry price
     pub entry_price: f64,
@@ -91,6 +91,15 @@ pub struct TradeStats {
     pub avg_mae: f64,
     /// Average MFE across all trades
     pub avg_mfe: f64,
+    /// Long/Short breakdown
+    pub long_trades_count: usize,
+    pub short_trades_count: usize,
+    pub long_win_rate: f64,
+    pub short_win_rate: f64,
+    pub avg_long_profit: f64,
+    pub avg_short_profit: f64,
+    pub total_long_profit: f64,
+    pub total_short_profit: f64,
 }
 
 impl TradeStats {
@@ -153,6 +162,49 @@ impl TradeStats {
         let total_mfe: f64 = trades.iter().map(|t| t.mfe).sum();
         let avg_mfe = total_mfe / total_trades as f64;
 
+        // Calculate long/short breakdown
+        let long_trades: Vec<_> = trades
+            .iter()
+            .filter(|t| t.side == TradeSide::Long)
+            .collect();
+        let short_trades: Vec<_> = trades
+            .iter()
+            .filter(|t| t.side == TradeSide::Short)
+            .collect();
+
+        let long_trades_count = long_trades.len();
+        let short_trades_count = short_trades.len();
+
+        let long_winning: Vec<_> = long_trades.iter().filter(|t| t.is_winner()).collect();
+        let short_winning: Vec<_> = short_trades.iter().filter(|t| t.is_winner()).collect();
+
+        let long_win_rate = if long_trades_count > 0 {
+            long_winning.len() as f64 / long_trades_count as f64
+        } else {
+            0.0
+        };
+
+        let short_win_rate = if short_trades_count > 0 {
+            short_winning.len() as f64 / short_trades_count as f64
+        } else {
+            0.0
+        };
+
+        let total_long_profit: f64 = long_trades.iter().map(|t| t.pnl).sum();
+        let total_short_profit: f64 = short_trades.iter().map(|t| t.pnl).sum();
+
+        let avg_long_profit = if long_trades_count > 0 {
+            total_long_profit / long_trades_count as f64
+        } else {
+            0.0
+        };
+
+        let avg_short_profit = if short_trades_count > 0 {
+            total_short_profit / short_trades_count as f64
+        } else {
+            0.0
+        };
+
         Self {
             total_trades,
             winning_trades: win_count,
@@ -167,6 +219,14 @@ impl TradeStats {
             avg_duration_secs,
             avg_mae,
             avg_mfe,
+            long_trades_count,
+            short_trades_count,
+            long_win_rate,
+            short_win_rate,
+            avg_long_profit,
+            avg_short_profit,
+            total_long_profit,
+            total_short_profit,
         }
     }
 }
@@ -223,5 +283,102 @@ mod tests {
         let stats = TradeStats::calculate(&[]);
         assert_eq!(stats.total_trades, 0);
         assert_eq!(stats.win_rate, 0.0);
+        // Long/short breakdown should be zero
+        assert_eq!(stats.long_trades_count, 0);
+        assert_eq!(stats.short_trades_count, 0);
+        assert_eq!(stats.long_win_rate, 0.0);
+        assert_eq!(stats.short_win_rate, 0.0);
+        assert_eq!(stats.total_long_profit, 0.0);
+        assert_eq!(stats.total_short_profit, 0.0);
+    }
+
+    fn make_trade_with_side(pnl: f64, duration_secs: i64, side: TradeSide) -> Trade {
+        let entry = Utc.with_ymd_and_hms(2024, 1, 1, 0, 0, 0).unwrap();
+        let exit = entry + chrono::Duration::seconds(duration_secs);
+        Trade {
+            symbol: "BTC".to_string(),
+            side,
+            entry_time: entry,
+            exit_time: exit,
+            entry_price: 100.0,
+            exit_price: if pnl > 0.0 { 110.0 } else { 90.0 },
+            quantity: 1.0,
+            pnl,
+            fees: 0.1,
+            mae: 5.0,
+            mfe: 15.0,
+            duration_secs,
+            exit_reason: Some("Signal".to_string()),
+        }
+    }
+
+    #[test]
+    fn test_long_only_trades() {
+        let trades = vec![
+            make_trade_with_side(100.0, 3600, TradeSide::Long), // Win
+            make_trade_with_side(50.0, 7200, TradeSide::Long),  // Win
+            make_trade_with_side(-30.0, 1800, TradeSide::Long), // Loss
+            make_trade_with_side(-20.0, 900, TradeSide::Long),  // Loss
+        ];
+
+        let stats = TradeStats::calculate(&trades);
+
+        assert_eq!(stats.long_trades_count, 4);
+        assert_eq!(stats.short_trades_count, 0);
+        assert!((stats.long_win_rate - 0.5).abs() < 1e-9); // 2 wins / 4 trades
+        assert_eq!(stats.short_win_rate, 0.0);
+        assert!((stats.total_long_profit - 100.0).abs() < 1e-9); // (100 + 50 - 30 - 20)
+        assert_eq!(stats.total_short_profit, 0.0);
+        assert!((stats.avg_long_profit - 25.0).abs() < 1e-9);
+        assert_eq!(stats.avg_short_profit, 0.0);
+    }
+
+    #[test]
+    fn test_short_only_trades() {
+        let trades = vec![
+            make_trade_with_side(80.0, 3600, TradeSide::Short), // Win
+            make_trade_with_side(-40.0, 7200, TradeSide::Short), // Loss
+            make_trade_with_side(30.0, 1800, TradeSide::Short), // Win
+        ];
+
+        let stats = TradeStats::calculate(&trades);
+
+        assert_eq!(stats.long_trades_count, 0);
+        assert_eq!(stats.short_trades_count, 3);
+        assert_eq!(stats.long_win_rate, 0.0);
+        assert!((stats.short_win_rate - 0.6666666667).abs() < 1e-9); // 2 wins / 3 trades
+        assert_eq!(stats.total_long_profit, 0.0);
+        assert!((stats.total_short_profit - 70.0).abs() < 1e-9); // (80 - 40 + 30)
+        assert_eq!(stats.avg_long_profit, 0.0);
+        assert!((stats.avg_short_profit - 23.3333333333).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_mixed_long_and_short_trades() {
+        let trades = vec![
+            make_trade_with_side(100.0, 3600, TradeSide::Long), // Long Win
+            make_trade_with_side(80.0, 7200, TradeSide::Short), // Short Win
+            make_trade_with_side(-30.0, 1800, TradeSide::Long), // Long Loss
+            make_trade_with_side(-40.0, 900, TradeSide::Short), // Short Loss
+            make_trade_with_side(60.0, 1200, TradeSide::Short), // Short Win
+        ];
+
+        let stats = TradeStats::calculate(&trades);
+
+        // Long trades: 1 win, 1 loss
+        assert_eq!(stats.long_trades_count, 2);
+        assert!((stats.long_win_rate - 0.5).abs() < 1e-9);
+        assert!((stats.total_long_profit - 70.0).abs() < 1e-9); // (100 - 30)
+        assert!((stats.avg_long_profit - 35.0).abs() < 1e-9);
+
+        // Short trades: 2 wins, 1 loss
+        assert_eq!(stats.short_trades_count, 3);
+        assert!((stats.short_win_rate - 0.6666666667).abs() < 1e-9);
+        assert!((stats.total_short_profit - 100.0).abs() < 1e-9); // (80 - 40 + 60)
+        assert!((stats.avg_short_profit - 33.3333333333).abs() < 1e-9);
+
+        // Overall stats
+        assert_eq!(stats.total_trades, 5);
+        assert!((stats.win_rate - 0.6).abs() < 1e-9); // 3 wins / 5 trades
     }
 }

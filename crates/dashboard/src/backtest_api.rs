@@ -7,8 +7,9 @@ use tracing::{error, info, warn};
 use alphafield_backtest::{
     AssetSentimentCalculator, AssetSentimentSummary, BacktestEngine, BenchmarkComparison,
     DrawdownAnalysis, DrawdownPoint, MonthlyReturn, PerformanceMetrics, RollingStats,
-    SlippageModel, StrategyAdapter, Trade,
+    SlippageModel, StrategyAdapter, Trade, TradeSide,
 };
+use alphafield_core::TradingMode;
 use alphafield_data::SentimentClient;
 
 use crate::api::AppState;
@@ -24,8 +25,14 @@ pub struct BacktestRequest {
     pub params: HashMap<String, f64>,
     #[serde(default)]
     pub include_benchmark: bool,
+    #[serde(default = "default_trading_mode")]
+    pub trading_mode: String,
     pub start_date: Option<String>,
     pub end_date: Option<String>,
+}
+
+fn default_trading_mode() -> String {
+    "Spot".to_string()
 }
 
 /// Enhanced backtest response with comprehensive analytics
@@ -98,6 +105,15 @@ pub struct TradeSummary {
     pub avg_mfe_percent: f64,
     pub longest_winning_streak: usize,
     pub longest_losing_streak: usize,
+    /// Long/Short breakdown metrics
+    pub long_trades_count: usize,
+    pub short_trades_count: usize,
+    pub long_win_rate: f64,
+    pub short_win_rate: f64,
+    pub avg_long_profit: f64,
+    pub avg_short_profit: f64,
+    pub total_long_profit: f64,
+    pub total_short_profit: f64,
 }
 
 impl TradeSummary {
@@ -155,6 +171,49 @@ impl TradeSummary {
             }
         }
 
+        // Calculate long/short breakdown
+        let long_trades: Vec<_> = trades
+            .iter()
+            .filter(|t| matches!(t.side, TradeSide::Long))
+            .collect();
+        let short_trades: Vec<_> = trades
+            .iter()
+            .filter(|t| matches!(t.side, TradeSide::Short))
+            .collect();
+
+        let long_trades_count = long_trades.len();
+        let short_trades_count = short_trades.len();
+
+        let long_winning: Vec<_> = long_trades.iter().filter(|t| t.pnl > 0.0).collect();
+        let short_winning: Vec<_> = short_trades.iter().filter(|t| t.pnl > 0.0).collect();
+
+        let long_win_rate = if long_trades_count > 0 {
+            long_winning.len() as f64 / long_trades_count as f64
+        } else {
+            0.0
+        };
+
+        let short_win_rate = if short_trades_count > 0 {
+            short_winning.len() as f64 / short_trades_count as f64
+        } else {
+            0.0
+        };
+
+        let total_long_profit: f64 = long_trades.iter().map(|t| t.pnl).sum();
+        let total_short_profit: f64 = short_trades.iter().map(|t| t.pnl).sum();
+
+        let avg_long_profit = if long_trades_count > 0 {
+            total_long_profit / long_trades_count as f64
+        } else {
+            0.0
+        };
+
+        let avg_short_profit = if short_trades_count > 0 {
+            total_short_profit / short_trades_count as f64
+        } else {
+            0.0
+        };
+
         Self {
             total_trades: total,
             winning_trades: winners.len(),
@@ -164,6 +223,14 @@ impl TradeSummary {
             avg_mfe_percent: avg_mfe,
             longest_winning_streak: max_winning,
             longest_losing_streak: max_losing,
+            long_trades_count,
+            short_trades_count,
+            long_win_rate,
+            short_win_rate,
+            avg_long_profit,
+            avg_short_profit,
+            total_long_profit,
+            total_short_profit,
         }
     }
 }
@@ -262,7 +329,14 @@ pub async fn run_backtest(
 
     // 3. Run Backtest & Extract Data
     let (metrics, trades, equity_history) = {
-        let mut engine = BacktestEngine::new(100_000.0, 0.001, SlippageModel::FixedPercent(0.0005));
+        // Parse trading mode from request (default to Spot if invalid)
+        let trading_mode = match req.trading_mode.as_str() {
+            "Margin" => TradingMode::Margin,
+            _ => TradingMode::Spot,
+        };
+
+        let mut engine = BacktestEngine::new(100_000.0, 0.001, SlippageModel::FixedPercent(0.0005))
+            .with_trading_mode(trading_mode);
 
         engine.add_data(&req.symbol, bars.clone());
 
@@ -616,6 +690,8 @@ pub struct WorkflowRequest {
     pub train_window_days: Option<usize>,
     /// Optional: Testing window for walk-forward (in days, default: 63)
     pub test_window_days: Option<usize>,
+    /// Trading mode (Spot or Margin)
+    pub trading_mode: String,
     /// Optional: Risk-free rate for Sharpe ratio calculation (default: 0.02)
     pub risk_free_rate: Option<f64>,
 }
@@ -798,6 +874,10 @@ pub async fn run_optimization_workflow(
         train_test_split_ratio: 0.70, // Use default 70/30 split
         monte_carlo_config: Some(alphafield_backtest::MonteCarloConfig::default()), // Monte Carlo enabled by default
         risk_free_rate: req.risk_free_rate.unwrap_or(0.02), // Default 2% risk-free rate
+        trading_mode: match req.trading_mode.as_str() {
+            "Margin" => alphafield_core::TradingMode::Margin,
+            _ => alphafield_core::TradingMode::Spot,
+        },
     };
 
     // 5. Determine sensitivity parameters (first two from bounds for 3D visualization)

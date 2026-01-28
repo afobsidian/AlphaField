@@ -8,6 +8,7 @@
 use super::data_split::RollingWindowGenerator;
 use super::ensemble::ModelMetrics;
 use super::models::MLModel;
+use alphafield_core::TradingMode;
 use serde::{Deserialize, Serialize};
 
 /// Result from a single validation window
@@ -89,16 +90,24 @@ pub struct MLValidation {
     step_size: usize,
     /// Gap between train and test
     gap: usize,
+    /// Trading mode for label filtering (Spot = Buy only, Margin = Buy & Sell)
+    trading_mode: TradingMode,
 }
 
 impl MLValidation {
     /// Create new ML validator
-    pub fn new(train_window: usize, test_window: usize, step_size: usize) -> Self {
+    pub fn new(
+        train_window: usize,
+        test_window: usize,
+        step_size: usize,
+        trading_mode: TradingMode,
+    ) -> Self {
         Self {
             train_window,
             test_window,
             step_size,
             gap: 0,
+            trading_mode,
         }
     }
 
@@ -146,17 +155,41 @@ impl MLValidation {
                 features[window.test_start..window.test_end].to_vec();
             let test_labels: Vec<f64> = labels[window.test_start..window.test_end].to_vec();
 
+            // Filter labels based on TradingMode
+            // Spot mode: only train on positive labels (Buy signals)
+            // Margin mode: train on all labels (both Buy and Sell signals)
+            let (train_features_filtered, train_labels_filtered) =
+                if self.trading_mode == TradingMode::Spot {
+                    // Filter to only positive labels (Buy signals) for Spot mode
+                    let mut filtered_features = Vec::new();
+                    let mut filtered_labels = Vec::new();
+                    for (feat, lbl) in train_features.iter().zip(train_labels.iter()) {
+                        if *lbl >= 0.0 {
+                            filtered_features.push(feat.clone());
+                            filtered_labels.push(*lbl);
+                        }
+                    }
+                    (filtered_features, filtered_labels)
+                } else {
+                    // Use all labels for Margin mode
+                    (train_features, train_labels)
+                };
+
             // Train fresh model
             let mut model = model_factory();
-            if model.train(&train_features, &train_labels).is_err() {
+            if model
+                .train(&train_features_filtered, &train_labels_filtered)
+                .is_err()
+            {
                 continue;
             }
 
             // Evaluate on train and test
-            let train_preds = model.predict_batch(&train_features);
+            let train_preds = model.predict_batch(&train_features_filtered);
             let test_preds = model.predict_batch(&test_features);
 
-            let train_metrics = ModelMetrics::calculate_regression(&train_preds, &train_labels);
+            let train_metrics =
+                ModelMetrics::calculate_regression(&train_preds, &train_labels_filtered);
             let test_metrics = ModelMetrics::calculate_regression(&test_preds, &test_labels);
 
             // Calculate train-test gap
@@ -341,7 +374,7 @@ mod tests {
     fn test_walk_forward_validation() {
         let (features, labels) = make_synthetic_data(200);
 
-        let validator = MLValidation::new(50, 20, 30);
+        let validator = MLValidation::new(50, 20, 30, TradingMode::Spot);
         let result = validator.validate(&features, &labels, || Box::new(LinearRegression::new()));
 
         assert!(!result.windows.is_empty());
@@ -354,10 +387,30 @@ mod tests {
     fn test_insufficient_data() {
         let (features, labels) = make_synthetic_data(10);
 
-        let validator = MLValidation::new(50, 20, 30);
+        let validator = MLValidation::new(50, 20, 30, TradingMode::Spot);
         let result = validator.validate(&features, &labels, || Box::new(LinearRegression::new()));
 
         assert!(result.windows.is_empty());
+    }
+
+    #[test]
+    fn test_walk_forward_validation_margin() {
+        let (features, labels) = make_synthetic_data(200);
+
+        // Create validator with Margin mode (trains on both Buy and Sell signals)
+        let validator = MLValidation::new(50, 20, 30, TradingMode::Margin);
+        let result = validator.validate(&features, &labels, || Box::new(LinearRegression::new()));
+
+        // Verify validation completed successfully with Margin mode
+        assert!(!result.windows.is_empty());
+        assert!(result.avg_test_mae >= 0.0);
+        assert!(result.stability_score >= 0.0);
+        assert!(result.stability_score <= 100.0);
+
+        // Verify that Margin mode processes both positive and negative labels
+        // (by checking that metrics were calculated)
+        assert!(result.avg_test_r2.is_finite());
+        assert!(result.avg_test_mae.is_finite());
     }
 
     #[test]

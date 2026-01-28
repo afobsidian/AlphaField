@@ -102,6 +102,12 @@ pub struct ValidationReport {
     pub grade: char, // A-F
     pub verdict: ValidationVerdict,
 
+    /// Long/Short trade breakdown (top-level for API convenience)
+    pub long_trades_count: usize,
+    pub short_trades_count: usize,
+    pub long_win_rate: f64,
+    pub short_win_rate: f64,
+
     /// Component results
     pub backtest: BacktestResult,
     pub walk_forward: WalkForwardResult,
@@ -139,6 +145,15 @@ pub struct BacktestResult {
     pub profit_factor: f64,
     /// Completed trades from backtest
     pub trades: Vec<Trade>,
+    /// Long/Short breakdown metrics
+    pub long_trades_count: usize,
+    pub short_trades_count: usize,
+    pub long_win_rate: f64,
+    pub short_win_rate: f64,
+    pub avg_long_profit: f64,
+    pub avg_short_profit: f64,
+    pub total_long_profit: f64,
+    pub total_short_profit: f64,
 }
 
 /// Risk assessment

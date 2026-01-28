@@ -3,7 +3,7 @@ use crate::exchange::{ExchangeSimulator, SlippageModel};
 use crate::metrics::PerformanceMetrics;
 use crate::portfolio::Portfolio;
 use crate::strategy::Strategy;
-use alphafield_core::Bar;
+use alphafield_core::{Bar, TradingMode};
 use std::collections::HashMap;
 use tracing::{debug, info, instrument, trace, warn};
 
@@ -12,6 +12,8 @@ pub struct BacktestEngine {
     pub exchange: ExchangeSimulator,
     pub data: HashMap<String, Vec<Bar>>, // Symbol -> History
     pub strategy: Option<Box<dyn Strategy>>,
+    /// Trading mode (Spot or Margin)
+    pub trading_mode: TradingMode,
 }
 
 impl BacktestEngine {
@@ -22,16 +24,24 @@ impl BacktestEngine {
             "Creating new BacktestEngine"
         );
         Self {
-            portfolio: Portfolio::new(initial_cash),
+            portfolio: Portfolio::new(initial_cash).with_trading_mode(TradingMode::Spot),
             exchange: ExchangeSimulator::new(fee_rate, slippage),
             data: HashMap::new(),
             strategy: None,
+            trading_mode: TradingMode::Spot,
         }
     }
 
     pub fn set_strategy(&mut self, strategy: Box<dyn Strategy>) {
         debug!("Strategy set on BacktestEngine");
         self.strategy = Some(strategy);
+    }
+
+    /// Set the trading mode (Spot or Margin)
+    pub fn with_trading_mode(mut self, trading_mode: TradingMode) -> Self {
+        self.trading_mode = trading_mode;
+        self.portfolio = self.portfolio.with_trading_mode(trading_mode);
+        self
     }
 
     pub fn add_data(&mut self, symbol: &str, bars: Vec<Bar>) {
@@ -191,5 +201,33 @@ impl BacktestEngine {
         );
 
         Ok(metrics)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_backtest_engine_default_trading_mode_is_spot() {
+        let engine = BacktestEngine::new(10000.0, 0.001, SlippageModel::None);
+        assert_eq!(engine.trading_mode, TradingMode::Spot);
+        assert_eq!(engine.portfolio.trading_mode, TradingMode::Spot);
+    }
+
+    #[test]
+    fn test_backtest_engine_with_trading_mode() {
+        let engine = BacktestEngine::new(10000.0, 0.001, SlippageModel::None)
+            .with_trading_mode(TradingMode::Margin);
+        assert_eq!(engine.trading_mode, TradingMode::Margin);
+        assert_eq!(engine.portfolio.trading_mode, TradingMode::Margin);
+    }
+
+    #[test]
+    fn test_backtest_engine_trading_mode_spot() {
+        let engine = BacktestEngine::new(10000.0, 0.001, SlippageModel::None)
+            .with_trading_mode(TradingMode::Spot);
+        assert_eq!(engine.trading_mode, TradingMode::Spot);
+        assert_eq!(engine.portfolio.trading_mode, TradingMode::Spot);
     }
 }

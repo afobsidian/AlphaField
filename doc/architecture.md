@@ -302,6 +302,101 @@ graph TD
 
 ---
 
+## 🎯 Trading Modes
+
+AlphaField supports two trading modes: **Spot** (default, long-only) and **Margin** (opt-in, long+short). This design ensures backward compatibility while enabling advanced trading strategies.
+
+### Mode Overview
+
+| Feature | Spot Mode | Margin Mode |
+|---------|-----------|-------------|
+| **Positions** | Long only | Long + Short |
+| **Funding** | Cash-based | Margin-based |
+| **Borrowing** | No | Yes (for shorts) |
+| **Default** | ✅ Yes | ❌ Opt-in |
+| **Risk** | Lower | Higher |
+| **Use Cases** | Long-only strategies | Market neutral, pairs trading, mean reversion |
+
+### Spot Mode (Default)
+
+**Characteristics:**
+- Long-only positions (buy and sell to close)
+- Cash-based settlement (no leverage or borrowing)
+- Simple risk management (unlimited loss potential only on long side)
+- Best for: trend following, momentum, breakout strategies
+
+**Component Behavior:**
+- `StrategyAdapter`: Only allows Buy when Flat, Sell when Long
+- `Portfolio`: Rejects orders that would create negative positions
+- `RiskManager`: Enforces `NoShorts` check unconditionally
+- `BacktestEngine`: Uses cash-based position sizing
+
+### Margin Mode
+
+**Characteristics:**
+- Long and short positions (buy and sell to open/close)
+- Margin-based settlement (requires borrowing for shorts)
+- Complex risk management (unlimited loss on shorts, short squeeze risk)
+- Best for: market neutral, pairs trading, mean reversion, arbitrage
+
+**Component Behavior:**
+- `StrategyAdapter`: Full state machine (Flat ↔ Long ↔ Short)
+- `Portfolio`: Allows negative positions when in Margin mode
+- `RiskManager`: Conditionally disables `NoShorts`, enforces `MaxShortPosition`
+- `BacktestEngine`: Supports margin-based position sizing
+- **Additional**: Short Squeeze detection, Margin Requirement checks
+
+### System Integration
+
+Trading mode flows through all major components:
+
+```mermaid
+graph LR
+    subgraph "Strategy Layer"
+        S[Strategy]
+        SA[StrategyAdapter]
+    end
+    
+    subgraph "Execution Layer"
+        RM[RiskManager]
+        P[Portfolio]
+    end
+    
+    subgraph "Analysis Layer"
+        BE[BacktestEngine]
+        MV[MLValidation]
+    end
+    
+    S -->|with_trading_mode()| SA
+    SA --> P
+    P --> RM
+    RM --> BE
+    BE --> MV
+```
+
+**Configuration Points:**
+
+| Component | Configuration Method | Default |
+|-----------|---------------------|---------|
+| `StrategyAdapter` | `.with_trading_mode(TradingMode::Margin)` | `Spot` |
+| `Portfolio` | `.with_trading_mode(TradingMode::Margin)` | `Spot` |
+| `RiskManager` | Conditional checks based on mode | Spot behavior |
+| `BacktestEngine` | `.with_trading_mode(TradingMode::Margin)` | `Spot` |
+| `MLValidation` | `TradingMode` parameter to constructor | `Spot` |
+
+**Key Types:**
+- `TradingMode`: Enum (Spot/Margin) - Core type controlling mode
+- `PositionState`: Enum (Flat/Long/Short) - Current position state in strategies
+- `Signal`: Buy/Sell/Hold with size - Mode determines signal interpretation
+
+**Backward Compatibility:**
+- `Spot` mode is the **default** for all components
+- Existing strategies continue to work without changes
+- Opt-in `Margin` mode requires explicit configuration
+- All existing tests pass with Spot mode (174+ tests)
+
+---
+
 ## 🔄 Data Flow
 
 ### Backtest Flow

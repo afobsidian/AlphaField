@@ -120,6 +120,10 @@ impl StrategyValidator {
             overall_score,
             grade,
             verdict,
+            long_trades_count: backtest_result.long_trades_count,
+            short_trades_count: backtest_result.short_trades_count,
+            long_win_rate: backtest_result.long_win_rate,
+            short_win_rate: backtest_result.short_win_rate,
             backtest: backtest_result,
             walk_forward: walk_forward_result,
             monte_carlo: monte_carlo_result,
@@ -230,6 +234,10 @@ impl StrategyValidator {
             overall_score,
             grade,
             verdict,
+            long_trades_count: backtest_result.long_trades_count,
+            short_trades_count: backtest_result.short_trades_count,
+            long_win_rate: backtest_result.long_win_rate,
+            short_win_rate: backtest_result.short_win_rate,
             backtest: backtest_result,
             walk_forward: walk_forward_result,
             monte_carlo: monte_carlo_result,
@@ -292,12 +300,63 @@ impl StrategyValidator {
             }
         };
 
+        // Calculate long/short breakdown
+        let long_trades: Vec<_> = trades
+            .iter()
+            .filter(|t| matches!(t.side, crate::TradeSide::Long))
+            .collect();
+        let short_trades: Vec<_> = trades
+            .iter()
+            .filter(|t| matches!(t.side, crate::TradeSide::Short))
+            .collect();
+
+        let long_trades_count = long_trades.len();
+        let short_trades_count = short_trades.len();
+
+        let long_winning: Vec<_> = long_trades.iter().filter(|t| t.pnl > 0.0).collect();
+        let short_winning: Vec<_> = short_trades.iter().filter(|t| t.pnl > 0.0).collect();
+
+        let long_win_rate = if long_trades_count > 0 {
+            long_winning.len() as f64 / long_trades_count as f64
+        } else {
+            0.0
+        };
+
+        let short_win_rate = if short_trades_count > 0 {
+            short_winning.len() as f64 / short_trades_count as f64
+        } else {
+            0.0
+        };
+
+        let total_long_profit: f64 = long_trades.iter().map(|t| t.pnl).sum();
+        let total_short_profit: f64 = short_trades.iter().map(|t| t.pnl).sum();
+
+        let avg_long_profit = if long_trades_count > 0 {
+            total_long_profit / long_trades_count as f64
+        } else {
+            0.0
+        };
+
+        let avg_short_profit = if short_trades_count > 0 {
+            total_short_profit / short_trades_count as f64
+        } else {
+            0.0
+        };
+
         Ok(BacktestResult {
             metrics: metrics_with_trades,
             total_trades: trades.len(),
             win_rate,
             profit_factor,
             trades: trades.clone(),
+            long_trades_count,
+            short_trades_count,
+            long_win_rate,
+            short_win_rate,
+            avg_long_profit,
+            avg_short_profit,
+            total_long_profit,
+            total_short_profit,
         })
     }
 
@@ -882,6 +941,14 @@ mod tests {
                 win_rate: 0.0,
                 profit_factor: 0.0,
                 trades: Vec::new(),
+                long_trades_count: 0,
+                short_trades_count: 0,
+                long_win_rate: 0.0,
+                short_win_rate: 0.0,
+                avg_long_profit: 0.0,
+                avg_short_profit: 0.0,
+                total_long_profit: 0.0,
+                total_short_profit: 0.0,
             },
             walk_forward: crate::walk_forward::WalkForwardResult {
                 windows: Vec::new(),
