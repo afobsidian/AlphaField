@@ -1253,16 +1253,15 @@ async function loadStrategies() {
 
     renderStrategyOptions(strategies);
 
-    // Ensure selected strategy exists; otherwise default to first
+    // Ensure selected strategy exists; otherwise keep no strategy selected
     const selectedExists = strategies.some(
       (s) => s && s.name === AppState.strategy,
     );
-    if (!selectedExists) {
-      AppState.strategy = strategies[0].name;
+    
+    // Initialize params only if a strategy is selected
+    if (selectedExists) {
+      initParamsForStrategy(AppState.strategy);
     }
-
-    // Initialize default params for selected strategy
-    initParamsForStrategy(AppState.strategy);
 
     // Refresh parameter UI and context
     updateParamsUI();
@@ -1510,11 +1509,7 @@ function renderStrategyOptions(strategies) {
     categoryDiv.appendChild(content);
     container.appendChild(categoryDiv);
 
-    // Open first category by default
-    if (catIdx === 0) {
-      categoryDiv.classList.add("open");
-      header.classList.add("active");
-    }
+
   });
 
   // Set initial selection state
@@ -1537,16 +1532,8 @@ function renderStrategyOptions(strategies) {
       }
     });
 
-  if (!selectedExists) {
-    const firstInput = document.querySelector(
-      '.strategy-compact-item input[name="strategy"]',
-    );
-    if (firstInput) {
-      firstInput.checked = true;
-      AppState.strategy = firstInput.value;
-      firstInput.closest(".strategy-compact-item").classList.add("selected");
-    }
-  }
+  // Don't select any strategy by default
+  // Keep all accordions collapsed
 }
 
 function initParamsForStrategy(strategyKey) {
@@ -2300,6 +2287,7 @@ async function optimizeParams() {
         symbol: AppState.symbol,
         interval: AppState.backtestInterval,
         days: AppState.backtestDays,
+        trading_mode: AppState.trading_mode,
       }),
     });
 

@@ -247,106 +247,158 @@
                         </div>
 
                         <!-- ML Enhancement Card -->
-                        <div class="card strategy-card">
-                            <h3>🤖 ML Enhancement</h3>
-                            <div class="strategy-options">
-                                <label
-                                    class="strategy-option"
-                                    style="
-                                        background: rgba(139, 92, 246, 0.1);
-                                        border-color: rgba(139, 92, 246, 0.3);
-                                    "
-                                >
-                                    <input
-                                        type="checkbox"
-                                        id="ml-enabled"
-                                        onchange="toggleMLMode()"
-                                    />
-                                    <div class="strategy-info">
-                                        <span class="strategy-name"
-                                            >Enable ML</span
-                                        >
-                                        <span class="strategy-desc"
-                                            >Train model during
-                                            optimization</span
-                                        >
-                                    </div>
-                                </label>
-                            </div>
-
-                            <div
-                                id="ml-options"
-                                class="hidden"
-                                style="
-                                    margin-top: 12px;
-                                    padding: 12px;
-                                    background: rgba(139, 92, 246, 0.05);
-                                    border-radius: 8px;
-                                "
-                            >
-                                <div
-                                    class="form-group"
-                                    style="margin-bottom: 12px"
-                                >
+                        <div>
+                            <div class="card strategy-card">
+                                <h3>🤖 ML Enhancement</h3>
+                                <div class="strategy-options">
                                     <label
+                                        class="strategy-option"
                                         style="
-                                            display: block;
-                                            margin-bottom: 6px;
-                                            font-weight: 500;
-                                            font-size: 12px;
-                                        "
-                                        >Model Type</label
-                                    >
-                                    <select
-                                        id="ml-model-type"
-                                        class="form-select"
-                                        onchange="updateMLModelType(this.value)"
-                                        style="
-                                            padding: 8px 12px;
-                                            font-size: 12px;
+                                            background: rgba(139, 92, 246, 0.1);
+                                            border-color: rgba(
+                                                139,
+                                                92,
+                                                246,
+                                                0.3
+                                            );
                                         "
                                     >
-                                        <option value="linear">
-                                            Linear Regression
-                                        </option>
-                                        <option value="logistic">
-                                            Logistic Regression
-                                        </option>
-                                        <option value="rf">
-                                            Random Forest
-                                        </option>
-                                    </select>
+                                        <input
+                                            type="checkbox"
+                                            id="ml-enabled"
+                                            onchange="toggleMLMode()"
+                                        />
+                                        <div class="strategy-info">
+                                            <span class="strategy-name"
+                                                >Enable ML</span
+                                            >
+                                            <span class="strategy-desc"
+                                                >Train model during
+                                                optimization</span
+                                            >
+                                        </div>
+                                    </label>
                                 </div>
 
                                 <div
-                                    class="form-group"
-                                    style="margin-bottom: 0"
+                                    id="ml-options"
+                                    class="hidden"
+                                    style="
+                                        margin-top: 12px;
+                                        padding: 12px;
+                                        background: rgba(139, 92, 246, 0.05);
+                                        border-radius: 8px;
+                                    "
                                 >
-                                    <label
-                                        style="
-                                            display: block;
-                                            margin-bottom: 6px;
-                                            font-weight: 500;
-                                            font-size: 12px;
-                                        "
+                                    <div
+                                        class="form-group"
+                                        style="margin-bottom: 12px"
                                     >
-                                        Confidence:
-                                        <span id="ml-confidence-value"
-                                            >60%</span
+                                        <label
+                                            style="
+                                                display: block;
+                                                margin-bottom: 6px;
+                                                font-weight: 500;
+                                                font-size: 12px;
+                                            "
+                                            >Model Type</label
                                         >
+                                        <select
+                                            id="ml-model-type"
+                                            class="form-select"
+                                            onchange="
+                                                updateMLModelType(this.value)
+                                            "
+                                            style="
+                                                padding: 8px 12px;
+                                                font-size: 12px;
+                                            "
+                                        >
+                                            <option value="linear">
+                                                Linear Regression
+                                            </option>
+                                            <option value="logistic">
+                                                Logistic Regression
+                                            </option>
+                                            <option value="rf">
+                                                Random Forest
+                                            </option>
+                                        </select>
+                                    </div>
+
+                                    <div
+                                        class="form-group"
+                                        style="margin-bottom: 0"
+                                    >
+                                        <label
+                                            style="
+                                                display: block;
+                                                margin-bottom: 6px;
+                                                font-weight: 500;
+                                                font-size: 12px;
+                                            "
+                                        >
+                                            Confidence:
+                                            <span id="ml-confidence-value"
+                                                >60%</span
+                                            >
+                                        </label>
+                                        <input
+                                            type="range"
+                                            id="ml-confidence"
+                                            min="50"
+                                            max="90"
+                                            step="5"
+                                            value="60"
+                                            style="width: 100%"
+                                            onchange="
+                                                updateMLConfidence(this.value)
+                                            "
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Trading Mode Card -->
+                            <div class="card strategy-card" style="margin-top: 16px;">
+                                <h3>💱 Trading Mode</h3>
+                                <div class="strategy-options">
+                                    <label class="strategy-option">
+                                        <input
+                                            type="radio"
+                                            name="trading-mode-build"
+                                            value="Spot"
+                                            checked
+                                            id="trading-mode-build-spot"
+                                            onchange="updateTradingMode('Spot')"
+                                        />
+                                        <div class="strategy-info">
+                                            <span class="strategy-name"
+                                                >📈 Spot Mode</span
+                                            >
+                                            <span class="strategy-desc"
+                                                >Long positions only</span
+                                            >
+                                        </div>
                                     </label>
-                                    <input
-                                        type="range"
-                                        id="ml-confidence"
-                                        min="50"
-                                        max="90"
-                                        step="5"
-                                        value="60"
-                                        style="width: 100%"
-                                        onchange="
-                                            updateMLConfidence(this.value)
-                                        "
-                                    />
+                                    <label class="strategy-option">
+                                        <input
+                                            type="radio"
+                                            name="trading-mode-build"
+                                            value="Margin"
+                                            id="trading-mode-build-margin"
+                                            onchange="
+                                                updateTradingMode('Margin')
+                                            "
+                                        />
+                                        <div class="strategy-info">
+                                            <span class="strategy-name"
+                                                >⚡ Margin Mode</span
+                                            >
+                                            <span class="strategy-desc"
+                                                >Long + Short positions</span
+                                            >
+                                        </div>
+                                    </label>
                                 </div>
                             </div>
                         </div>
@@ -516,38 +568,6 @@
                                     >
                                         1d
                                     </button>
-                                </div>
-
-                                <!-- Trading Mode Selector -->
-                                <div class="form-group">
-                                    <label>Trading Mode</label>
-                                    <div class="trading-mode-selector">
-                                        <label>
-                                            <input
-                                                type="radio"
-                                                name="trading_mode"
-                                                value="Spot"
-                                                checked
-                                                id="trading-mode-spot"
-                                                onchange="
-                                                    updateTradingMode('Spot')
-                                                "
-                                            />
-                                            Spot Mode (Long Only)
-                                        </label>
-                                        <label>
-                                            <input
-                                                type="radio"
-                                                name="trading_mode"
-                                                value="Margin"
-                                                id="trading-mode-margin"
-                                                onchange="
-                                                    updateTradingMode('Margin')
-                                                "
-                                            />
-                                            Margin Mode (Long + Short)
-                                        </label>
-                                    </div>
                                 </div>
                             </div>
 

@@ -37,18 +37,24 @@ jobs:
             exit 1
           fi
 
-          # Truncate logs if too large (keep last 3000 lines for context to fit in prompt)
-          if [ $(wc -l < failure.log) -gt 3000 ]; then
-            tail -n 3000 failure.log > failure_truncated.log
-            mv failure_truncated.log failure.log
+          # Extract only error-relevant lines (much smaller)
+          # Focus on: errors, failures, exit codes, and surrounding context
+          grep -i -E "error|fail|fatal|exception|✗|×|❌|exit code" failure.log | tail -n 100 > errors_only.log || true
+
+          # If no errors found, take last 100 lines
+          if [ ! -s errors_only.log ]; then
+            tail -n 100 failure.log > errors_only.log
           fi
 
-          echo "Log file size: $(wc -l < failure.log) lines"
+          # Further reduce to last 50 lines for token limit
+          tail -n 50 errors_only.log > final_errors.log
+
+          echo "Filtered log size: $(wc -l < final_errors.log) lines"
 
           # Output the log content for use in next step using heredoc
           {
             echo 'log_content<<EOF_LOGS'
-            cat failure.log
+            cat final_errors.log
             echo 'EOF_LOGS'
           } >> $GITHUB_OUTPUT
         env:
@@ -60,14 +66,11 @@ jobs:
           # Gather additional context for better AI analysis
           echo "workflow_name=${{ github.event.workflow_run.name }}" >> $GITHUB_OUTPUT
           echo "branch=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
-          echo "commit=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+          echo "commit=$(git rev-parse HEAD | cut -c1-8)" >> $GITHUB_OUTPUT
 
-          # Handle commit messages with special characters
-          {
-            echo 'commit_message<<EOF_MSG'
-            git log -1 --pretty=%B
-            echo 'EOF_MSG'
-          } >> $GITHUB_OUTPUT
+          # Get just first line of commit message
+          commit_msg=$(git log -1 --pretty=%s | head -c 100)
+          echo "commit_message=$commit_msg" >> $GITHUB_OUTPUT
 
       - name: AI Root Cause Analysis & Fix Generation
         id: ai_fix
@@ -75,30 +78,19 @@ jobs:
         with:
           model: gpt-4o
           prompt: |
-            You are an expert DevOps engineer analyzing a failed GitHub Actions workflow.
+            Analyze this failed CI workflow and provide a fix.
 
-            **Context:**
-            - Workflow: ${{ steps.context.outputs.workflow_name }}
-            - Branch: ${{ steps.context.outputs.branch }}
-            - Commit: ${{ steps.context.outputs.commit }}
-            - Commit Message: ${{ steps.context.outputs.commit_message }}
+            Context: ${{ steps.context.outputs.workflow_name }} on ${{ steps.context.outputs.branch }}
+            Commit: ${{ steps.context.outputs.commit }} - ${{ steps.context.outputs.commit_message }}
 
-            **Failed Workflow Logs:**
-            ```
+            Error logs:
+              ```plaintext
             ${{ steps.fetch_logs.outputs.log_content }}
             ```
 
-            **Instructions:**
-            1. Identify the root cause of the failure
-            2. Determine if this is fixable via code changes (not infrastructure/secrets issues)
-            3. If fixable, provide ONLY executable shell commands to apply the fix
-            4. Use safe commands like `sed -i`, `printf`, or `patch`
-            5. Do NOT include explanatory text, only commands
-            6. If unfixable via code, output: "UNFIXABLE: <reason>"
-
-            **Output format:**
-            If fixable, output shell commands only.
-            If not fixable, output: UNFIXABLE: <brief reason>
+            If fixable via code, output ONLY shell commands (sed, printf, patch).
+            If not fixable via code, output: UNFIXABLE: <reason>
+            No explanations, only commands or UNFIXABLE.
 
       - name: Validate AI Response
         id: validate
