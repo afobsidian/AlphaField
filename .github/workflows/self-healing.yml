@@ -37,17 +37,17 @@ jobs:
             exit 1
           fi
 
-          # Extract only error-relevant lines (much smaller)
-          # Focus on: errors, failures, exit codes, and surrounding context
-          grep -i -E "error|fail|fatal|exception|✗|×|❌|exit code" failure.log | tail -n 100 > errors_only.log || true
+          # Extract error-relevant lines with context
+          # Include 3 lines before and 3 lines after each error for file paths and context
+          grep -i -B 3 -A 3 -E "error|fail|fatal|exception|✗|×|❌|exit code" failure.log | tail -n 200 > errors_only.log || true
 
-          # If no errors found, take last 100 lines
+          # If no errors found, take last 200 lines
           if [ ! -s errors_only.log ]; then
-            tail -n 100 failure.log > errors_only.log
+            tail -n 200 failure.log > errors_only.log
           fi
 
-          # Further reduce to last 50 lines for token limit
-          tail -n 50 errors_only.log > final_errors.log
+          # Reduce to last 150 lines for token limit
+          tail -n 150 errors_only.log > final_errors.log
 
           echo "Filtered log size: $(wc -l < final_errors.log) lines"
 
@@ -85,6 +85,24 @@ jobs:
 
             Error logs:
             ${{ steps.fetch_logs.outputs.log_content }}
+
+            PROJECT STRUCTURE (Crucial for accurate file paths):
+            This is AlphaField, a Rust Cargo monorepo organized as:
+            - crates/core/      - Core types and traits
+            - crates/data/      - Data ingestion and storage
+            - crates/strategy/  - Technical indicators and strategies
+            - crates/backtest/  - Backtesting engine and ML models
+            - crates/execution/  - Order execution and risk management
+            - crates/dashboard/ - Web UI and API server
+
+            Common file locations within each crate:
+            - src/lib.rs        - Main library code
+            - src/main.rs       - Binary entry point
+            - src/bin/*.rs      - Additional binaries
+            - src/*.rs          - Other modules
+
+            IMPORTANT: Always use the full crate path (e.g., crates/strategy/src/lib.rs) NOT guessed paths like src/alphafield/strategy.rs
+            The logs will show the actual file paths that failed - use those exact paths.
 
             If fixable via code, output ONLY shell commands (sed, printf, patch).
             If not fixable via code, output: UNFIXABLE: <reason>
@@ -192,15 +210,21 @@ jobs:
             [ -z "$cmd" ] && continue
 
             # Extract file paths from various command patterns
-            # sed -i '...' file.txt
-            if echo "$cmd" | grep -qE 'sed.*-i.*\s+[^\s]+$'; then
-              file=$(echo "$cmd" | sed -E 's/^.*\s+([^\s]+)$/\1/')
+            # For sed -i commands, extract file from end of line
+            if echo "$cmd" | grep -qE '^\s*sed\s+-i'; then
+              # Extract filename - it's the last space-separated field
+              # Handle both quoted patterns: sed -i 'pattern' file or sed -i "pattern" file
+              file=$(echo "$cmd" | awk '{print $NF}')
               if [ -n "$file" ] && [ ! -f "$file" ]; then
-                missing_files="$missing_files $file"
+                # If simple extraction fails, try removing trailing quotes
+                file=$(echo "$file" | sed -E "s/['\"]$//")
+                if [ -n "$file" ] && [ ! -f "$file" ]; then
+                  missing_files="$missing_files $file"
+                fi
               fi
-            # cat file.txt, grep pattern file.txt, etc.
-            elif echo "$cmd" | grep -qE '^\s*(cat|grep|awk|head|tail|diff|patch)\s+[^\s]+\s+[^\s]+$'; then
-              file=$(echo "$cmd" | sed -E 's/^\s*\S+\s+.*\s+([^\s]+)$/\1/')
+            # For other commands with explicit file argument
+            elif echo "$cmd" | grep -qE '^\s*(cat|grep|awk|head|tail|diff|patch|mkdir|touch|chmod|rm|mv|cp)'; then
+              file=$(echo "$cmd" | awk '{print $NF}')
               if [ -n "$file" ] && [ ! -f "$file" ]; then
                 missing_files="$missing_files $file"
               fi
