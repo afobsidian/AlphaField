@@ -112,20 +112,68 @@ jobs:
 
           echo "can_fix=true" >> $GITHUB_OUTPUT
 
-          # Sanitize AI response to remove Markdown formatting and placeholders
-          sanitized_response=$(echo "$response" | \
-            sed '1s/^```shell//g; 1s/^```sh//g; 1s/^```bash//g; 1s/^```//g' | \
-            sed '$s/^```$//' | \
-            sed '/^```[a-z]*$/d' | \
-            sed 's|path/to/your/file\.rs||g; s|path/to/your/file||g; s|/path/to/file||g' | \
-            sed '/^[[:space:]]*$/d' | \
-            # Filter out placeholder-only commands
-            grep -vE '^\s*(echo|printf)\s+"?(\s+|TODO|FIXME|placeholder)' | \
-            grep -vE '^\s*#\s*(TODO|FIXME|placeholder)' | \
-            # Only keep lines that look like actual shell commands
-            grep -E '^\s*(sed|awk|grep|cat|echo|printf|mkdir|touch|chmod|rm|mv|cp|patch|git|cargo|npm|pip|pip3|yarn|make|bash|sh|true|false|exit|:|\.|source|cd)' || \
-            # If grep fails (no valid commands), output nothing
-            echo "")
+          # Debug: Show raw AI response
+          echo "===== RAW AI RESPONSE START ====="
+          echo "$response"
+          echo "===== RAW AI RESPONSE END ====="
+
+          # Sanitize AI response to remove Markdown formatting, placeholders, and metadata
+          echo "Starting sanitization process..."
+
+          # Step 1: Remove GitHub Actions metadata
+          step1=$(echo "$response" | sed -E '/^shell:\s*\/usr\/bin\/bash/d')
+          echo "After removing GitHub Actions metadata:"
+          echo "$step1"
+
+          # Step 2: Remove variable assignment lines (response="...")
+          step2=$(echo "$step1" | sed -E '/^\w+=["\x27]/d')
+          echo "After removing variable assignments:"
+          echo "$step2"
+
+          # Step 3: Remove opening Markdown code block markers
+          step3=$(echo "$step2" | sed '1s/^```shell//g; 1s/^```sh//g; 1s/^```bash//g; 1s/^```//g')
+          echo "After removing opening code blocks:"
+          echo "$step3"
+
+          # Step 4: Remove closing code block markers
+          step4=$(echo "$step3" | sed '$s/^```$//')
+          echo "After removing closing code blocks:"
+          echo "$step4"
+
+          # Step 5: Remove standalone code block markers
+          step5=$(echo "$step4" | sed '/^```[a-z]*$/d')
+          echo "After removing standalone code blocks:"
+          echo "$step5"
+
+          # Step 6: Remove placeholder paths
+          step6=$(echo "$step5" | sed 's|path/to/your/file\.rs||g; s|path/to/your/file||g; s|/path/to/file||g')
+          echo "After removing placeholder paths:"
+          echo "$step6"
+
+          # Step 7: Remove empty lines
+          step7=$(echo "$step6" | sed '/^[[:space:]]*$/d')
+          echo "After removing empty lines:"
+          echo "$step7"
+
+          # Step 8: Filter out placeholder-only commands and echo of variable names
+          step8=$(echo "$step7" | grep -vE '^\s*(echo|printf)\s+"?(\s+|TODO|FIXME|placeholder|\$)')
+          echo "After filtering placeholder echoes:"
+          echo "$step8"
+
+          # Step 9: Filter out comment placeholders
+          step9=$(echo "$step8" | grep -vE '^\s*#\s*(TODO|FIXME|placeholder)')
+          echo "After filtering comment placeholders:"
+          echo "$step9"
+
+          # Step 10: Filter out variable expansions
+          step10=$(echo "$step9" | grep -vE '^\s*\$\{')
+          echo "After filtering variable expansions:"
+          echo "$step10"
+
+          # Final: Only keep lines that look like actual shell commands
+          sanitized_response=$(echo "$step10" | grep -E '^\s*(sed|awk|grep|cat|echo|printf|mkdir|touch|chmod|rm|mv|cp|patch|git|cargo|npm|pip|pip3|yarn|make|bash|sh|true|false|exit|:|\.|source|cd)' || echo "")
+          echo "Final sanitized response:"
+          echo "$sanitized_response"
 
           # Validate we have actual commands after sanitization
           if [ -z "$sanitized_response" ]; then
@@ -135,12 +183,48 @@ jobs:
             exit 0
           fi
 
+          # Validate that files referenced in commands exist
+          echo "Validating referenced files..."
+          missing_files=""
+
+          # Extract file paths from commands (handles multiple patterns)
+          while IFS= read -r cmd; do
+            [ -z "$cmd" ] && continue
+
+            # Extract file paths from various command patterns
+            # sed -i '...' file.txt
+            if echo "$cmd" | grep -qE 'sed.*-i.*\s+[^\s]+$'; then
+              file=$(echo "$cmd" | sed -E 's/^.*\s+([^\s]+)$/\1/')
+              if [ -n "$file" ] && [ ! -f "$file" ]; then
+                missing_files="$missing_files $file"
+              fi
+            # cat file.txt, grep pattern file.txt, etc.
+            elif echo "$cmd" | grep -qE '^\s*(cat|grep|awk|head|tail|diff|patch)\s+[^\s]+\s+[^\s]+$'; then
+              file=$(echo "$cmd" | sed -E 's/^\s*\S+\s+.*\s+([^\s]+)$/\1/')
+              if [ -n "$file" ] && [ ! -f "$file" ]; then
+                missing_files="$missing_files $file"
+              fi
+            fi
+          done <<< "$sanitized_response"
+
+          if [ -n "$missing_files" ]; then
+            echo "The following files referenced in commands do not exist:$missing_files"
+            echo "can_fix=false" >> $GITHUB_OUTPUT
+            echo "reason=Referenced files do not exist:$missing_files" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "All referenced files exist, proceeding with fix..."
+
           # Save sanitized commands to file for execution
+          echo "Saving sanitized commands to fix_commands.sh..."
           echo "$sanitized_response" > fix_commands.sh
           chmod +x fix_commands.sh
 
-          echo "AI suggested fix commands:"
+          echo "AI suggested fix commands (from file):"
           cat fix_commands.sh
+
+          echo "Sanitization complete. Valid commands: $(wc -l < fix_commands.sh) lines"
 
       - name: Apply AI-Generated Fix
         if: steps.validate.outputs.can_fix == 'true'
