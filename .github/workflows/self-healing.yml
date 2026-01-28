@@ -112,8 +112,31 @@ jobs:
 
           echo "can_fix=true" >> $GITHUB_OUTPUT
 
-          # Save commands to file for execution
-          echo "$response" > fix_commands.sh
+          # Sanitize AI response to remove Markdown formatting and placeholders
+          sanitized_response=$(echo "$response" | \
+            sed '1s/^```shell//g; 1s/^```sh//g; 1s/^```bash//g; 1s/^```//g' | \
+            sed '$s/^```$//' | \
+            sed '/^```[a-z]*$/d' | \
+            sed 's|path/to/your/file\.rs||g; s|path/to/your/file||g; s|/path/to/file||g' | \
+            sed '/^[[:space:]]*$/d' | \
+            # Filter out placeholder-only commands
+            grep -vE '^\s*(echo|printf)\s+"?(\s+|TODO|FIXME|placeholder)' | \
+            grep -vE '^\s*#\s*(TODO|FIXME|placeholder)' | \
+            # Only keep lines that look like actual shell commands
+            grep -E '^\s*(sed|awk|grep|cat|echo|printf|mkdir|touch|chmod|rm|mv|cp|patch|git|cargo|npm|pip|pip3|yarn|make|bash|sh|true|false|exit|:|\.|source|cd)' || \
+            # If grep fails (no valid commands), output nothing
+            echo "")
+
+          # Validate we have actual commands after sanitization
+          if [ -z "$sanitized_response" ]; then
+            echo "No valid shell commands found after sanitization"
+            echo "can_fix=false" >> $GITHUB_OUTPUT
+            echo "reason=Sanitization removed all commands - output contained only Markdown formatting or placeholders" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Save sanitized commands to file for execution
+          echo "$sanitized_response" > fix_commands.sh
           chmod +x fix_commands.sh
 
           echo "AI suggested fix commands:"
