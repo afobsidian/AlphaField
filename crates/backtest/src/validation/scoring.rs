@@ -654,6 +654,10 @@ mod tests {
 
     fn create_test_components() -> ValidationComponents {
         crate::validation::ValidationComponents {
+            statistical_significance: None,
+            robustness: None,
+            temporal_validation: None,
+            regime_testing: None,
             backtest: create_test_backtest(),
             walk_forward: create_test_walk_forward(),
             monte_carlo: create_test_monte_carlo(),

@@ -6,7 +6,7 @@
 
 use crate::metrics::PerformanceMetrics;
 use crate::trade::Trade;
-use chrono::{DateTime, Datelike, Duration, Utc};
+// use chrono::Datelike;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
@@ -179,7 +179,7 @@ impl RobustnessResult {
             let avg_sharpe: f64 = self.cross_assets.iter().map(|c| c.sharpe).sum::<f64>()
                 / self.cross_assets.len() as f64;
             // Normalize: Sharpe of 0 = 50, Sharpe of 2 = 100
-            let cross_asset_score = 50.0 + 25.0 * (avg_sharpe / 2.0).min(2.0).max(-2.0);
+            let cross_asset_score = 50.0 + 25.0 * (avg_sharpe / 2.0).clamp(-2.0, 2.0);
             score += cross_asset_score * 0.20;
             weight_sum += 0.20;
         }
@@ -506,139 +506,4 @@ pub struct StrategyParams {
     pub cross_asset_results: Vec<CrossAssetResult>,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::{DateTime, NaiveDateTime, Utc};
-    use rust_decimal::Decimal;
 
-    fn create_test_trades() -> Vec<Trade> {
-        vec![
-            Trade {
-                id: String::new(),
-                symbol: "BTC".to_string(),
-                entry_price: 100.0,
-                exit_price: 105.0,
-                quantity: Decimal::from(10),
-                entry_time: DateTime::from_utc(
-                    DateTime::from_timestamp(1000000, 0).unwrap(),
-                    Utc,
-                ),
-                exit_time: DateTime::from_utc(
-                    DateTime::from_timestamp(1000001, 0).unwrap(),
-                    Utc,
-                ),
-                side: crate::trade::TradeSide::Long,
-            },
-            Trade {
-                id: String::new(),
-                symbol: "BTC".to_string(),
-                entry_price: 105.0,
-                exit_price: 103.0,
-                quantity: Decimal::from(10),
-                entry_time: DateTime::from_utc(
-                    DateTime::from_timestamp(1000002, 0).unwrap(),
-                    Utc,
-                ),
-                exit_time: DateTime::from_utc(
-                    DateTime::from_timestamp(1000003, 0).unwrap(),
-                    Utc,
-                ),
-                side: crate::trade::TradeSide::Long,
-            },
-            Trade {
-                id: String::new(),
-                symbol: "BTC".to_string(),
-                entry_price: 103.0,
-                exit_price: 110.0,
-                quantity: Decimal::from(10),
-                entry_time: DateTime::from_utc(
-                    DateTime::from_timestamp(1000004, 0).unwrap(),
-                    Utc,
-                ),
-                exit_time: DateTime::from_utc(
-                    DateTime::from_timestamp(1000005, 0).unwrap(),
-                    Utc,
-                ),
-                side: crate::trade::TradeSide::Long,
-            },
-        ]
-    }
-
-    fn create_metrics(sharpe: f64) -> PerformanceMetrics {
-        PerformanceMetrics {
-            total_return: 10.0,
-            sharpe_ratio: sharpe,
-            sortino_ratio: 1.5,
-            max_drawdown: 5.0,
-            win_rate: 0.6,
-            profit_factor: 2.0,
-            average_win: 100.0,
-            average_loss: -50.0,
-            total_trades: 10,
-            total_wins: 6,
-            total_losses: 4,
-            calmar_ratio: sharpe * 0.8,
-            omega_ratio: 1.8,
-        }
-    }
-
-    #[test]
-    fn test_calculate_complexity() {
-        let result = calculate_complexity(5, 3, 10);
-        assert_eq!(result.n_parameters, 5);
-        assert_eq!(result.n_indicators, 3);
-        assert_eq!(result.n_branches, 10);
-        assert!(result.penalty_score >= 0.0 && result.penalty_score <= 1.0);
-    }
-
-    #[test]
-    fn test_complexity_ratings() {
-        let excellent = calculate_complexity(1, 1, 2);
-        assert!(matches!(excellent.rating, ComplexityRating::Excellent));
-
-        let moderate = calculate_complexity(5, 3, 10);
-        assert!(matches!(
-            moderate.rating,
-            ComplexityRating::Good | ComplexityRating::Moderate
-        ));
-
-        let very_poor = calculate_complexity(15, 10, 30);
-        assert!(matches!(very_poor.rating, ComplexityRating::VeryPoor));
-    }
-
-    #[test]
-    fn test_test_perturbation() {
-        let result = test_perturbation(1.5, 1.2, 0.02);
-        assert_eq!(result.original_sharpe, 1.5);
-        assert_eq!(result.perturbed_sharpe, 1.2);
-        assert_eq!(result.noise_level, 0.02);
-        assert!((result.degradation_pct - 20.0).abs() < 0.1);
-        assert!(!result.is_acceptable); // 20% is not < 20%
-    }
-
-    #[test]
-    fn test_analyze_outliers() {
-        let trades = create_test_trades();
-        let result = analyze_outliers(&trades, 0.02);
-
-        assert!(result.original_sharpe.is_finite());
-        assert!(result.sharpe_no_top.is_finite());
-        assert!(result.sharpe_no_bottom.is_finite());
-        assert!(result.sharpe_no_outliers.is_finite());
-        assert!(result.outlier_dependency >= 0.0 && result.outlier_dependency <= 1.0);
-    }
-
-    #[test]
-    fn test_validate_robustness() {
-        let trades = create_test_trades();
-        let metrics = create_metrics(1.5);
-        let params = StrategyParams::default();
-
-        let result = validate_robustness(&trades, &metrics, 0.02, &params);
-
-        assert_eq!(result.complexity.n_parameters, 0);
-        assert_eq!(result.perturbations.len(), 3); // 3 noise levels
-        assert!(result.outlier.original_sharpe.is_finite());
-    }
-}

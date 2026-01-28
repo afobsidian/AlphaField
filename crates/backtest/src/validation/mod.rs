@@ -5,10 +5,10 @@
 //! regime-based performance analysis.
 
 pub mod regime;
-pub mod regime_testing;
-pub mod robustness;
 pub mod scoring;
 pub mod statistical_significance;
+pub mod robustness;
+pub mod regime_testing;
 pub mod temporal;
 pub mod validator;
 
@@ -234,7 +234,6 @@ pub struct ValidationComponents {
 // Re-export regime module types
 pub use regime::{MarketRegime, RegimeAnalysisResult, RegimeAnalyzer, RegimePerformance};
 pub use scoring::{RecommendationsGenerator, ScoreCalculator, ScoreWeights};
-pub use validator::StrategyValidator;
 
 // Re-export Phase 13 advanced validation modules
 pub use regime_testing::{validate_regime_testing, RegimeTestingResult};

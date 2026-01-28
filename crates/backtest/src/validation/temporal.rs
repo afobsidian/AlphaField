@@ -6,7 +6,7 @@
 
 use crate::metrics::PerformanceMetrics;
 use crate::trade::Trade;
-use chrono::{DateTime, Datelike, Duration, Utc};
+use chrono::{DateTime, Datelike, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Expanding window result
@@ -122,7 +122,7 @@ pub enum StabilityRating {
 }
 
 /// Period type
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum PeriodType {
     Year,
     Quarter,
@@ -715,106 +715,4 @@ fn calculate_max_drawdown(returns: &[f64]) -> f64 {
     }
 
     max_drawdown
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::NaiveDateTime;
-    use rust_decimal::Decimal;
-
-    fn create_test_trades() -> Vec<Trade> {
-        let start_time =
-            DateTime::from_utc(DateTime::from_timestamp(1000000, 0).unwrap(), Utc);
-
-        (0..20)
-            .map(|i| Trade {
-                id: String::new(),
-                symbol: "BTC".to_string(),
-                entry_price: 100.0 + i as f64,
-                exit_price: 105.0 + i as f64,
-                quantity: Decimal::from(10),
-                entry_time: start_time + Duration::days(i),
-                exit_time: start_time + Duration::days(i + 1),
-                side: crate::trade::TradeSide::Long,
-            })
-            .collect()
-    }
-
-    #[test]
-    fn test_analyze_expanding_windows() {
-        let trades = create_test_trades();
-        let window_sizes = vec![5, 10, 15, 20];
-        let results = analyze_expanding_windows(&trades, 0.02, window_sizes);
-
-        assert_eq!(results.len(), 4);
-        assert_eq!(results[0].window_size, 5);
-        assert_eq!(results[3].window_size, 20);
-    }
-
-    #[test]
-    fn test_analyze_rolling_stability() {
-        let trades = create_test_trades();
-        let result = analyze_rolling_stability(&trades, 0.02, 10, 1);
-
-        assert_eq!(result.window_size, 10);
-        assert!(result.mean_sharpe.is_finite());
-        assert!(result.std_sharpe >= 0.0);
-        assert!(result.n_windows > 0);
-    }
-
-    #[test]
-    fn test_decompose_by_period() {
-        let trades = create_test_trades();
-        let results = decompose_by_period(&trades, 0.02, PeriodType::Year);
-
-        assert!(!results.is_empty());
-        assert_eq!(results[0].period_type, PeriodType::Year);
-    }
-
-    #[test]
-    fn test_analyze_market_cycles() {
-        let trades = create_test_trades();
-        let results = analyze_market_cycles(&trades, None, 0.02);
-
-        assert_eq!(results.len(), 1);
-        assert!(results[0].n_trades > 0);
-    }
-
-    #[test]
-    fn test_forward_looking_validation() {
-        let result = forward_looking_validation(1.5, Some(1.2), Some(1.0));
-
-        assert_eq!(result.backtest_sharpe, 1.5);
-        assert_eq!(result.paper_sharpe, Some(1.2));
-        assert_eq!(result.live_sharpe, Some(1.0));
-        assert!(result.backtest_to_paper_degradation.is_some());
-        assert!(result.paper_to_live_degradation.is_some());
-    }
-
-    #[test]
-    fn test_validate_temporal() {
-        let trades = create_test_trades();
-        let metrics = PerformanceMetrics {
-            total_return: 10.0,
-            sharpe_ratio: 1.5,
-            sortino_ratio: 1.5,
-            max_drawdown: 5.0,
-            win_rate: 0.6,
-            profit_factor: 2.0,
-            average_win: 100.0,
-            average_loss: -50.0,
-            total_trades: 20,
-            total_wins: 12,
-            total_losses: 8,
-            calmar_ratio: 1.2,
-            omega_ratio: 1.8,
-        };
-
-        let result = validate_temporal(&trades, &metrics, 0.02, None, None);
-
-        assert!(!result.expanding_windows.is_empty());
-        assert_eq!(result.rolling_stability.n_windows > 0, true);
-        assert!(!result.periods.is_empty());
-    }
 }

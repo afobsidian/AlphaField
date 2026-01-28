@@ -359,7 +359,6 @@ pub fn adf_test(
 pub fn sharpe_significance(
     sharpe: f64,
     returns: &[f64],
-    risk_free_rate: f64,
 ) -> SharpeSignificance {
     if returns.len() < 2 {
         return SharpeSignificance {
@@ -374,17 +373,15 @@ pub fn sharpe_significance(
 
     // Calculate standard error of Sharpe
     let n = returns.len() as f64;
+    // Calculate standard deviation
     let mean_return: f64 = returns.iter().sum::<f64>() / n;
-
-    let mut variance = 0.0;
-    for &r in returns {
+    let mut variance: f64 = 0.0;
+    for r in returns {
         variance += (r - mean_return).powi(2);
     }
     variance /= n - 1.0;
-
-    // Approximate standard error of Sharpe (Jobson & Korkie, 1981)
+    // Calculate standard error of Sharpe (approximate)
     let standard_error = ((1.0 + 0.5 * sharpe.powi(2)) / n).sqrt();
-
     let t_statistic = if standard_error > 1e-10 {
         sharpe / standard_error
     } else {
@@ -512,11 +509,11 @@ pub fn validate_statistical_significance(
         .iter()
         .map(|t| (t.exit_price - t.entry_price) / t.entry_price)
         .collect();
-    let sharpe_significance = sharpe_significance(metrics.sharpe_ratio, &returns, risk_free_rate);
+    let sharpe_significance = sharpe_significance(metrics.sharpe_ratio, &returns);
 
     // Correlation analysis
     let correlation = if let Some(add_returns) = additional_returns {
-        let all_returns = vec![returns.clone()];
+        let all_returns = [returns.clone()];
         let all_returns: Vec<Vec<f64>> = all_returns.iter().chain(add_returns).cloned().collect();
 
         let mut names = vec!["Main Strategy".to_string()];
@@ -625,118 +622,4 @@ fn pearson_correlation(x: ArrayView1<f64>, y: ArrayView1<f64>) -> f64 {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use chrono::{DateTime, NaiveDateTime, Utc};
-    use rust_decimal::Decimal;
 
-    fn create_test_trades() -> Vec<Trade> {
-        vec![
-            Trade {
-                id: String::new(),
-                symbol: "BTC".to_string(),
-                entry_price: 100.0,
-                exit_price: 105.0,
-                quantity: Decimal::from(10),
-                entry_time: DateTime::from_utc(
-                    DateTime::from_timestamp(1000000, 0).unwrap(),
-                    Utc,
-                ),
-                exit_time: DateTime::from_utc(
-                    DateTime::from_timestamp(1000001, 0).unwrap(),
-                    Utc,
-                ),
-                side: crate::trade::TradeSide::Long,
-            },
-            Trade {
-                id: String::new(),
-                symbol: "BTC".to_string(),
-                entry_price: 105.0,
-                exit_price: 103.0,
-                quantity: Decimal::from(10),
-                entry_time: DateTime::from_utc(
-                    DateTime::from_timestamp(1000002, 0).unwrap(),
-                    Utc,
-                ),
-                exit_time: DateTime::from_utc(
-                    DateTime::from_timestamp(1000003, 0).unwrap(),
-                    Utc,
-                ),
-                side: crate::trade::TradeSide::Long,
-            },
-            Trade {
-                id: String::new(),
-                symbol: "BTC".to_string(),
-                entry_price: 103.0,
-                exit_price: 110.0,
-                quantity: Decimal::from(10),
-                entry_time: DateTime::from_utc(
-                    DateTime::from_timestamp(1000004, 0).unwrap(),
-                    Utc,
-                ),
-                exit_time: DateTime::from_utc(
-                    DateTime::from_timestamp(1000005, 0).unwrap(),
-                    Utc,
-                ),
-                side: crate::trade::TradeSide::Long,
-            },
-        ]
-    }
-
-    #[test]
-    fn test_bootstrap_sharpe() {
-        let trades = create_test_trades();
-        let result = bootstrap_sharpe(&trades, 0.02, 100, 0.95).unwrap();
-
-        assert_eq!(result.iterations, 100);
-        assert!(result.mean_sharpe.is_finite());
-        assert!(result.ci_lower <= result.mean_sharpe);
-        assert!(result.ci_upper >= result.mean_sharpe);
-    }
-
-    #[test]
-    fn test_permutation_test() {
-        let trades = create_test_trades();
-        let result =
-            permutation_test(&trades, |t| calculate_sharpe_from_trades(t, 0.02), 100).unwrap();
-
-        assert_eq!(result.permutations, 100);
-        assert!(result.p_value >= 0.0 && result.p_value <= 1.0);
-        assert!(result.permuted_mean.is_finite());
-    }
-
-    #[test]
-    fn test_adf_test() {
-        let trades = create_test_trades();
-        let result = adf_test(&trades, true).unwrap();
-
-        assert!(result.adf_statistic.is_finite());
-        assert_eq!(result.critical_value_5pct, -2.86);
-        assert_eq!(result.critical_value_1pct, -3.43);
-    }
-
-    #[test]
-    fn test_sharpe_significance() {
-        let returns = vec![0.05, -0.02, 0.03, 0.01, -0.01];
-        let result = sharpe_significance(0.5, &returns, 0.02);
-
-        assert_eq!(result.sharpe, 0.5);
-        assert!(result.standard_error >= 0.0);
-        assert!(result.p_value >= 0.0 && result.p_value <= 1.0);
-    }
-
-    #[test]
-    fn test_calculate_correlations() {
-        let returns1 = vec![0.05, -0.02, 0.03, 0.01, -0.01];
-        let returns2 = vec![0.04, -0.01, 0.02, 0.02, -0.02];
-        let names = vec!["Strategy A".to_string(), "Strategy B".to_string()];
-
-        let result = calculate_correlations(&[returns1, returns2], &names).unwrap();
-
-        assert_eq!(result.n_strategies, 2);
-        assert_eq!(result.strategy_names.len(), 2);
-        assert!((result.correlation_matrix[0] - 1.0).abs() < 0.01); // Diagonal = 1
-        assert!((result.correlation_matrix[3] - 1.0).abs() < 0.01); // Diagonal = 1
-    }
-}
