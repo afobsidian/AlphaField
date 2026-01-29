@@ -505,5 +505,3 @@ pub struct StrategyParams {
     /// Results from cross-asset tests (if available)
     pub cross_asset_results: Vec<CrossAssetResult>,
 }
-
-

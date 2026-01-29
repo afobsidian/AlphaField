@@ -3,7 +3,7 @@
 //! Command-line tool for validating trading strategies without requiring
 //! full dashboard integration.
 use alphafield_backtest::validation::MarketRegime as BacktestRegime;
-use alphafield_backtest::RegimeAnalyzer;
+use alphafield_backtest::validation::RegimeAnalyzer;
 use alphafield_backtest::{
     Strategy, StrategyAdapter, StrategyValidator, ValidationConfig, ValidationReport,
     ValidationThresholds, WalkForwardConfig,

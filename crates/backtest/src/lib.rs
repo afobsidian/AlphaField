@@ -58,6 +58,6 @@ pub use strategy::{BuyAndHold, OrderRequest, OrderSide, OrderType, Strategy, Str
 pub use trade::{Trade, TradeSide, TradeStats};
 pub use validation::{
     BacktestResult, DeploymentRecommendation, MarketRegime, Recommendations, RegimeAnalysisResult,
-    ValidationConfig, ValidationReport, ValidationThresholds, ValidationVerdict,
+    StrategyValidator, ValidationConfig, ValidationReport, ValidationThresholds, ValidationVerdict,
 };
 pub use walk_forward::{WalkForwardAnalyzer, WalkForwardConfig, WalkForwardResult};

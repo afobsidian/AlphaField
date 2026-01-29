@@ -356,10 +356,7 @@ pub fn adf_test(
 /// * `sharpe` - Sharpe ratio
 /// * `returns` - Vector of returns
 /// * `risk_free_rate` - Annual risk-free rate
-pub fn sharpe_significance(
-    sharpe: f64,
-    returns: &[f64],
-) -> SharpeSignificance {
+pub fn sharpe_significance(sharpe: f64, returns: &[f64]) -> SharpeSignificance {
     if returns.len() < 2 {
         return SharpeSignificance {
             sharpe: 0.0,
@@ -373,14 +370,7 @@ pub fn sharpe_significance(
 
     // Calculate standard error of Sharpe
     let n = returns.len() as f64;
-    // Calculate standard deviation
-    let mean_return: f64 = returns.iter().sum::<f64>() / n;
-    let mut variance: f64 = 0.0;
-    for r in returns {
-        variance += (r - mean_return).powi(2);
-    }
-    variance /= n - 1.0;
-    // Calculate standard error of Sharpe (approximate)
+    // Standard error approximation (doesn't require mean or variance)
     let standard_error = ((1.0 + 0.5 * sharpe.powi(2)) / n).sqrt();
     let t_statistic = if standard_error > 1e-10 {
         sharpe / standard_error
@@ -621,5 +611,3 @@ fn pearson_correlation(x: ArrayView1<f64>, y: ArrayView1<f64>) -> f64 {
         covariance / denominator
     }
 }
-
-

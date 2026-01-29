@@ -462,10 +462,7 @@ pub fn decompose_by_period(
             ),
         };
 
-        period_trades
-            .entry(period_id)
-            .or_insert_with(Vec::new)
-            .push(trade);
+        period_trades.entry(period_id).or_default().push(trade);
     }
 
     let mut results = Vec::new();

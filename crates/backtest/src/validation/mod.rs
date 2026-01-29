@@ -5,10 +5,10 @@
 //! regime-based performance analysis.
 
 pub mod regime;
+pub mod regime_testing;
+pub mod robustness;
 pub mod scoring;
 pub mod statistical_significance;
-pub mod robustness;
-pub mod regime_testing;
 pub mod temporal;
 pub mod validator;
 
@@ -242,3 +242,6 @@ pub use statistical_significance::{
     validate_statistical_significance, StatisticalSignificanceResult,
 };
 pub use temporal::{validate_temporal, TemporalValidationResult};
+
+// Re-export main validator
+pub use validator::StrategyValidator;

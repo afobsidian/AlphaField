@@ -161,7 +161,7 @@ impl RegimeTestingResult {
                 / self.transitions.len() as f64;
             // Positive impact = good adaptation
             let transition_score = 50.0 + avg_impact * 25.0;
-            score += transition_score.max(0.0).min(100.0) * 0.25;
+            score += transition_score.clamp(0.0, 100.0) * 0.25;
             weight_sum += 0.25;
         }
 
@@ -259,12 +259,12 @@ pub fn detect_regimes(trades: &[Trade], _price_data: Option<&[f64]>) -> Vec<Mark
             let characteristics = RegimeCharacteristics {
                 avg_return,
                 volatility,
-                trend_strength: (avg_return / (volatility + 0.01)).min(1.0).max(-1.0).abs(),
+                trend_strength: (avg_return / (volatility + 0.01)).clamp(-1.0, 1.0).abs(),
                 n_regime_changes: 1,
             };
 
             regimes.push(MarketRegimeDetected {
-                regime_type: current.regime_type,
+                regime_type: current_regime_type,
                 confidence: 0.7, // Simplified confidence
                 start: regime_start,
                 end: returns[i].0,
@@ -293,7 +293,7 @@ pub fn detect_regimes(trades: &[Trade], _price_data: Option<&[f64]>) -> Vec<Mark
         let characteristics = RegimeCharacteristics {
             avg_return,
             volatility,
-            trend_strength: (avg_return / (volatility + 0.01)).min(1.0).max(-1.0).abs(),
+            trend_strength: (avg_return / (volatility + 0.01)).clamp(-1.0, 1.0).abs(),
             n_regime_changes: 0,
         };
 
@@ -398,7 +398,8 @@ pub fn analyze_transitions(
         let trades_before: Vec<&Trade> = trades
             .iter()
             .filter(|t| {
-                let days_before = ((transition_time - t.entry_time).num_days()).num_days().unsigned_abs() as usize;
+                let days_before =
+                    (transition_time - t.entry_time).num_days().unsigned_abs() as usize;
                 days_before <= window_bars && t.entry_time <= transition_time
             })
             .collect();
@@ -407,7 +408,8 @@ pub fn analyze_transitions(
         let trades_after: Vec<&Trade> = trades
             .iter()
             .filter(|t| {
-                let days_after = ((t.entry_time - transition_time).num_days()).num_days().unsigned_abs() as usize;
+                let days_after =
+                    (t.entry_time - transition_time).num_days().unsigned_abs() as usize;
                 days_after <= window_bars && t.entry_time >= transition_time
             })
             .collect();
@@ -592,7 +594,7 @@ pub fn validate_regime_testing(
         .last()
         .map(|r| r.regime_type)
         .unwrap_or(RegimeType::Sideways);
-    let prediction = Some(predict_regime(current_regime, &regimes));
+    let prediction = Some(predict_regime(start_time_regime, &regimes));
 
     RegimeTestingResult {
         regimes,
@@ -648,5 +650,3 @@ fn calculate_max_drawdown(returns: &[f64]) -> f64 {
 
     max_drawdown
 }
-
-

@@ -41,7 +41,10 @@ impl ScoreWeights {
             + self.walk_forward
             + self.monte_carlo
             + self.regime_match
-            + self.risk_metrics;
+            + self.risk_metrics
+            + self.statistical_significance
+            + self.robustness
+            + self.temporal_validation;
         (sum - 1.0).abs() < 0.0001
     }
 }
