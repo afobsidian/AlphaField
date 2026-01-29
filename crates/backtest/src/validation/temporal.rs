@@ -312,7 +312,8 @@ pub fn analyze_expanding_windows(
             .collect();
 
         let cumulative_return: f64 = returns.iter().sum();
-        let cumulative_sharpe = calculate_sharpe_from_returns(&returns, risk_free_rate);
+        let cumulative_sharpe =
+            crate::validation::calculate_sharpe_from_returns(&returns, risk_free_rate);
         let max_drawdown = calculate_max_drawdown(&returns);
 
         let window_start = window_trades.first().map(|t| t.entry_time).unwrap();
@@ -368,7 +369,7 @@ pub fn analyze_rolling_stability(
             .map(|t| (t.exit_price - t.entry_price) / t.entry_price)
             .collect();
 
-        let sharpe = calculate_sharpe_from_returns(&returns, risk_free_rate);
+        let sharpe = crate::validation::calculate_sharpe_from_returns(&returns, risk_free_rate);
         sharpes.push(sharpe);
     }
 
@@ -401,11 +402,11 @@ pub fn analyze_rolling_stability(
 
     let min_sharpe = *sharpes
         .iter()
-        .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .min_by(|a: &&f64, b: &&f64| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .unwrap_or(&0.0);
     let max_sharpe = *sharpes
         .iter()
-        .max_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+        .max_by(|a: &&f64, b: &&f64| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
         .unwrap_or(&0.0);
 
     let rating = match cv_sharpe {
@@ -478,7 +479,7 @@ pub fn decompose_by_period(
             .collect();
 
         let period_return: f64 = returns.iter().sum();
-        let sharpe = calculate_sharpe_from_returns(&returns, risk_free_rate);
+        let sharpe = crate::validation::calculate_sharpe_from_returns(&returns, risk_free_rate);
         let max_drawdown = calculate_max_drawdown(&returns);
 
         let start = period_trade_list.first().map(|t| t.entry_time).unwrap();
@@ -527,7 +528,7 @@ pub fn analyze_market_cycles(
         .collect();
 
     let period_return: f64 = returns.iter().sum();
-    let sharpe = calculate_sharpe_from_returns(&returns, risk_free_rate);
+    let sharpe = crate::validation::calculate_sharpe_from_returns(&returns, risk_free_rate);
     let max_drawdown = calculate_max_drawdown(&returns);
 
     let start = trades.first().map(|t| t.entry_time).unwrap();
@@ -628,25 +629,29 @@ pub fn forward_looking_validation(
 /// * `risk_free_rate` - Annual risk-free rate
 /// * `paper_sharpe` - Optional paper trading Sharpe
 /// * `live_sharpe` - Optional live trading Sharpe
+/// * `expanding_step_fraction` - Fraction of trades for expanding window step (default: 0.2)
+/// * `rolling_window_fraction` - Fraction of trades for rolling window (default: 0.5)
 pub fn validate_temporal(
     trades: &[Trade],
     metrics: &PerformanceMetrics,
     risk_free_rate: f64,
     paper_sharpe: Option<f64>,
     live_sharpe: Option<f64>,
+    expanding_step_fraction: f64,
+    rolling_window_fraction: f64,
 ) -> TemporalValidationResult {
     // Expanding window analysis (use multiple window sizes)
     let n_trades = trades.len();
     let window_sizes = if n_trades > 0 {
-        let step = (n_trades / 5).max(10);
-        (step..=n_trades).step_by(step).collect()
+        let step = (n_trades as f64 * expanding_step_fraction) as usize;
+        (step.max(10)..=n_trades).step_by(step).collect()
     } else {
         Vec::new()
     };
     let expanding_windows = analyze_expanding_windows(trades, risk_free_rate, window_sizes);
 
-    // Rolling stability analysis (6-month window)
-    let window_size = (n_trades as f64 * 0.5) as usize;
+    // Rolling stability analysis (configurable window size)
+    let window_size = (n_trades as f64 * rolling_window_fraction) as usize;
     let rolling_stability = analyze_rolling_stability(trades, risk_free_rate, window_size, 1);
 
     // Period decomposition (by year)
@@ -665,32 +670,6 @@ pub fn validate_temporal(
         periods,
         market_cycles,
         forward_looking,
-    }
-}
-
-/// Helper: Calculate Sharpe ratio from returns
-fn calculate_sharpe_from_returns(returns: &[f64], risk_free_rate: f64) -> f64 {
-    if returns.is_empty() {
-        return 0.0;
-    }
-
-    let mean_return: f64 = returns.iter().sum::<f64>() / returns.len() as f64;
-
-    let mut variance = 0.0;
-    for &r in returns {
-        variance += (r - mean_return).powi(2);
-    }
-    variance /= (returns.len() - 1) as f64;
-
-    let std_dev = variance.sqrt();
-
-    if std_dev < 1e-10 {
-        0.0
-    } else {
-        // Annualize (assuming daily returns)
-        let annual_mean = mean_return * 252.0;
-        let annual_std = std_dev * (252.0_f64).sqrt();
-        (annual_mean - risk_free_rate) / annual_std
     }
 }
 

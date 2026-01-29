@@ -35,6 +35,24 @@ pub struct ValidationConfig {
     pub risk_free_rate: f64,
     /// Pass/fail thresholds
     pub thresholds: ValidationThresholds,
+    /// Phase 13: Maximum complexity parameters (for complexity penalty)
+    pub max_parameters: usize,
+    /// Phase 13: Maximum indicators (for complexity penalty)
+    pub max_indicators: usize,
+    /// Phase 13: Maximum branches (for complexity penalty)
+    pub max_branches: usize,
+    /// Phase 13: Noise levels for perturbation testing (as decimal, e.g., 0.01 for 1%)
+    pub perturbation_noise_levels: Vec<f64>,
+    /// Phase 13: Window size as fraction of total trades (0.0-1.0)
+    pub rolling_window_fraction: f64,
+    /// Phase 13: Expanding window step as fraction of total trades (0.0-1.0)
+    pub expanding_window_step_fraction: f64,
+    /// Phase 13: Maximum iterations for bootstrap/permutation tests
+    pub max_statistical_iterations: usize,
+    /// Phase 13: Enable early stopping for large datasets
+    pub enable_early_stopping: bool,
+    /// Phase 13: Timeout in seconds for statistical tests (0 = no timeout)
+    pub statistical_timeout_seconds: Option<u64>,
     /// Initial capital for backtesting
     pub initial_capital: f64,
     /// Fee rate for simulated trading
@@ -52,6 +70,16 @@ impl Default for ValidationConfig {
             thresholds: ValidationThresholds::default(),
             initial_capital: 10000.0,
             fee_rate: 0.001,
+            // Phase 13 defaults
+            max_parameters: 10,
+            max_indicators: 5,
+            max_branches: 20,
+            perturbation_noise_levels: vec![0.01, 0.02, 0.05],
+            rolling_window_fraction: 0.5,
+            expanding_window_step_fraction: 0.2,
+            max_statistical_iterations: 1000,
+            enable_early_stopping: true,
+            statistical_timeout_seconds: Some(30),
         }
     }
 }
@@ -229,6 +257,118 @@ pub struct ValidationComponents {
     pub robustness: Option<robustness::RobustnessResult>,
     pub temporal_validation: Option<temporal::TemporalValidationResult>,
     pub regime_testing: Option<regime_testing::RegimeTestingResult>,
+}
+
+impl ValidationComponents {
+    /// Run all Phase 13 advanced validations based on available data
+    ///
+    /// This method automatically runs statistical significance, regime testing,
+    /// temporal validation, and robustness analysis if sufficient data is available.
+    ///
+    /// # Returns
+    /// Updated ValidationComponents with Phase 13 results populated
+    pub fn run_phase_13_validations(mut self) -> Self {
+        let risk_free_rate = self.config.risk_free_rate;
+
+        // Statistical Significance Validation
+        if !self.backtest.trades.is_empty() {
+            let stat_sig_result = statistical_significance::validate_statistical_significance(
+                &self.backtest.trades,
+                &self.backtest.metrics,
+                risk_free_rate,
+                None,
+                None,
+                self.config.statistical_timeout_seconds,
+            );
+            self.statistical_significance = Some(stat_sig_result.ok().unwrap_or_default());
+        }
+
+        // Regime Testing
+        if !self.backtest.trades.is_empty() {
+            let regime_test_result = regime_testing::validate_regime_testing(
+                &self.backtest.trades,
+                &self.backtest.metrics,
+                risk_free_rate,
+            );
+            self.regime_testing = Some(regime_test_result);
+        }
+
+        // Temporal Validation
+        if self.backtest.trades.len() > 252 {
+            let temporal_result = temporal::validate_temporal(
+                &self.backtest.trades,
+                &self.backtest.metrics,
+                risk_free_rate,
+                None, // paper_sharpe
+                None, // live_sharpe
+                self.config.expanding_window_step_fraction,
+                self.config.rolling_window_fraction,
+            );
+            self.temporal_validation = Some(temporal_result);
+        }
+
+        // Robustness Validation
+        let strategy_params = robustness::StrategyParams {
+            n_parameters: self.config.max_parameters,
+            n_indicators: self.config.max_indicators,
+            n_branches: self.config.max_branches,
+            timeframe_results: vec![],
+            cross_asset_results: vec![],
+        };
+        let robustness_result = robustness::validate_robustness(
+            &self.backtest.trades,
+            &self.backtest.metrics,
+            risk_free_rate,
+            &strategy_params,
+            &self.config.perturbation_noise_levels,
+            self.config.max_parameters,
+            self.config.max_indicators,
+            self.config.max_branches,
+        );
+        self.robustness = Some(robustness_result);
+
+        self
+    }
+}
+
+/// Shared helper: Calculate Sharpe ratio from returns
+///
+/// This function is used across multiple validation modules to ensure
+/// consistent Sharpe ratio calculations.
+///
+/// # Arguments
+/// * `returns` - Vector of returns (e.g., from trades)
+/// * `risk_free_rate` - Annual risk-free rate (default: 0.02)
+///
+/// # Returns
+/// * Sharpe ratio (annualized), or 0.0 if insufficient data
+///
+/// # Notes
+/// - Annualizes assuming daily returns (252 trading days per year)
+/// - Returns 0.0 for empty returns or zero standard deviation
+pub fn calculate_sharpe_from_returns(returns: &[f64], risk_free_rate: f64) -> f64 {
+    if returns.is_empty() {
+        return 0.0;
+    }
+
+    let mean_return: f64 = returns.iter().sum::<f64>() / returns.len() as f64;
+
+    let mut variance = 0.0;
+    for &r in returns {
+        variance += (r - mean_return).powi(2);
+    }
+    variance /= (returns.len() - 1) as f64;
+
+    let std_dev = variance.sqrt();
+
+    if std_dev < 1e-10 {
+        0.0
+    } else {
+        // Annualize (assuming daily returns)
+        let annual_mean = mean_return * 252.0;
+        let annual_std = std_dev * (252.0_f64).sqrt();
+        (annual_mean - risk_free_rate) / annual_std
+    }
 }
 
 // Re-export regime module types

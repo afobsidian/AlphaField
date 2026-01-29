@@ -194,8 +194,11 @@ impl RegimeTestingResult {
 ///
 /// # Arguments
 /// * `trades` - Vector of trades
-/// * `price_data` - Price data for regime detection (optional)
-pub fn detect_regimes(trades: &[Trade], _price_data: Option<&[f64]>) -> Vec<MarketRegimeDetected> {
+///
+/// # Note
+/// Currently uses simple return/volatility-based detection. Phase 14 will add
+/// ML-based detection using price data and technical indicators.
+pub fn detect_regimes(trades: &[Trade]) -> Vec<MarketRegimeDetected> {
     if trades.is_empty() {
         return Vec::new();
     }
@@ -578,7 +581,7 @@ pub fn validate_regime_testing(
     risk_free_rate: f64,
 ) -> RegimeTestingResult {
     // Detect regimes
-    let regimes = detect_regimes(trades, None);
+    let regimes = detect_regimes(trades);
 
     // Regime-specific performance
     let regime_performance = test_regime_specific(trades, &regimes, risk_free_rate);
@@ -607,28 +610,8 @@ pub fn validate_regime_testing(
 
 /// Helper: Calculate Sharpe ratio from returns
 fn calculate_sharpe_from_returns(returns: &[f64], risk_free_rate: f64) -> f64 {
-    if returns.is_empty() {
-        return 0.0;
-    }
-
-    let mean_return: f64 = returns.iter().sum::<f64>() / returns.len() as f64;
-
-    let mut variance = 0.0;
-    for &r in returns {
-        variance += (r - mean_return).powi(2);
-    }
-    variance /= (returns.len() - 1) as f64;
-
-    let std_dev = variance.sqrt();
-
-    if std_dev < 1e-10 {
-        0.0
-    } else {
-        // Annualize (assuming daily returns)
-        let annual_mean = mean_return * 252.0;
-        let annual_std = std_dev * (252.0_f64).sqrt();
-        (annual_mean - risk_free_rate) / annual_std
-    }
+    // Use shared helper from parent module for consistent calculations
+    super::calculate_sharpe_from_returns(returns, risk_free_rate)
 }
 
 /// Helper: Calculate maximum drawdown from returns

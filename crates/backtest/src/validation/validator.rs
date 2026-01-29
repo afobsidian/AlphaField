@@ -87,6 +87,7 @@ impl StrategyValidator {
 
         // Run Monte Carlo simulation
         let monte_carlo_result = self.run_monte_carlo(&backtest_result)?;
+        let monte_carlo_result_clone = monte_carlo_result.clone();
 
         // Run regime analysis (no strategy reference required for regime analysis)
         let regime_result = self.run_regime_analysis(bars)?;
@@ -94,19 +95,22 @@ impl StrategyValidator {
         // Calculate risk assessment
         let risk_assessment = self.assess_risk(&backtest_result, &monte_carlo_result);
 
-        // Calculate overall score and generate verdict
-        let components = ValidationComponents {
+        // Create base components
+        let mut components = ValidationComponents {
             backtest: backtest_result.clone(),
             walk_forward: walk_forward_result.clone(),
             monte_carlo: monte_carlo_result.clone(),
             regime: regime_result.clone(),
             config: self.config.clone(),
-            // Phase 13: Optional advanced validation results
+            // Phase 13: Will be populated by run_phase_13_validations()
             statistical_significance: None,
             robustness: None,
             temporal_validation: None,
             regime_testing: None,
         };
+
+        // Run Phase 13 advanced validations if sufficient data available
+        components = components.run_phase_13_validations();
 
         let calculator = ScoreCalculator::new();
         let overall_score = calculator.calculate(&components);
@@ -131,13 +135,13 @@ impl StrategyValidator {
             short_win_rate: backtest_result.short_win_rate,
             backtest: backtest_result,
             walk_forward: walk_forward_result,
-            monte_carlo: monte_carlo_result,
+            monte_carlo: monte_carlo_result_clone,
             regime_analysis: regime_result,
-            // Phase 13: Optional advanced validation results
-            statistical_significance: None,
-            robustness: None,
-            temporal_validation: None,
-            regime_testing: None,
+            // Phase 13: Advanced validation results from run_phase_13_validations()
+            statistical_significance: components.statistical_significance,
+            robustness: components.robustness,
+            temporal_validation: components.temporal_validation,
+            regime_testing: components.regime_testing,
             risk_assessment,
             recommendations,
         })
@@ -225,7 +229,7 @@ impl StrategyValidator {
             monte_carlo: monte_carlo_result.clone(),
             regime: regime_result.clone(),
             config: self.config.clone(),
-            // Phase 13: Optional advanced validation results
+            // Phase 13: Will be populated by run_phase_13_validations()
             statistical_significance: None,
             robustness: None,
             temporal_validation: None,
@@ -257,11 +261,11 @@ impl StrategyValidator {
             walk_forward: walk_forward_result,
             monte_carlo: monte_carlo_result,
             regime_analysis: regime_result,
-            // Phase 13: Optional advanced validation results
-            statistical_significance: None,
-            robustness: None,
-            temporal_validation: None,
-            regime_testing: None,
+            // Phase 13: Advanced validation results from run_phase_13_validations()
+            statistical_significance: components.statistical_significance,
+            robustness: components.robustness,
+            temporal_validation: components.temporal_validation,
+            regime_testing: components.regime_testing,
             risk_assessment,
             recommendations,
         })
@@ -805,7 +809,7 @@ mod tests {
         );
     }
     use super::*;
-    use crate::validation::ValidationThresholds;
+
     use alphafield_core::Bar;
     use chrono::Utc;
 
@@ -873,14 +877,19 @@ mod tests {
                 fee_rate: 0.001,
             },
             risk_free_rate: 0.02,
-            thresholds: ValidationThresholds {
-                min_sharpe: 1.0,
-                max_drawdown: 0.30,
-                min_win_rate: 0.60,
-                min_positive_probability: 0.70,
-            },
+            thresholds: crate::validation::ValidationThresholds::default(),
             initial_capital: 10000.0,
             fee_rate: 0.001,
+            // Phase 13 fields
+            max_parameters: 10,
+            max_indicators: 5,
+            max_branches: 20,
+            perturbation_noise_levels: vec![0.01, 0.02, 0.05],
+            rolling_window_fraction: 0.5,
+            expanding_window_step_fraction: 0.2,
+            max_statistical_iterations: 1000,
+            enable_early_stopping: true,
+            statistical_timeout_seconds: Some(30),
         }
     }
 
@@ -987,7 +996,7 @@ mod tests {
             },
             regime: crate::validation::RegimeAnalysisResult::default(),
             config: create_test_config(),
-            // Phase 13 components
+            // Phase 13: Will be populated by run_phase_13_validations()
             statistical_significance: None,
             robustness: None,
             temporal_validation: None,

@@ -203,16 +203,21 @@ impl RobustnessResult {
 /// * `n_parameters` - Number of tunable parameters
 /// * `n_indicators` - Number of technical indicators
 /// * `n_branches` - Number of decision branches
+/// * `max_parameters` - Maximum parameters threshold
+/// * `max_indicators` - Maximum indicators threshold
+/// * `max_branches` - Maximum branches threshold
 pub fn calculate_complexity(
     n_parameters: usize,
     n_indicators: usize,
     n_branches: usize,
+    max_parameters: usize,
+    max_indicators: usize,
+    max_branches: usize,
 ) -> ComplexityResult {
     // Complexity score based on normalized values
-    // Assume reasonable maximums: 10 parameters, 5 indicators, 20 branches
-    let param_score = (n_parameters as f64 / 10.0).min(1.0);
-    let indicator_score = (n_indicators as f64 / 5.0).min(1.0);
-    let branch_score = (n_branches as f64 / 20.0).min(1.0);
+    let param_score = (n_parameters as f64 / max_parameters as f64).min(1.0);
+    let indicator_score = (n_indicators as f64 / max_indicators as f64).min(1.0);
+    let branch_score = (n_branches as f64 / max_branches as f64).min(1.0);
 
     let penalty_score = (param_score * 0.4 + indicator_score * 0.3 + branch_score * 0.3).min(1.0);
 
@@ -274,32 +279,6 @@ pub fn add_noise(values: &mut [f64], noise_level: f64) {
     }
 }
 
-/// Calculate Sharpe ratio from trade returns
-fn calculate_sharpe_from_returns(returns: &[f64], risk_free_rate: f64) -> f64 {
-    if returns.is_empty() {
-        return 0.0;
-    }
-
-    let mean_return: f64 = returns.iter().sum::<f64>() / returns.len() as f64;
-
-    let mut variance = 0.0;
-    for &r in returns {
-        variance += (r - mean_return).powi(2);
-    }
-    variance /= (returns.len() - 1) as f64;
-
-    let std_dev = variance.sqrt();
-
-    if std_dev < 1e-10 {
-        0.0
-    } else {
-        // Annualize (assuming daily returns)
-        let annual_mean = mean_return * 252.0;
-        let annual_std = std_dev * (252.0_f64).sqrt();
-        (annual_mean - risk_free_rate) / annual_std
-    }
-}
-
 /// Analyze outlier impact on performance
 ///
 /// # Arguments
@@ -323,7 +302,8 @@ pub fn analyze_outliers(trades: &[Trade], risk_free_rate: f64) -> OutlierResult 
         .iter()
         .map(|t| (t.exit_price - t.entry_price) / t.entry_price)
         .collect();
-    let original_sharpe = calculate_sharpe_from_returns(&original_returns, risk_free_rate);
+    let original_sharpe =
+        crate::validation::calculate_sharpe_from_returns(&original_returns, risk_free_rate);
 
     if trades.len() < 5 {
         return OutlierResult {
@@ -366,7 +346,8 @@ pub fn analyze_outliers(trades: &[Trade], risk_free_rate: f64) -> OutlierResult 
             .map(|(_, &r)| r)
             .collect();
     }
-    let sharpe_no_top = calculate_sharpe_from_returns(&returns_no_top, risk_free_rate);
+    let sharpe_no_top =
+        crate::validation::calculate_sharpe_from_returns(&returns_no_top, risk_free_rate);
 
     // Remove bottom outliers (worst trades)
     let mut returns_no_bottom: Vec<f64> = original_returns.clone();
@@ -383,7 +364,8 @@ pub fn analyze_outliers(trades: &[Trade], risk_free_rate: f64) -> OutlierResult 
             .map(|(_, &r)| r)
             .collect();
     }
-    let sharpe_no_bottom = calculate_sharpe_from_returns(&returns_no_bottom, risk_free_rate);
+    let sharpe_no_bottom =
+        crate::validation::calculate_sharpe_from_returns(&returns_no_bottom, risk_free_rate);
 
     // Remove both top and bottom outliers
     let mut returns_no_outliers: Vec<f64> = original_returns.clone();
@@ -401,7 +383,8 @@ pub fn analyze_outliers(trades: &[Trade], risk_free_rate: f64) -> OutlierResult 
             .map(|(_, &r)| r)
             .collect();
     }
-    let sharpe_no_outliers = calculate_sharpe_from_returns(&returns_no_outliers, risk_free_rate);
+    let sharpe_no_outliers =
+        crate::validation::calculate_sharpe_from_returns(&returns_no_outliers, risk_free_rate);
 
     // Calculate impact percentages
     let top_impact_pct = if original_sharpe != 0.0 {
@@ -441,20 +424,32 @@ pub fn analyze_outliers(trades: &[Trade], risk_free_rate: f64) -> OutlierResult 
 /// * `metrics` - Performance metrics
 /// * `risk_free_rate` - Annual risk-free rate
 /// * `strategy_params` - Strategy configuration for complexity analysis
+/// * `noise_levels` - Noise levels for perturbation testing (e.g., 0.01 for 1%)
+/// * `max_parameters` - Maximum parameters threshold for complexity
+/// * `max_indicators` - Maximum indicators threshold for complexity
+/// * `max_branches` - Maximum branches threshold for complexity
+#[allow(clippy::too_many_arguments)]
 pub fn validate_robustness(
     trades: &[Trade],
     metrics: &PerformanceMetrics,
     risk_free_rate: f64,
     strategy_params: &StrategyParams,
+    noise_levels: &[f64],
+    max_parameters: usize,
+    max_indicators: usize,
+    max_branches: usize,
 ) -> RobustnessResult {
-    // Complexity penalty
+    // Complexity penalty (use configurable thresholds)
     let complexity = calculate_complexity(
         strategy_params.n_parameters,
         strategy_params.n_indicators,
         strategy_params.n_branches,
+        max_parameters,
+        max_indicators,
+        max_branches,
     );
 
-    // Data perturbation tests (test at multiple noise levels)
+    // Data perturbation tests (use configurable noise levels)
     let mut perturbations = Vec::new();
     let original_returns: Vec<f64> = trades
         .iter()
@@ -462,10 +457,11 @@ pub fn validate_robustness(
         .collect();
     let original_sharpe = metrics.sharpe_ratio;
 
-    for &noise_level in &[0.01, 0.02, 0.05] {
+    for &noise_level in noise_levels {
         let mut perturbed_returns = original_returns.clone();
         add_noise(&mut perturbed_returns, noise_level);
-        let perturbed_sharpe = calculate_sharpe_from_returns(&perturbed_returns, risk_free_rate);
+        let perturbed_sharpe =
+            crate::validation::calculate_sharpe_from_returns(&perturbed_returns, risk_free_rate);
         perturbations.push(test_perturbation(
             original_sharpe,
             perturbed_sharpe,

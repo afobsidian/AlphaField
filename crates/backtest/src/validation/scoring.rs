@@ -224,8 +224,8 @@ impl ScoreCalculator {
         if let Some(ref stat_sig) = components.statistical_significance {
             stat_sig.overall_score()
         } else {
-            // No statistical significance data - neutral score
-            50.0
+            // No statistical significance data - penalize missing validation
+            30.0
         }
     }
 
@@ -234,8 +234,8 @@ impl ScoreCalculator {
         if let Some(ref robustness) = components.robustness {
             robustness.overall_score()
         } else {
-            // No robustness data - neutral score
-            50.0
+            // No robustness data - penalize missing validation
+            30.0
         }
     }
 
@@ -244,8 +244,8 @@ impl ScoreCalculator {
         if let Some(ref temporal) = components.temporal_validation {
             temporal.overall_score()
         } else {
-            // No temporal validation data - neutral score
-            50.0
+            // No temporal validation data - penalize missing validation
+            30.0
         }
     }
 }
@@ -666,6 +666,16 @@ mod tests {
             monte_carlo: create_test_monte_carlo(),
             regime: create_test_regime(),
             config: crate::validation::ValidationConfig {
+                // Phase 13 fields with test defaults
+                max_parameters: 10,
+                max_indicators: 5,
+                max_branches: 20,
+                perturbation_noise_levels: vec![0.01, 0.02, 0.05],
+                rolling_window_fraction: 0.5,
+                expanding_window_step_fraction: 0.2,
+                max_statistical_iterations: 1000,
+                enable_early_stopping: true,
+                statistical_timeout_seconds: Some(30),
                 data_source: String::new(),
                 symbol: String::new(),
                 interval: String::new(),

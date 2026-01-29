@@ -101,6 +101,43 @@ pub struct StatisticalSignificanceResult {
     pub correlation: Option<CorrelationResult>,
 }
 
+impl Default for StatisticalSignificanceResult {
+    fn default() -> Self {
+        Self {
+            bootstrap: BootstrapResult {
+                iterations: 0,
+                mean_sharpe: 0.0,
+                ci_lower: 0.0,
+                ci_upper: 0.0,
+                original_sharpe: 0.0,
+            },
+            permutation: PermutationResult {
+                p_value: 1.0,
+                permutations: 0,
+                original_value: 0.0,
+                permuted_mean: 0.0,
+                is_significant: false,
+            },
+            stationarity: StationarityResult {
+                adf_statistic: 0.0,
+                critical_value_5pct: 0.0,
+                critical_value_1pct: 0.0,
+                is_stationary: false,
+                interpretation: String::new(),
+            },
+            sharpe_significance: SharpeSignificance {
+                sharpe: 0.0,
+                standard_error: 0.0,
+                t_statistic: 0.0,
+                p_value: 1.0,
+                confidence_interval: (0.0, 0.0),
+                is_significant: false,
+            },
+            correlation: None,
+        }
+    }
+}
+
 impl StatisticalSignificanceResult {
     /// Calculate overall statistical significance score (0-100)
     pub fn overall_score(&self) -> f64 {
@@ -163,6 +200,7 @@ pub fn bootstrap_sharpe(
     risk_free_rate: f64,
     iterations: usize,
     confidence_level: f64,
+    timeout_seconds: Option<u64>,
 ) -> Result<BootstrapResult, Box<dyn std::error::Error>> {
     if trades.is_empty() {
         return Err("Cannot bootstrap with empty trades".into());
@@ -171,11 +209,23 @@ pub fn bootstrap_sharpe(
     // Calculate original Sharpe
     let original_sharpe = calculate_sharpe_from_trades(trades, risk_free_rate)?;
 
-    // Bootstrap resampling
+    // Bootstrap resampling with early stopping for timeout
     let mut rng = rand::thread_rng();
     let mut sharpe_samples = Vec::with_capacity(iterations);
+    let start_time = std::time::Instant::now();
 
-    for _ in 0..iterations {
+    for i in 0..iterations {
+        // Check timeout if specified
+        if let Some(timeout) = timeout_seconds {
+            if start_time.elapsed().as_secs() >= timeout {
+                // Use available samples with warning
+                eprintln!(
+                    "Bootstrap: Timeout reached after {} iterations (requested {})",
+                    i, iterations
+                );
+                break;
+            }
+        }
         // Resample trades with replacement
         let resampled: Vec<Trade> = (0..trades.len())
             .map(|_| trades[rng.gen_range(0..trades.len())].clone())
@@ -190,18 +240,19 @@ pub fn bootstrap_sharpe(
     let mean_sharpe: f64 = sharpe_samples.iter().sum::<f64>() / sharpe_samples.len() as f64;
 
     // Calculate confidence interval
+    let actual_iterations = sharpe_samples.len();
     let alpha = 1.0 - confidence_level;
-    let lower_idx = ((alpha / 2.0) * iterations as f64) as usize;
-    let upper_idx = ((1.0 - alpha / 2.0) * iterations as f64) as usize;
+    let lower_idx = ((alpha / 2.0) * actual_iterations as f64) as usize;
+    let upper_idx = ((1.0 - alpha / 2.0) * actual_iterations as f64) as usize;
 
     let ci_lower = sharpe_samples[lower_idx];
     let ci_upper = sharpe_samples[upper_idx];
 
     Ok(BootstrapResult {
+        iterations: actual_iterations,
         mean_sharpe,
         ci_lower,
         ci_upper,
-        iterations,
         original_sharpe,
     })
 }
@@ -216,6 +267,7 @@ pub fn permutation_test<F>(
     trades: &[Trade],
     metric_fn: F,
     permutations: usize,
+    timeout_seconds: Option<u64>,
 ) -> Result<PermutationResult, Box<dyn std::error::Error>>
 where
     F: Fn(&[Trade]) -> Result<f64, Box<dyn std::error::Error>>,
@@ -233,11 +285,23 @@ where
         .map(|t| (t.exit_price - t.entry_price) / t.entry_price)
         .collect();
 
-    // Permute and calculate metric
+    // Permute and calculate metric with early stopping for timeout
     let mut rng = rand::thread_rng();
     let mut permuted_values = Vec::with_capacity(permutations);
+    let start_time = std::time::Instant::now();
 
-    for _ in 0..permutations {
+    for i in 0..permutations {
+        // Check timeout if specified
+        if let Some(timeout) = timeout_seconds {
+            if start_time.elapsed().as_secs() >= timeout {
+                // Use available samples with warning
+                eprintln!(
+                    "Permutation: Timeout reached after {} iterations (requested {})",
+                    i, permutations
+                );
+                break;
+            }
+        }
         returns.shuffle(&mut rng);
 
         // Create permuted trades with shuffled returns
@@ -264,12 +328,13 @@ where
     let p_value = (more_extreme as f64 + 1.0) / (permutations as f64 + 1.0); // +1 for continuity correction
 
     let permuted_mean: f64 = permuted_values.iter().sum::<f64>() / permuted_values.len() as f64;
+    let actual_permutations = permuted_values.len();
 
     Ok(PermutationResult {
         p_value,
-        permutations,
         original_value,
         permuted_mean,
+        permutations: actual_permutations,
         is_significant: p_value < 0.05,
     })
 }
@@ -355,7 +420,11 @@ pub fn adf_test(
 /// # Arguments
 /// * `sharpe` - Sharpe ratio
 /// * `returns` - Vector of returns
-/// * `risk_free_rate` - Annual risk-free rate
+///
+/// # Note
+/// This function uses a simplified standard error approximation that does not
+/// require the risk-free rate parameter. For Phase 14, consider implementing
+/// full regression-based significance testing with proper error estimation.
 pub fn sharpe_significance(sharpe: f64, returns: &[f64]) -> SharpeSignificance {
     if returns.len() < 2 {
         return SharpeSignificance {
@@ -476,19 +545,21 @@ pub fn validate_statistical_significance(
     risk_free_rate: f64,
     additional_returns: Option<&[Vec<f64>]>,
     additional_names: Option<&[String]>,
+    timeout_seconds: Option<u64>,
 ) -> Result<StatisticalSignificanceResult, Box<dyn std::error::Error>> {
     if trades.is_empty() {
         return Err("Cannot validate statistical significance with empty trades".into());
     }
 
-    // Bootstrap Sharpe confidence intervals
-    let bootstrap = bootstrap_sharpe(trades, risk_free_rate, 1000, 0.95)?;
+    // Bootstrap Sharpe confidence intervals with timeout
+    let bootstrap = bootstrap_sharpe(trades, risk_free_rate, 1000, 0.95, timeout_seconds)?;
 
-    // Permutation test for Sharpe
+    // Permutation test for Sharpe with timeout
     let permutation = permutation_test(
         trades,
         |t| calculate_sharpe_from_trades(t, risk_free_rate),
         1000,
+        timeout_seconds,
     )?;
 
     // Stationarity test
@@ -543,24 +614,11 @@ fn calculate_sharpe_from_trades(
         return Err("No returns to calculate".into());
     }
 
-    let mean_return: f64 = returns.iter().sum::<f64>() / returns.len() as f64;
-
-    let mut _variance = 0.0;
-    for r in &returns {
-        _variance += (r - mean_return).powi(2);
-    }
-    _variance /= (returns.len() - 1) as f64;
-
-    let std_dev = _variance.sqrt();
-
-    if std_dev < 1e-10 {
-        Ok(0.0)
-    } else {
-        // Annualize (assuming daily returns)
-        let annual_mean = mean_return * 252.0;
-        let annual_std = std_dev * (252.0_f64).sqrt();
-        Ok((annual_mean - risk_free_rate) / annual_std)
-    }
+    // Use shared helper from parent module for consistent calculations
+    Ok(super::calculate_sharpe_from_returns(
+        &returns,
+        risk_free_rate,
+    ))
 }
 
 /// Helper: Standard normal CDF (approximation)
