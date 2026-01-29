@@ -3,7 +3,7 @@
 //! Command-line tool for validating trading strategies without requiring
 //! full dashboard integration.
 use alphafield_backtest::validation::MarketRegime as BacktestRegime;
-use alphafield_backtest::RegimeAnalyzer;
+use alphafield_backtest::validation::RegimeAnalyzer;
 use alphafield_backtest::{
     Strategy, StrategyAdapter, StrategyValidator, ValidationConfig, ValidationReport,
     ValidationThresholds, WalkForwardConfig,
@@ -385,6 +385,16 @@ async fn main() -> Result<()> {
                 },
                 initial_capital,
                 fee_rate,
+                // Phase 13 fields
+                max_parameters: 10,
+                max_indicators: 5,
+                max_branches: 20,
+                perturbation_noise_levels: vec![0.01, 0.02, 0.05],
+                rolling_window_fraction: 0.5,
+                expanding_window_step_fraction: 0.2,
+                max_statistical_iterations: 1000,
+                enable_early_stopping: true,
+                statistical_timeout_seconds: Some(30),
             };
 
             // Look up strategy factory from registry for enhanced walk-forward
@@ -603,6 +613,16 @@ async fn main() -> Result<()> {
                             thresholds: ValidationThresholds::default(),
                             initial_capital: 10000.0,
                             fee_rate: 0.001,
+                            // Phase 13 fields
+                            max_parameters: 10,
+                            max_indicators: 5,
+                            max_branches: 20,
+                            perturbation_noise_levels: vec![0.01, 0.02, 0.05],
+                            rolling_window_fraction: 0.5,
+                            expanding_window_step_fraction: 0.2,
+                            max_statistical_iterations: 1000,
+                            enable_early_stopping: true,
+                            statistical_timeout_seconds: Some(30),
                         };
 
                         // Look up strategy factory from registry for enhanced walk-forward

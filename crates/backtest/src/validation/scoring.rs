@@ -7,21 +7,29 @@ use crate::validation::ValidationComponents;
 /// Score weights for different validation components
 #[derive(Debug, Clone)]
 pub struct ScoreWeights {
-    pub backtest: f64,     // 30%
-    pub walk_forward: f64, // 25%
-    pub monte_carlo: f64,  // 20%
-    pub regime_match: f64, // 15%
-    pub risk_metrics: f64, // 10%
+    pub backtest: f64,     // 25% (reduced)
+    pub walk_forward: f64, // 20% (reduced)
+    pub monte_carlo: f64,  // 15% (reduced)
+    pub regime_match: f64, // 10% (reduced)
+    pub risk_metrics: f64, // 5% (reduced)
+    // Phase 13 Advanced Validation
+    pub statistical_significance: f64, // 10%
+    pub robustness: f64,               // 10%
+    pub temporal_validation: f64,      // 5%
 }
 
 impl Default for ScoreWeights {
     fn default() -> Self {
         Self {
-            backtest: 0.30,
-            walk_forward: 0.25,
-            monte_carlo: 0.20,
-            regime_match: 0.15,
-            risk_metrics: 0.10,
+            backtest: 0.25,
+            walk_forward: 0.20,
+            monte_carlo: 0.15,
+            regime_match: 0.10,
+            risk_metrics: 0.05,
+            // Phase 13 Advanced Validation
+            statistical_significance: 0.10,
+            robustness: 0.10,
+            temporal_validation: 0.05,
         }
     }
 }
@@ -33,7 +41,10 @@ impl ScoreWeights {
             + self.walk_forward
             + self.monte_carlo
             + self.regime_match
-            + self.risk_metrics;
+            + self.risk_metrics
+            + self.statistical_significance
+            + self.robustness
+            + self.temporal_validation;
         (sum - 1.0).abs() < 0.0001
     }
 }
@@ -65,11 +76,19 @@ impl ScoreCalculator {
         let regime_score = self.score_regime_match(components);
         let risk_score = self.score_risk(components);
 
+        // Phase 13 Advanced Validation scores
+        let stat_sig_score = self.score_statistical_significance(components);
+        let robustness_score = self.score_robustness(components);
+        let temporal_score = self.score_temporal_validation(components);
+
         backtest_score * self.weights.backtest
             + wf_score * self.weights.walk_forward
             + mc_score * self.weights.monte_carlo
             + regime_score * self.weights.regime_match
             + risk_score * self.weights.risk_metrics
+            + stat_sig_score * self.weights.statistical_significance
+            + robustness_score * self.weights.robustness
+            + temporal_score * self.weights.temporal_validation
     }
 
     /// Convert numeric score to letter grade
@@ -198,6 +217,36 @@ impl ScoreCalculator {
         };
 
         drawdown_score + volatility_score + tail_risk_score
+    }
+
+    /// Score statistical significance component (0-100)
+    fn score_statistical_significance(&self, components: &ValidationComponents) -> f64 {
+        if let Some(ref stat_sig) = components.statistical_significance {
+            stat_sig.overall_score()
+        } else {
+            // No statistical significance data - penalize missing validation
+            30.0
+        }
+    }
+
+    /// Score robustness component (0-100)
+    fn score_robustness(&self, components: &ValidationComponents) -> f64 {
+        if let Some(ref robustness) = components.robustness {
+            robustness.overall_score()
+        } else {
+            // No robustness data - penalize missing validation
+            30.0
+        }
+    }
+
+    /// Score temporal validation component (0-100)
+    fn score_temporal_validation(&self, components: &ValidationComponents) -> f64 {
+        if let Some(ref temporal) = components.temporal_validation {
+            temporal.overall_score()
+        } else {
+            // No temporal validation data - penalize missing validation
+            30.0
+        }
     }
 }
 
@@ -608,11 +657,25 @@ mod tests {
 
     fn create_test_components() -> ValidationComponents {
         crate::validation::ValidationComponents {
+            statistical_significance: None,
+            robustness: None,
+            temporal_validation: None,
+            regime_testing: None,
             backtest: create_test_backtest(),
             walk_forward: create_test_walk_forward(),
             monte_carlo: create_test_monte_carlo(),
             regime: create_test_regime(),
             config: crate::validation::ValidationConfig {
+                // Phase 13 fields with test defaults
+                max_parameters: 10,
+                max_indicators: 5,
+                max_branches: 20,
+                perturbation_noise_levels: vec![0.01, 0.02, 0.05],
+                rolling_window_fraction: 0.5,
+                expanding_window_step_fraction: 0.2,
+                max_statistical_iterations: 1000,
+                enable_early_stopping: true,
+                statistical_timeout_seconds: Some(30),
                 data_source: String::new(),
                 symbol: String::new(),
                 interval: String::new(),
