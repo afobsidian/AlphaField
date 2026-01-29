@@ -621,18 +621,15 @@ impl Adx {
 
                 // Calculate ADX
                 if self.dx_values.len() >= self.period {
-                    if self.current_adx.is_none() {
-                        // First ADX - simple average
-                        let sum_dx: f64 = self.dx_values.iter().sum();
-                        self.current_adx = Some(sum_dx / self.period as f64);
-                    } else {
+                    if let Some(prev_adx) = self.current_adx {
                         // Smoothed ADX
-                        let prev_adx = self
-                            .current_adx
-                            .expect("current_adx should be Some in else branch");
                         let new_adx =
                             (prev_adx * (self.period as f64 - 1.0) + dx) / self.period as f64;
                         self.current_adx = Some(new_adx);
+                    } else {
+                        // First ADX - simple average
+                        let sum_dx: f64 = self.dx_values.iter().sum();
+                        self.current_adx = Some(sum_dx / self.period as f64);
                     }
                 }
             }
