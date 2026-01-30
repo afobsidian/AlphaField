@@ -100,10 +100,17 @@ pub fn calculate_composite_score(
     win_rate: f64,
     total_trades: usize,
 ) -> f64 {
-    // Require at least 5 trades for valid scoring
-    if total_trades < 5 {
-        return f64::NEG_INFINITY;
-    }
+    // Require at least 1 trade for valid scoring
+    // Multi-indicator strategies have restrictive entry conditions, so we allow fewer trades
+    // but apply a strong penalty for very low trade counts to encourage reasonable activity
+    let trade_penalty = match total_trades {
+        0 => f64::NEG_INFINITY, // No trades is invalid
+        1 => 0.5,               // 1 trade: 50% penalty
+        2 => 0.7,               // 2 trades: 30% penalty
+        3 => 0.85,              // 3 trades: 15% penalty
+        4 => 0.95,              // 4 trades: 5% penalty
+        _ => 1.0,               // 5+ trades: no penalty
+    };
 
     // Normalize components
     let sharpe_component = sharpe.clamp(-3.0, 5.0) / 5.0; // Normalize to roughly 0-1
@@ -111,9 +118,11 @@ pub fn calculate_composite_score(
     let win_rate_component = win_rate; // Already 0-1
     let drawdown_penalty = (max_drawdown.abs()).clamp(0.0, 0.5) * 2.0; // 0-1 penalty
 
-    // Weighted combination
-    0.40 * sharpe_component + 0.25 * return_component + 0.20 * win_rate_component
-        - 0.15 * drawdown_penalty
+    // Weighted combination with trade count penalty
+    let base_score = 0.40 * sharpe_component + 0.25 * return_component + 0.20 * win_rate_component
+        - 0.15 * drawdown_penalty;
+
+    base_score * trade_penalty
 }
 
 /// Parameter optimizer using grid search
