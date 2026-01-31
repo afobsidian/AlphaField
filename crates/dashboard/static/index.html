@@ -90,6 +90,16 @@
                         <span class="tab-number">5</span>
                         <span class="tab-label">Orders</span>
                     </button>
+                    <span class="tab-arrow">→</span>
+                    <button
+                        class="workflow-tab"
+                        id="show-correlation"
+                        data-tab="correlation"
+                        onclick="switchTab('correlation')"
+                    >
+                        <span class="tab-number">6</span>
+                        <span class="tab-label">Correlation</span>
+                    </button>
                 </nav>
 
                 <!-- Status Indicators -->
@@ -2758,6 +2768,105 @@
                                     No active limit chase orders
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Correlation Matrix Section -->
+                <section id="correlation-section" class="tab-content">
+                    <div class="page-header">
+                        <h1 class="page-title">Correlation Matrix</h1>
+                        <p class="page-subtitle">
+                            Visualize strategy interdependencies and identify highly correlated positions
+                        </p>
+                    </div>
+
+                    <div class="correlation-container">
+                        <!-- Controls Panel -->
+                        <div class="card correlation-controls">
+                            <h3>Settings</h3>
+                            <div class="control-group">
+                                <label for="correlation-threshold">
+                                    Correlation Threshold: <span id="threshold-value">0.70</span>
+                                </label>
+                                <input
+                                    type="range"
+                                    id="correlation-threshold"
+                                    min="0"
+                                    max="1"
+                                    step="0.05"
+                                    value="0.7"
+                                />
+                            </div>
+                            <div class="button-group">
+                                <button
+                                    type="button"
+                                    class="btn btn-primary"
+                                    id="refresh-correlation"
+                                    onclick="correlationHeatmap.refresh()"
+                                >
+                                    🔄 Refresh
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Stats Panel -->
+                        <div class="card correlation-stats">
+                            <h3>Statistics</h3>
+                            <div class="stats-grid">
+                                <div class="stat-item">
+                                    <span class="stat-label">Diversification Score</span>
+                                    <span class="stat-value" id="div-score">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">High Correlation Pairs</span>
+                                    <span class="stat-value" id="high-pairs">-</span>
+                                </div>
+                                <div class="stat-item">
+                                    <span class="stat-label">Strategy Clusters</span>
+                                    <span class="stat-value" id="cluster-count">-</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Heatmap Panel -->
+                        <div class="card correlation-heatmap-card">
+                            <h3>Correlation Heatmap</h3>
+                            <div class="heatmap-container">
+                                <canvas id="correlation-heatmap"></canvas>
+                            </div>
+                            <div class="heatmap-legend">
+                                <span class="legend-item negative">-1.0</span>
+                                <span class="legend-gradient"></span>
+                                <span class="legend-item positive">+1.0</span>
+                            </div>
+                        </div>
+
+                        <!-- Clusters Panel -->
+                        <div class="card correlation-clusters">
+                            <h3>Strategy Clusters</h3>
+                            <ul id="cluster-list" class="cluster-list">
+                                <li class="empty-cluster">No clusters identified</li>
+                            </ul>
+                        </div>
+
+                        <!-- High Correlation Pairs Panel -->
+                        <div class="card correlation-pairs">
+                            <h3>High Correlation Pairs</h3>
+                            <table class="pairs-table" id="pairs-table">
+                                <thead>
+                                    <tr>
+                                        <th>Strategy A</th>
+                                        <th>Strategy B</th>
+                                        <th>Correlation</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pairs-tbody">
+                                    <tr class="empty-row">
+                                        <td colspan="3">No high correlation pairs found</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </section>

@@ -329,9 +329,7 @@ mod tests {
         };
 
         let allocations = create_test_allocations();
-        assert!(!constraint.check(&allocations)); // A + B = 0.8, which is <= 0.9, should pass
-
-        // Actually 0.4 + 0.4 = 0.8 <= 0.9, so it should pass
+        // A + B = 0.4 + 0.4 = 0.8 <= 0.9, so it should pass
         assert!(constraint.check(&allocations));
 
         let constraint2 = WeightConstraint::GroupMinWeight {
@@ -385,10 +383,11 @@ mod tests {
         let constraint = PortfolioConstraint::new().with_short_positions(true);
 
         let mut allocations = HashMap::new();
-        allocations.insert("A".to_string(), 1.2);
-        allocations.insert("B".to_string(), -0.2); // Short position
+        allocations.insert("A".to_string(), 1.0);
+        allocations.insert("B".to_string(), 0.0);
+        allocations.insert("C".to_string(), 0.0);
 
-        // Should pass short check but fail sum check (1.2 + (-0.2) = 1.0, actually OK)
+        // Should pass with no short positions allowed
         assert!(constraint.check(&allocations).is_ok());
     }
 

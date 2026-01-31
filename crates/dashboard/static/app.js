@@ -5925,3 +5925,233 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 });
+
+// ========================================
+// Correlation Matrix Heatmap
+// ========================================
+
+class CorrelationHeatmap {
+  constructor() {
+    this.canvas = document.getElementById('correlation-heatmap');
+    if (!this.canvas) {
+      console.warn('Correlation heatmap canvas not found');
+      return;
+    }
+    this.ctx = this.canvas.getContext('2d');
+    this.data = null;
+    this.cellSize = 80;
+    this.labelWidth = 120;
+    this.labelHeight = 120;
+    this.currentThreshold = 0.7;
+  }
+
+  async loadData(threshold = 0.7) {
+    this.currentThreshold = threshold;
+    try {
+      showLoading('correlation-section');
+      const response = await fetch(`${API_BASE}/analysis/correlation-matrix?threshold=${threshold}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      this.data = await response.json();
+      
+      if (this.data.success) {
+        this.render();
+        this.updateStats();
+        this.updateClusters();
+        this.updatePairs();
+      } else {
+        console.error('Correlation matrix API error:', this.data.error);
+        showError('correlation-section', this.data.error || 'Failed to load correlation matrix');
+      }
+    } catch (error) {
+      console.error('Failed to load correlation data:', error);
+      showError('correlation-section', 'Failed to load correlation matrix. Please try again.');
+    } finally {
+      hideLoading('correlation-section');
+    }
+  }
+
+  render() {
+    if (!this.data || !this.data.matrix) return;
+
+    const { strategies, matrix } = this.data;
+    const n = strategies.length;
+    
+    const width = this.labelWidth + n * this.cellSize;
+    const height = this.labelHeight + n * this.cellSize;
+    
+    const dpr = window.devicePixelRatio || 1;
+    this.canvas.width = width * dpr;
+    this.canvas.height = height * dpr;
+    this.canvas.style.width = width + 'px';
+    this.canvas.style.height = height + 'px';
+    this.ctx.scale(dpr, dpr);
+    
+    this.ctx.fillStyle = '#0f172a';
+    this.ctx.fillRect(0, 0, width, height);
+    
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        const x = this.labelWidth + j * this.cellSize;
+        const y = this.labelHeight + i * this.cellSize;
+        const value = matrix[i][j];
+        
+        this.ctx.fillStyle = this.getColor(value);
+        this.ctx.fillRect(x, y, this.cellSize, this.cellSize);
+        
+        this.ctx.fillStyle = Math.abs(value) > 0.5 ? '#ffffff' : '#1e293b';
+        this.ctx.font = 'bold 14px Inter, sans-serif';
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText(value.toFixed(2), x + this.cellSize/2, y + this.cellSize/2);
+        
+        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(x, y, this.cellSize, this.cellSize);
+      }
+    }
+    
+    this.ctx.fillStyle = '#f8fafc';
+    this.ctx.font = '12px Inter, sans-serif';
+    
+    for (let j = 0; j < n; j++) {
+      this.ctx.save();
+      this.ctx.translate(this.labelWidth + j * this.cellSize + this.cellSize/2, this.labelHeight - 10);
+      this.ctx.rotate(-Math.PI / 4);
+      this.ctx.textAlign = 'right';
+      this.ctx.fillText(this.truncateLabel(strategies[j], 15), 0, 0);
+      this.ctx.restore();
+    }
+    
+    for (let i = 0; i < n; i++) {
+      this.ctx.textAlign = 'right';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.fillText(this.truncateLabel(strategies[i], 15), this.labelWidth - 10, this.labelHeight + i * this.cellSize + this.cellSize/2);
+    }
+    
+    this.ctx.strokeStyle = '#3b82f6';
+    this.ctx.lineWidth = 2;
+    for (let i = 0; i < n; i++) {
+      const x = this.labelWidth + i * this.cellSize;
+      const y = this.labelHeight + i * this.cellSize;
+      this.ctx.strokeRect(x, y, this.cellSize, this.cellSize);
+    }
+  }
+
+  getColor(correlation) {
+    const absCorr = Math.abs(correlation);
+    
+    if (correlation < 0) {
+      const intensity = Math.min(absCorr, 1.0);
+      const r = Math.round(30 + (1 - intensity) * 225);
+      const g = Math.round(41 + (1 - intensity) * 214);
+      const b = Math.round(59 + intensity * 196);
+      return `rgb(${r}, ${g}, ${b})`;
+    } else if (correlation > 0) {
+      const intensity = Math.min(absCorr, 1.0);
+      const r = Math.round(30 + intensity * 225);
+      const g = Math.round(41 + (1 - intensity) * 214);
+      const b = Math.round(59 + (1 - intensity) * 196);
+      return `rgb(${r}, ${g}, ${b})`;
+    }
+    
+    return '#ffffff';
+  }
+
+  truncateLabel(label, maxLength) {
+    if (label.length <= maxLength) return label;
+    return label.substring(0, maxLength - 3) + '...';
+  }
+
+  updateStats() {
+    if (!this.data) return;
+    
+    const divScoreEl = document.getElementById('div-score');
+    const highPairsEl = document.getElementById('high-pairs');
+    const clusterCountEl = document.getElementById('cluster-count');
+    
+    if (divScoreEl) divScoreEl.textContent = this.data.diversification_score.toFixed(3);
+    if (highPairsEl) highPairsEl.textContent = this.data.high_correlation_pairs.length;
+    if (clusterCountEl) clusterCountEl.textContent = this.data.clusters.length;
+  }
+
+  updateClusters() {
+    const list = document.getElementById('cluster-list');
+    if (!list || !this.data) return;
+    
+    list.innerHTML = '';
+    
+    if (this.data.clusters.length === 0) {
+      list.innerHTML = '<li class="empty-cluster">No significant clusters found</li>';
+      return;
+    }
+    
+    this.data.clusters.forEach((cluster, idx) => {
+      const li = document.createElement('li');
+      li.innerHTML = `<strong>Cluster ${idx + 1}:</strong> ${cluster.join(', ')}`;
+      list.appendChild(li);
+    });
+  }
+
+  updatePairs() {
+    const tbody = document.getElementById('pairs-tbody');
+    if (!tbody || !this.data) return;
+    
+    tbody.innerHTML = '';
+    
+    if (this.data.high_correlation_pairs.length === 0) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="3">No high correlation pairs found</td></tr>';
+      return;
+    }
+    
+    this.data.high_correlation_pairs.forEach(([stratA, stratB, corr]) => {
+      const row = document.createElement('tr');
+      const corrClass = corr > 0.8 ? 'high' : corr > 0.7 ? 'medium' : 'low';
+      row.innerHTML = `
+        <td>${stratA}</td>
+        <td>${stratB}</td>
+        <td class="correlation-${corrClass}">${(corr * 100).toFixed(1)}%</td>
+      `;
+      tbody.appendChild(row);
+    });
+  }
+
+  refresh() {
+    const thresholdSlider = document.getElementById('correlation-threshold');
+    const threshold = thresholdSlider ? parseFloat(thresholdSlider.value) : 0.7;
+    this.loadData(threshold);
+  }
+}
+
+let correlationHeatmap = null;
+
+function initCorrelationHeatmap() {
+  if (!correlationHeatmap) {
+    correlationHeatmap = new CorrelationHeatmap();
+  }
+  correlationHeatmap.loadData(0.7);
+  
+  const thresholdSlider = document.getElementById('correlation-threshold');
+  const thresholdValue = document.getElementById('threshold-value');
+  
+  if (thresholdSlider && thresholdValue) {
+    thresholdSlider.addEventListener('input', (e) => {
+      thresholdValue.textContent = parseFloat(e.target.value).toFixed(2);
+    });
+    
+    thresholdSlider.addEventListener('change', (e) => {
+      correlationHeatmap.loadData(parseFloat(e.target.value));
+    });
+  }
+}
+
+const originalSwitchTab = switchTab;
+switchTab = function(tabName) {
+  originalSwitchTab(tabName);
+  if (tabName === 'correlation') {
+    initCorrelationHeatmap();
+  }
+};

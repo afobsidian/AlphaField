@@ -29,6 +29,9 @@ pub enum BacktestError {
 
     #[error("Position not found: {0}")]
     PositionNotFound(String),
+
+    #[error("Validation error: {0}")]
+    Validation(String),
 }
 
 pub type Result<T> = std::result::Result<T, BacktestError>;
