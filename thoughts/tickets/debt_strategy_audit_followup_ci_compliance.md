@@ -3,7 +3,7 @@ type: debt
 priority: high
 created: 2026-02-01T21:30:00Z
 created_by: Opus
-status: planned
+status: reviewed
 tags: [strategies, optimization, testing, backtest, ci-cd, audit, follow-up]
 keywords: [StrategyFactory, test harness, batch validation, compiler warnings, make ci, integration tests, data generators, TradingMode, StrategyAdapter, cargo test, cargo clippy, cargo fmt]
 patterns: [test_harness_pattern, strategy_instantiation, error_handling, configuration_validation, ci_pipeline]

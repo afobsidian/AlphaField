@@ -130,6 +130,7 @@ dependencies = [
  "alphafield-data",
  "chrono",
  "dotenvy",
+ "rand",
  "serde",
  "serde_json",
  "thiserror 1.0.69",

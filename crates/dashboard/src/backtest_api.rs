@@ -639,7 +639,13 @@ pub async fn optimize_params(
             &symbol,
             |params| {
                 // Create strategy adapter for backtest
-                StrategyFactory::create_backtest(&strategy_name_owned, params, &symbol, 100_000.0, trading_mode)
+                StrategyFactory::create_backtest(
+                    &strategy_name_owned,
+                    params,
+                    &symbol,
+                    100_000.0,
+                    trading_mode,
+                )
             },
             &bounds,
         )
@@ -958,7 +964,13 @@ pub async fn run_optimization_workflow(
 
         // Create factory closure
         let factory = |params: &HashMap<String, f64>| {
-            StrategyFactory::create_backtest(&strategy_name, params, &symbol, 100_000.0, workflow_trading_mode)
+            StrategyFactory::create_backtest(
+                &strategy_name,
+                params,
+                &symbol,
+                100_000.0,
+                workflow_trading_mode,
+            )
         };
 
         workflow.run(&bars, &symbol, &factory, &bounds, sensitivity_params)
@@ -1246,7 +1258,12 @@ pub async fn run_multi_symbol_workflow(
     };
 
     let sweep_result = tokio::task::spawn_blocking(move || {
-        run_combined_parameter_sweep(&symbol_data_clone, &strategy_name, &bounds_clone, trading_mode)
+        run_combined_parameter_sweep(
+            &symbol_data_clone,
+            &strategy_name,
+            &bounds_clone,
+            trading_mode,
+        )
     })
     .await;
 
@@ -1437,11 +1454,16 @@ fn run_combined_parameter_sweep(
         // Test on ALL symbols
         for (symbol, bars) in symbol_data {
             // Create strategy
-            let strategy =
-                match StrategyFactory::create_backtest(strategy_name, params, symbol, 100_000.0, trading_mode) {
-                    Some(s) => s,
-                    None => continue,
-                };
+            let strategy = match StrategyFactory::create_backtest(
+                strategy_name,
+                params,
+                symbol,
+                100_000.0,
+                trading_mode,
+            ) {
+                Some(s) => s,
+                None => continue,
+            };
 
             // Run backtest
             let mut engine =
@@ -1598,14 +1620,19 @@ fn run_multi_symbol_walk_forward(
 
         // Run train backtest
         let train_metrics = {
-            let strategy =
-                match StrategyFactory::create_backtest(strategy_name, params, symbol, 100_000.0, trading_mode) {
-                    Some(s) => s,
-                    None => {
-                        window_idx += 1;
-                        continue;
-                    }
-                };
+            let strategy = match StrategyFactory::create_backtest(
+                strategy_name,
+                params,
+                symbol,
+                100_000.0,
+                trading_mode,
+            ) {
+                Some(s) => s,
+                None => {
+                    window_idx += 1;
+                    continue;
+                }
+            };
 
             let mut engine =
                 BacktestEngine::new(100_000.0, 0.001, SlippageModel::FixedPercent(0.0005));
@@ -1623,14 +1650,19 @@ fn run_multi_symbol_walk_forward(
 
         // Run test backtest
         let test_metrics = {
-            let strategy =
-                match StrategyFactory::create_backtest(strategy_name, params, symbol, 100_000.0, trading_mode) {
-                    Some(s) => s,
-                    None => {
-                        window_idx += 1;
-                        continue;
-                    }
-                };
+            let strategy = match StrategyFactory::create_backtest(
+                strategy_name,
+                params,
+                symbol,
+                100_000.0,
+                trading_mode,
+            ) {
+                Some(s) => s,
+                None => {
+                    window_idx += 1;
+                    continue;
+                }
+            };
 
             let mut engine =
                 BacktestEngine::new(100_000.0, 0.001, SlippageModel::FixedPercent(0.0005));

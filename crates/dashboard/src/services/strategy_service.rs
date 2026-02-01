@@ -10,7 +10,6 @@ use alphafield_strategy::strategies::volatility::atr_breakout::ATRBreakoutConfig
 use alphafield_strategy::strategies::volatility::atr_trailing::ATRTrailingConfig;
 use alphafield_strategy::strategies::volatility::garch_strategy::GARCHConfig;
 use alphafield_strategy::strategies::volatility::vix_style::VIXStyleConfig;
-use alphafield_strategy::strategies::volatility::vol_regime::VolRegimeConfig;
 use alphafield_strategy::strategies::volatility::vol_sizing::VolSizingConfig;
 use alphafield_strategy::strategies::volatility::vol_squeeze::VolSqueezeConfig;
 // Multi-indicator strategy configs
@@ -257,7 +256,7 @@ impl StrategyFactory {
                 let period = params.get("period").copied().unwrap_or(14.0) as usize;
                 let lower = params.get("lower_bound").copied().unwrap_or(30.0);
                 let upper = params.get("upper_bound").copied().unwrap_or(70.0);
-                let tp = params.get("take_profit").copied().unwrap_or(3.0);
+                let _tp = params.get("take_profit").copied().unwrap_or(3.0);
                 let sl = params.get("stop_loss").copied().unwrap_or(5.0);
 
                 if period == 0 || lower >= upper {
@@ -476,10 +475,9 @@ impl StrategyFactory {
                     return None;
                 }
 
-                let mut strategy =
-                    alphafield_strategy::strategies::momentum::RsiMomentumStrategy::new(
-                        rsi_period, threshold, 1.0, tp, sl,
-                    );
+                let strategy = alphafield_strategy::strategies::momentum::RsiMomentumStrategy::new(
+                    rsi_period, threshold, 1.0, tp, sl,
+                );
                 Some(Box::new(strategy))
             }
             "RocStrategy" => {
