@@ -214,7 +214,11 @@ impl MultiStrategyBacktestEngine {
             let num_strategies = self.strategies.len() as f64;
             if num_strategies > 0.0 {
                 let equal_weight = 1.0 / num_strategies;
-                self.weights = self.strategies.keys().map(|k| (k.clone(), equal_weight)).collect();
+                self.weights = self
+                    .strategies
+                    .keys()
+                    .map(|k| (k.clone(), equal_weight))
+                    .collect();
             }
             return;
         }

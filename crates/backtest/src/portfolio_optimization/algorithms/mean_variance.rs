@@ -9,9 +9,7 @@ use std::collections::HashMap;
 
 use crate::portfolio_optimization::{
     constraints::PortfolioConstraint,
-    optimizer::{
-        calculate_volatility, equity_to_returns, prepare_optimization_data,
-    },
+    optimizer::{calculate_volatility, equity_to_returns, prepare_optimization_data},
     OptimizationConfig, OptimizationObjective, OptimizationResult, PortfolioOptimizer,
 };
 
