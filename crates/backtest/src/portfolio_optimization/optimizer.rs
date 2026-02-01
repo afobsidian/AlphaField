@@ -298,8 +298,15 @@ pub fn prepare_optimization_data(
         return_series.push(returns);
     }
 
-    // Calculate covariance matrix
-    let cov_matrix = calculate_covariance_matrix(&return_series)?;
+    // Calculate covariance matrix (daily units)
+    let mut cov_matrix = calculate_covariance_matrix(&return_series)?;
+
+    // Annualize covariance matrix to match annualized mean returns (×252)
+    for row in cov_matrix.iter_mut() {
+        for value in row.iter_mut() {
+            *value *= 252.0;
+        }
+    }
 
     Ok((means, return_series, cov_matrix))
 }

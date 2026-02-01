@@ -283,7 +283,7 @@ impl Strategy for GoldenCrossStrategy {
         let price = bar.close;
 
         // Initialize last_fast and last_slow when SMAs first produce values
-        // This enables crossover detection from the very first valid SMA values
+        // This ensures we have valid previous values for the next bar's crossover check
         if self.last_fast.is_none() {
             self.last_fast = Some(fast);
         }

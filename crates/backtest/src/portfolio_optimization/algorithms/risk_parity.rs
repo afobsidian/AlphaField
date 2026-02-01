@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::portfolio_optimization::{
-    optimizer::{calculate_mean_return, equity_to_returns, prepare_optimization_data},
+    optimizer::{
+        calculate_volatility, equity_to_returns, prepare_optimization_data,
+    },
     OptimizationConfig, OptimizationObjective, OptimizationResult, PortfolioOptimizer,
 };
 
@@ -254,7 +256,7 @@ impl PortfolioOptimizer for RiskParityOptimizer {
                 .get(name)
                 .ok_or_else(|| format!("Missing equity curve for: {}", name))?;
             let returns = equity_to_returns(equity);
-            let vol = calculate_mean_return(&returns) * (252.0_f64).sqrt();
+            let vol = calculate_volatility(&returns) * (252.0_f64).sqrt();
             volatilities.push(vol);
         }
 

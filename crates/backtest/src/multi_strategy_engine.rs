@@ -203,6 +203,22 @@ impl MultiStrategyBacktestEngine {
     pub fn set_weights(&mut self, weights: HashMap<String, f64>) {
         // Validate weights sum to approximately 1.0
         let total: f64 = weights.values().sum();
+
+        // Handle invalid total (zero, NaN, or infinite)
+        if !total.is_finite() || total <= 0.0 {
+            warn!(
+                total = total,
+                "Invalid weight total, falling back to equal weights"
+            );
+            // Fall back to equal weights
+            let num_strategies = weights.len() as f64;
+            if num_strategies > 0.0 {
+                let equal_weight = 1.0 / num_strategies;
+                self.weights = weights.keys().map(|k| (k.clone(), equal_weight)).collect();
+            }
+            return;
+        }
+
         if (total - 1.0).abs() > 0.01 {
             warn!(total = total, "Weights don't sum to 1.0, normalizing");
             // Normalize weights
@@ -496,14 +512,19 @@ impl MultiStrategyBacktestEngine {
             }
 
             let num_trades = *self.strategy_trades.get(name).unwrap_or(&0);
-            let pnl = *self.strategy_pnl.get(name).unwrap_or(&0.0);
+
+            // Calculate P&L from equity curve (final - initial)
+            let gross_pnl = final_val - initial;
+            // Net P&L would subtract per-strategy fees, but we don't track that separately
+            // For now, use the same value (actual fees are tracked at portfolio level)
+            let net_pnl = gross_pnl;
 
             performances.push(StrategyPerformance {
                 strategy_name: name.clone(),
                 weight: *self.weights.get(name).unwrap_or(&0.0),
                 num_trades,
-                gross_pnl: pnl,
-                net_pnl: pnl, // Simplified - would subtract fees
+                gross_pnl,
+                net_pnl,
                 strategy_return,
                 max_drawdown: max_dd,
             });

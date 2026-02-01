@@ -9,7 +9,9 @@ use std::collections::HashMap;
 
 use crate::portfolio_optimization::{
     constraints::PortfolioConstraint,
-    optimizer::{calculate_mean_return, equity_to_returns, prepare_optimization_data},
+    optimizer::{
+        calculate_volatility, equity_to_returns, prepare_optimization_data,
+    },
     OptimizationConfig, OptimizationObjective, OptimizationResult, PortfolioOptimizer,
 };
 
@@ -386,7 +388,7 @@ impl PortfolioOptimizer for MeanVarianceOptimizer {
                 .get(name)
                 .ok_or_else(|| format!("Missing equity curve for: {}", name))?;
             let returns = equity_to_returns(equity);
-            let vol = calculate_mean_return(&returns) * (252.0_f64).sqrt();
+            let vol = calculate_volatility(&returns) * (252.0_f64).sqrt();
             volatilities.push(vol);
         }
 
@@ -399,14 +401,14 @@ impl PortfolioOptimizer for MeanVarianceOptimizer {
                 config.risk_free_rate,
                 &config.constraints,
             )?,
-            OptimizationObjective::MinimizeVolatility | OptimizationObjective::MinimumVariance => {
-                self.optimize_min_volatility(
-                    &means,
-                    &cov_matrix,
-                    config.risk_free_rate,
-                    &config.constraints,
-                )?
-            }
+            OptimizationObjective::MinimizeVolatility
+            | OptimizationObjective::MinimumVariance
+            | OptimizationObjective::MaximizeDiversification => self.optimize_min_volatility(
+                &means,
+                &cov_matrix,
+                config.risk_free_rate,
+                &config.constraints,
+            )?,
             _ => {
                 return Err(format!(
                     "Objective {:?} not supported by MeanVarianceOptimizer",
@@ -466,6 +468,7 @@ impl PortfolioOptimizer for MeanVarianceOptimizer {
                 | OptimizationObjective::MinimizeVolatility
                 | OptimizationObjective::MinimumVariance
                 | OptimizationObjective::MaximizeReturn
+                | OptimizationObjective::MaximizeDiversification
         )
     }
 }
@@ -510,6 +513,7 @@ mod tests {
         assert!(optimizer.supports_objective(OptimizationObjective::MinimizeVolatility));
         assert!(optimizer.supports_objective(OptimizationObjective::MinimumVariance));
         assert!(optimizer.supports_objective(OptimizationObjective::MaximizeReturn));
+        assert!(optimizer.supports_objective(OptimizationObjective::MaximizeDiversification));
         assert!(!optimizer.supports_objective(OptimizationObjective::EqualRiskContribution));
     }
 
