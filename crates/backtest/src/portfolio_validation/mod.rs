@@ -113,9 +113,21 @@ impl PortfolioValidationReport {
 
         // General recommendations
         if self.recommendations.is_empty() {
-            self.recommendations.push(
-                "Portfolio validation passed all checks - suitable for deployment with standard monitoring".to_string()
-            );
+            // Check if any validation was actually run
+            let has_validation = self.walk_forward.is_some()
+                || self.monte_carlo.is_some()
+                || self.sensitivity.is_some()
+                || self.stress_test.is_some();
+
+            if has_validation {
+                self.recommendations.push(
+                    "Portfolio validation passed all checks - suitable for deployment with standard monitoring".to_string()
+                );
+            } else {
+                self.recommendations.push(
+                    "No validation results available - validation not yet run or pending integration".to_string()
+                );
+            }
         }
     }
 

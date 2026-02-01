@@ -149,7 +149,7 @@ impl PortfolioOptimizer for InverseVolatilityOptimizer {
             expected_volatility: portfolio_vol_annual,
             expected_sharpe: sharpe,
             diversification_ratio,
-            objective: OptimizationObjective::MinimizeVolatility,
+            objective: config.objective,
             iterations: 1,
             converged: true,
             status_message: "Inverse volatility optimization complete".to_string(),

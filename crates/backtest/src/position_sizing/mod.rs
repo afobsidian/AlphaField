@@ -178,7 +178,7 @@ impl FixedFractionalSizing {
     }
 
     pub fn with_max_position_fraction(mut self, fraction: f64) -> Self {
-        self.max_position_fraction = fraction.clamp(0.01, 10.0);
+        self.max_position_fraction = fraction.clamp(0.01, 1.0);
         self
     }
 }
