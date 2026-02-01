@@ -18,7 +18,10 @@ use crate::services::strategy_service::StrategyFactory;
 
 #[derive(Debug, Deserialize)]
 pub struct BacktestRequest {
-    pub strategy: String,
+    #[serde(default)]
+    pub strategy: Option<String>,
+    #[serde(default)]
+    pub strategies: Vec<String>,
     pub symbol: String,
     pub interval: String,
     pub days: u32,
@@ -340,11 +343,23 @@ pub async fn run_backtest(
 
         engine.add_data(&req.symbol, bars.clone());
 
-        if let Some(strategy) = StrategyFactory::create(&req.strategy, &req.params) {
+        // Determine which strategy to use (support both single and multi-strategy requests)
+        let strategy_name = if !req.strategies.is_empty() {
+            // Use first strategy from the array if provided
+            &req.strategies[0]
+        } else if let Some(ref strategy) = req.strategy {
+            // Fall back to single strategy field
+            strategy
+        } else {
+            warn!("No strategy provided in request");
+            return Json(empty_response(start.elapsed().as_millis() as u64));
+        };
+
+        if let Some(strategy) = StrategyFactory::create(strategy_name, &req.params) {
             let adapter = StrategyAdapter::new(strategy, &req.symbol, 100_000.0);
             engine.set_strategy(Box::new(adapter));
         } else {
-            warn!(strategy = req.strategy, "Unknown strategy requested");
+            warn!(strategy = strategy_name, "Unknown strategy requested");
             return Json(empty_response(start.elapsed().as_millis() as u64));
         }
 
@@ -476,7 +491,10 @@ use alphafield_backtest::{get_strategy_bounds, ParamSweepResult, ParameterOptimi
 
 #[derive(Debug, Deserialize)]
 pub struct OptimizeRequest {
-    pub strategy: String,
+    #[serde(default)]
+    pub strategy: Option<String>,
+    #[serde(default)]
+    pub strategies: Vec<String>,
     pub symbol: String,
     pub interval: String,
     pub days: u32,
@@ -504,7 +522,32 @@ pub async fn optimize_params(
     Json(req): Json<OptimizeRequest>,
 ) -> Json<OptimizeResponse> {
     let start = std::time::Instant::now();
-    info!(strategy = %req.strategy, symbol = %req.symbol, "Starting parameter optimization");
+
+    // Determine which strategy to use (support both single and multi-strategy requests)
+    let strategy_name = if !req.strategies.is_empty() {
+        // Use first strategy from the array if provided
+        &req.strategies[0]
+    } else if let Some(ref strategy) = req.strategy {
+        // Fall back to single strategy field
+        strategy
+    } else {
+        return Json(OptimizeResponse {
+            success: false,
+            optimized_params: HashMap::new(),
+            best_score: 0.0,
+            best_sharpe: 0.0,
+            best_return: 0.0,
+            best_max_drawdown: 0.0,
+            best_win_rate: 0.0,
+            best_trades: 0,
+            iterations: 0,
+            elapsed_ms: start.elapsed().as_millis() as u64,
+            sweep_results: vec![],
+            error: Some("No strategy provided in request".to_string()),
+        });
+    };
+
+    info!(strategy = %strategy_name, symbol = %req.symbol, "Starting parameter optimization");
 
     // 1. Date Range (same as backtest)
     use chrono::{Duration, Utc};
@@ -561,7 +604,7 @@ pub async fn optimize_params(
     }
 
     // 3. Get parameter bounds and run optimizer
-    let bounds = get_strategy_bounds(&req.strategy);
+    let bounds = get_strategy_bounds(strategy_name);
     if bounds.is_empty() {
         return Json(OptimizeResponse {
             success: false,
@@ -575,12 +618,12 @@ pub async fn optimize_params(
             iterations: 0,
             elapsed_ms: start.elapsed().as_millis() as u64,
             sweep_results: vec![],
-            error: Some(format!("Unknown strategy: {}", req.strategy)),
+            error: Some(format!("Unknown strategy: {}", strategy_name)),
         });
     }
 
     let optimizer = ParameterOptimizer::new(100_000.0, 0.001);
-    let strategy_name = req.strategy.clone();
+    let strategy_name_owned = strategy_name.to_string(); // Convert &str to owned String for closure
     let symbol = req.symbol.clone();
 
     // Run optimizer in blocking task to avoid blocking async runtime
@@ -590,7 +633,7 @@ pub async fn optimize_params(
             &symbol,
             |params| {
                 // Create strategy adapter for backtest
-                StrategyFactory::create_backtest(&strategy_name, params, &symbol, 100_000.0)
+                StrategyFactory::create_backtest(&strategy_name_owned, params, &symbol, 100_000.0)
             },
             &bounds,
         )

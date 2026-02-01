@@ -282,6 +282,15 @@ impl Strategy for GoldenCrossStrategy {
         let slow = slow_opt?;
         let price = bar.close;
 
+        // Initialize last_fast and last_slow when SMAs first produce values
+        // This enables crossover detection from the very first valid SMA values
+        if self.last_fast.is_none() {
+            self.last_fast = Some(fast);
+        }
+        if self.last_slow.is_none() {
+            self.last_slow = Some(slow);
+        }
+
         // EXIT LOGIC FIRST (priority: partial TP > trailing stop > SL > death cross)
         if let Some(entry) = self.entry_price {
             let mut signals = Vec::new();

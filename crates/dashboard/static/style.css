@@ -828,7 +828,7 @@ body {
 .strategy-category-strategies {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 6px;
 }
 
 /* Category-specific icons and colors */
@@ -864,25 +864,44 @@ body {
 .strategy-compact-item {
     display: flex;
     align-items: center;
-    padding: 10px 12px;
-    border-radius: 6px;
+    padding: 12px 14px;
+    border-radius: 8px;
     cursor: pointer;
     transition: all 0.2s ease;
     border: 1px solid transparent;
+    position: relative;
+    background: transparent;
 }
 
 .strategy-compact-item:hover {
-    background: rgba(99, 102, 241, 0.08);
-    border-color: rgba(99, 102, 241, 0.2);
+    background: rgba(99, 102, 241, 0.06);
+    border-color: rgba(99, 102, 241, 0.15);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .strategy-compact-item.selected {
-    background: rgba(99, 102, 241, 0.15);
-    border-color: var(--primary);
+    background: linear-gradient(
+        135deg,
+        rgba(99, 102, 241, 0.12),
+        rgba(139, 92, 246, 0.1)
+    );
+    border-color: rgba(99, 102, 241, 0.4);
+    box-shadow: 0 2px 12px rgba(99, 102, 241, 0.15);
 }
 
+.strategy-compact-item input[type="checkbox"],
 .strategy-compact-item input[type="radio"] {
     display: none;
+}
+
+.strategy-compact-item.selected .strategy-compact-name {
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.strategy-compact-item.selected .strategy-compact-desc {
+    color: var(--text-color);
 }
 
 .strategy-compact-info {
@@ -904,14 +923,25 @@ body {
 }
 
 .strategy-compact-selected-icon {
-    font-size: 14px;
-    color: var(--primary);
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--primary);
+    color: white;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 600;
     opacity: 0;
-    transition: opacity 0.2s ease;
+    transform: scale(0.5);
+    transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
 }
 
 .strategy-compact-item.selected .strategy-compact-selected-icon {
     opacity: 1;
+    transform: scale(1);
 }
 
 /* No results message */

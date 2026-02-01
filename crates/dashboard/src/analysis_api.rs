@@ -624,6 +624,8 @@ pub async fn get_correlation_matrix(
         .map(|_| vec![0.0_f64; num_strategies])
         .collect();
 
+    // Matrix indexing is clearer this way
+    #[allow(clippy::needless_range_loop)]
     for i in 0..num_strategies {
         matrix[i][i] = 1.0; // Diagonal is always 1
         for j in (i + 1)..num_strategies {
@@ -640,6 +642,8 @@ pub async fn get_correlation_matrix(
     let mut clusters: Vec<Vec<String>> = vec![];
     let mut visited: std::collections::HashSet<usize> = std::collections::HashSet::new();
 
+    // Matrix indexing is clearer this way
+    #[allow(clippy::needless_range_loop)]
     for i in 0..num_strategies {
         if visited.contains(&i) {
             continue;
@@ -648,6 +652,8 @@ pub async fn get_correlation_matrix(
         let mut cluster = vec![params.strategies[i].clone()];
         visited.insert(i);
 
+        // Matrix indexing is clearer this way
+        #[allow(clippy::needless_range_loop)]
         for j in (i + 1)..num_strategies {
             if !visited.contains(&j) && matrix[i][j].abs() >= threshold {
                 cluster.push(params.strategies[j].clone());
@@ -665,6 +671,8 @@ pub async fn get_correlation_matrix(
 
     // Find high correlation pairs
     let mut high_corr_pairs: Vec<(String, String, f64)> = vec![];
+    // Matrix indexing is clearer this way
+    #[allow(clippy::needless_range_loop)]
     for i in 0..num_strategies {
         for j in (i + 1)..num_strategies {
             let corr = matrix[i][j].abs();

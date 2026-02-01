@@ -10,12 +10,13 @@ const API_BASE = "/api";
 // ===========================
 
 const AppState = {
-  strategy: "GoldenCross",
+  strategy: "",
+  selectedStrategies: [],
   symbol: "",
   params: {},
   backtestDays: 90,
   backtestInterval: "1h",
-  backtestResults: null,
+  backtestResults: {}, // Map of strategy name -> results
   optimizeResults: null,
   isTrading: false,
   currentTab: "build",
@@ -1257,7 +1258,7 @@ async function loadStrategies() {
     const selectedExists = strategies.some(
       (s) => s && s.name === AppState.strategy,
     );
-    
+
     // Initialize params only if a strategy is selected
     if (selectedExists) {
       initParamsForStrategy(AppState.strategy);
@@ -1462,21 +1463,21 @@ function renderStrategyOptions(strategies) {
       item.dataset.description = description;
 
       const input = document.createElement("input");
-      input.type = "radio";
+      input.type = "checkbox";
       input.name = "strategy";
       input.value = key;
+      input.checked = AppState.selectedStrategies.includes(key);
+      input.addEventListener("change", () =>
+        toggleStrategy(key, input.checked),
+      );
 
-      input.addEventListener("change", (e) => {
-        AppState.strategy = e.target.value;
-        initParamsForStrategy(AppState.strategy);
-        updateParamsUI();
-        updateContextBar();
-
-        // Update selection visuals
-        document.querySelectorAll(".strategy-compact-item").forEach((i) => {
-          i.classList.remove("selected");
-        });
-        item.classList.add("selected");
+      // Add click handler for better UX - toggle on item click
+      item.addEventListener("click", (e) => {
+        // Prevent double-toggle since label click already triggers checkbox
+        if (e.target === item || e.target.closest(".strategy-compact-info")) {
+          // Let the label's default behavior handle the checkbox toggle
+          // The checkbox's change event will handle the rest
+        }
       });
 
       const info = document.createElement("div");
@@ -1501,6 +1502,11 @@ function renderStrategyOptions(strategies) {
       item.appendChild(info);
       item.appendChild(checkIcon);
 
+      // Apply selected class if already selected
+      if (AppState.selectedStrategies.includes(key)) {
+        item.classList.add("selected");
+      }
+
       strategiesList.appendChild(item);
     });
 
@@ -1508,42 +1514,91 @@ function renderStrategyOptions(strategies) {
     categoryDiv.appendChild(header);
     categoryDiv.appendChild(content);
     container.appendChild(categoryDiv);
-
-
   });
 
-  // Set initial selection state
-  let selectedExists = false;
+  // Set initial selection state and apply selected classes
   document
     .querySelectorAll('.strategy-compact-item input[name="strategy"]')
     .forEach((r) => {
-      if (r.value === AppState.strategy) {
+      const item = r.closest(".strategy-compact-item");
+      if (AppState.selectedStrategies.includes(r.value)) {
         r.checked = true;
-        r.closest(".strategy-compact-item").classList.add("selected");
-        // Open the category containing the selected strategy
+        item.classList.add("selected");
+        // Open the category containing the first selected strategy
         const category = r.closest(".strategy-category");
-        if (category) {
+        if (category && !category.classList.contains("open")) {
           category.classList.add("open");
           category
             .querySelector(".strategy-category-header")
             ?.classList.add("active");
         }
-        selectedExists = true;
+      } else {
+        r.checked = false;
+        item.classList.remove("selected");
       }
     });
-
-  // Don't select any strategy by default
-  // Keep all accordions collapsed
 }
 
-function initParamsForStrategy(strategyKey) {
-  const strategyParams = STRATEGY_PARAMS[strategyKey] || [];
-  strategyParams.forEach((param) => {
+// Toggle strategy selection (checkbox handler)
+function toggleStrategy(strategyName, isSelected) {
+  if (isSelected) {
+    if (!AppState.selectedStrategies.includes(strategyName)) {
+      AppState.selectedStrategies.push(strategyName);
+    }
+    // Update current strategy to the one being selected
+    AppState.strategy = strategyName;
+  } else {
+    AppState.selectedStrategies = AppState.selectedStrategies.filter(
+      (s) => s !== strategyName,
+    );
+    // Update current strategy to the first remaining one if any
+    if (AppState.selectedStrategies.length > 0) {
+      AppState.strategy = AppState.selectedStrategies[0];
+    } else {
+      AppState.strategy = "";
+    }
+  }
+  updateStrategySelectionUI();
+  updateContextBar();
+
+  // Update visual selection state for all strategy items
+  document
+    .querySelectorAll('.strategy-compact-item input[name="strategy"]')
+    .forEach((r) => {
+      const item = r.closest(".strategy-compact-item");
+      if (AppState.selectedStrategies.includes(r.value)) {
+        item.classList.add("selected");
+      } else {
+        item.classList.remove("selected");
+      }
+    });
+}
+
+// Update strategy selection UI to show count
+function updateStrategySelectionUI() {
+  const countEl = document.getElementById("selected-strategies-count");
+  if (countEl) {
+    const count = AppState.selectedStrategies.length;
+    countEl.textContent =
+      count === 0
+        ? "0 strategies selected"
+        : count === 1
+          ? "1 strategy selected"
+          : `${count} strategies selected`;
+  }
+}
+
+function initParamsForStrategy(strategyName) {
+  const strategyParams = STRATEGY_PARAMS[strategyName] || {};
+  Object.values(strategyParams).forEach((param) => {
+    if (AppState.params[strategyName] === undefined) {
+      AppState.params[strategyName] = {};
+    }
     if (
-      AppState.params[param.name] === undefined ||
-      AppState.params[param.name] === null
+      AppState.params[strategyName][param.name] === undefined ||
+      AppState.params[strategyName][param.name] === null
     ) {
-      AppState.params[param.name] = param.default;
+      AppState.params[strategyName][param.name] = param.default;
     }
   });
 }
@@ -1552,7 +1607,7 @@ function initParamsForStrategy(strategyKey) {
 // Initialization
 // ===========================
 
-document.addEventListener("DOMContentLoaded", () => {
+function initializeApp() {
   console.log("AlphaField Dashboard v2.0 initializing...");
 
   // Initialize tabs
@@ -1585,7 +1640,7 @@ document.addEventListener("DOMContentLoaded", () => {
   loadSentiment();
 
   console.log("Dashboard initialized");
-});
+}
 
 // ===========================
 // Tab Navigation
@@ -1594,7 +1649,7 @@ document.addEventListener("DOMContentLoaded", () => {
 function initTabNavigation() {
   // Set initial tab from URL hash or default to 'build'
   const hash = window.location.hash.slice(1);
-  if (["build", "backtest", "optimize", "deploy"].includes(hash)) {
+  if (["build", "backtest", "optimize", "deploy", "orders"].includes(hash)) {
     switchTab(hash);
   }
 }
@@ -1674,20 +1729,20 @@ function initStrategySelection() {
   // not yet been populated.
   const container = document.getElementById("strategy-options");
   if (!container) {
-    // Fall back to legacy behavior if container isn’t present
-    document.querySelectorAll('input[name="strategy"]').forEach((radio) => {
-      radio.addEventListener("change", (e) => {
-        AppState.strategy = e.target.value;
-        initParamsForStrategy(AppState.strategy);
-        updateParamsUI();
-        updateContextBar();
-      });
+    // Fall back to legacy behavior if container isn't present
+    // Only add listeners to elements that exist (defensive programming)
+    const strategyInputs = document.querySelectorAll('input[name="strategy"]');
+    strategyInputs.forEach((radio) => {
+      if (radio && typeof radio.addEventListener === "function") {
+        radio.addEventListener("change", (e) => {
+          AppState.strategy = e.target.value;
+          initParamsForStrategy(AppState.strategy);
+          updateParamsUI();
+          updateContextBar();
+        });
+      }
     });
   }
-
-  // Initial params setup
-  initParamsForStrategy(AppState.strategy);
-  updateParamsUI();
 }
 
 // ===========================
@@ -1782,20 +1837,36 @@ function getParams() {
 
 function updateContextBar() {
   // Strategy with ML indicator
-  const backendKey = AppState.strategy;
-  const override = STRATEGY_UI_OVERRIDES[backendKey];
-  const friendly = (override && override.displayName) || backendKey;
+  // Handle multiple strategy selection
+  const selectedCount = AppState.selectedStrategies.length;
+  let strategyText = "";
 
-  let strategyText = `${friendly} (${backendKey})`;
-  if (AppState.mlEnabled) {
+  if (selectedCount === 0) {
+    strategyText = "Not Selected";
+  } else if (selectedCount === 1) {
+    // Single strategy - show full name with key
+    const backendKey = AppState.strategy;
+    const override = STRATEGY_UI_OVERRIDES[backendKey];
+    const friendly = (override && override.displayName) || backendKey;
+    strategyText = `${friendly} (${backendKey})`;
+  } else {
+    // Multiple strategies - show comma-separated list of display names
+    const displayNames = AppState.selectedStrategies.map((key) => {
+      const override = STRATEGY_UI_OVERRIDES[key];
+      return (override && override.displayName) || key;
+    });
+    strategyText = displayNames.join(", ");
+  }
+
+  if (AppState.mlEnabled && selectedCount > 0) {
     strategyText += " + 🤖ML";
   }
   document.getElementById("ctx-strategy").textContent = strategyText;
   document.getElementById("ctx-symbol").textContent = AppState.symbol || "—";
 
-  let status = "Configure strategy to begin";
-  if (AppState.strategy && AppState.symbol) {
-    status = "Ready to test";
+  let status = "Configure strategies to begin";
+  if (selectedCount > 0 && AppState.symbol) {
+    status = selectedCount === 1 ? "Ready to test" : "Ready to test multiple";
   }
   if (AppState.backtestResults) {
     const returnVal =
@@ -2138,19 +2209,6 @@ function initIntervalSelector() {
   });
 }
 
-function updateBacktestSummary() {
-  document.getElementById("bt-summary-strategy").textContent =
-    AppState.strategy;
-  document.getElementById("bt-summary-symbol").textContent =
-    AppState.symbol || "—";
-
-  const params = getParams();
-  const paramsStr = Object.entries(params)
-    .map(([k, v]) => `${k}=${v}`)
-    .join(", ");
-  document.getElementById("bt-summary-params").textContent = paramsStr || "—";
-}
-
 async function runBacktest() {
   const btn = document.getElementById("btn-run-backtest");
   btn.disabled = true;
@@ -2171,11 +2229,12 @@ async function runBacktest() {
 
     const params = getParams();
 
+    // Send request
     const res = await fetch(`${API_BASE}/backtest/run`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        strategy: AppState.strategy,
+        strategies: AppState.selectedStrategies,
         symbol: backtestSymbol,
         interval: AppState.backtestInterval,
         days: AppState.backtestDays,
@@ -2282,13 +2341,23 @@ async function optimizeParams() {
     const res = await fetch(`${API_BASE}/backtest/optimize`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        strategy: AppState.strategy,
-        symbol: AppState.symbol,
-        interval: AppState.backtestInterval,
-        days: AppState.backtestDays,
-        trading_mode: AppState.trading_mode,
-      }),
+      body: JSON.stringify(
+        {
+          strategies: AppState.selectedStrategies,
+          symbol: AppState.symbol || "",
+          interval: AppState.backtestInterval,
+          days: AppState.backtestDays,
+          include_benchmark: true,
+          trading_mode: AppState.trading_mode,
+        },
+        (key, value) => {
+          // Filter out undefined/null values to prevent JSON stringify errors
+          if (value === undefined || value === null) {
+            return undefined;
+          }
+          return value;
+        },
+      ),
     });
 
     const data = await res.json();
@@ -4379,7 +4448,27 @@ function updateOptimizeDisplay() {
   const categoryEl = document.getElementById("opt-display-category");
 
   if (strategyEl) {
-    strategyEl.textContent = AppState.strategy || "—";
+    const selectedCount = AppState.selectedStrategies.length;
+    let strategyText = "";
+
+    if (selectedCount === 0) {
+      strategyText = "—";
+    } else if (selectedCount === 1) {
+      // Single strategy - show display name with key
+      const backendKey = AppState.selectedStrategies[0];
+      const override = STRATEGY_UI_OVERRIDES[backendKey];
+      const friendly = (override && override.displayName) || backendKey;
+      strategyText = friendly;
+    } else {
+      // Multiple strategies - show comma-separated list of display names
+      const displayNames = AppState.selectedStrategies.map((key) => {
+        const override = STRATEGY_UI_OVERRIDES[key];
+        return (override && override.displayName) || key;
+      });
+      strategyText = displayNames.join(", ");
+    }
+
+    strategyEl.textContent = strategyText;
   }
 
   if (categoryEl && AppState.assetCategory) {
@@ -5527,18 +5616,20 @@ async function createBracketOrder(event) {
 }
 
 // Iceberg Order Management
-document
-  .getElementById("iceberg-visible-qty")
-  .addEventListener("input", updateIcebergSlices);
-document
-  .getElementById("iceberg-total-qty")
-  .addEventListener("input", updateIcebergSlices);
+const visibleQtyInput = document.getElementById("iceberg-visible-qty");
+if (visibleQtyInput && typeof visibleQtyInput.addEventListener === "function") {
+  visibleQtyInput.addEventListener("input", updateIcebergSlices);
+}
+const totalQtyInput = document.getElementById("iceberg-total-qty");
+if (totalQtyInput && typeof totalQtyInput.addEventListener === "function") {
+  totalQtyInput.addEventListener("input", updateIcebergSlices);
+}
 
 function updateIcebergSlices() {
-  const visible =
-    parseFloat(document.getElementById("iceberg-visible-qty").value) || 0;
-  const total =
-    parseFloat(document.getElementById("iceberg-total-qty").value) || 0;
+  const visibleQtyInput = document.getElementById("iceberg-visible-qty");
+  const totalQtyInput = document.getElementById("iceberg-total-qty");
+  const visible = visibleQtyInput ? parseFloat(visibleQtyInput.value) || 0 : 0;
+  const total = totalQtyInput ? parseFloat(totalQtyInput.value) || 0 : 0;
   const slices = visible > 0 ? Math.ceil(total / visible) : 0;
   document.getElementById("iceberg-slices").textContent = slices;
 }
@@ -5932,12 +6023,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
 class CorrelationHeatmap {
   constructor() {
-    this.canvas = document.getElementById('correlation-heatmap');
+    this.canvas = document.getElementById("correlation-heatmap");
     if (!this.canvas) {
-      console.warn('Correlation heatmap canvas not found');
+      console.warn("Correlation heatmap canvas not found");
       return;
     }
-    this.ctx = this.canvas.getContext('2d');
+    this.ctx = this.canvas.getContext("2d");
     this.data = null;
     this.cellSize = 80;
     this.labelWidth = 120;
@@ -5948,29 +6039,37 @@ class CorrelationHeatmap {
   async loadData(threshold = 0.7) {
     this.currentThreshold = threshold;
     try {
-      showLoading('correlation-section');
-      const response = await fetch(`${API_BASE}/analysis/correlation-matrix?threshold=${threshold}`);
-      
+      showLoading("correlation-section");
+      const response = await fetch(
+        `${API_BASE}/analysis/correlation-matrix?threshold=${threshold}`,
+      );
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       this.data = await response.json();
-      
+
       if (this.data.success) {
         this.render();
         this.updateStats();
         this.updateClusters();
         this.updatePairs();
       } else {
-        console.error('Correlation matrix API error:', this.data.error);
-        showError('correlation-section', this.data.error || 'Failed to load correlation matrix');
+        console.error("Correlation matrix API error:", this.data.error);
+        showError(
+          "correlation-section",
+          this.data.error || "Failed to load correlation matrix",
+        );
       }
     } catch (error) {
-      console.error('Failed to load correlation data:', error);
-      showError('correlation-section', 'Failed to load correlation matrix. Please try again.');
+      console.error("Failed to load correlation data:", error);
+      showError(
+        "correlation-section",
+        "Failed to load correlation matrix. Please try again.",
+      );
     } finally {
-      hideLoading('correlation-section');
+      hideLoading("correlation-section");
     }
   }
 
@@ -5979,60 +6078,71 @@ class CorrelationHeatmap {
 
     const { strategies, matrix } = this.data;
     const n = strategies.length;
-    
+
     const width = this.labelWidth + n * this.cellSize;
     const height = this.labelHeight + n * this.cellSize;
-    
+
     const dpr = window.devicePixelRatio || 1;
     this.canvas.width = width * dpr;
     this.canvas.height = height * dpr;
-    this.canvas.style.width = width + 'px';
-    this.canvas.style.height = height + 'px';
+    this.canvas.style.width = width + "px";
+    this.canvas.style.height = height + "px";
     this.ctx.scale(dpr, dpr);
-    
-    this.ctx.fillStyle = '#0f172a';
+
+    this.ctx.fillStyle = "#0f172a";
     this.ctx.fillRect(0, 0, width, height);
-    
+
     for (let i = 0; i < n; i++) {
       for (let j = 0; j < n; j++) {
         const x = this.labelWidth + j * this.cellSize;
         const y = this.labelHeight + i * this.cellSize;
         const value = matrix[i][j];
-        
+
         this.ctx.fillStyle = this.getColor(value);
         this.ctx.fillRect(x, y, this.cellSize, this.cellSize);
-        
-        this.ctx.fillStyle = Math.abs(value) > 0.5 ? '#ffffff' : '#1e293b';
-        this.ctx.font = 'bold 14px Inter, sans-serif';
-        this.ctx.textAlign = 'center';
-        this.ctx.textBaseline = 'middle';
-        this.ctx.fillText(value.toFixed(2), x + this.cellSize/2, y + this.cellSize/2);
-        
-        this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+
+        this.ctx.fillStyle = Math.abs(value) > 0.5 ? "#ffffff" : "#1e293b";
+        this.ctx.font = "bold 14px Inter, sans-serif";
+        this.ctx.textAlign = "center";
+        this.ctx.textBaseline = "middle";
+        this.ctx.fillText(
+          value.toFixed(2),
+          x + this.cellSize / 2,
+          y + this.cellSize / 2,
+        );
+
+        this.ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
         this.ctx.lineWidth = 1;
         this.ctx.strokeRect(x, y, this.cellSize, this.cellSize);
       }
     }
-    
-    this.ctx.fillStyle = '#f8fafc';
-    this.ctx.font = '12px Inter, sans-serif';
-    
+
+    this.ctx.fillStyle = "#f8fafc";
+    this.ctx.font = "12px Inter, sans-serif";
+
     for (let j = 0; j < n; j++) {
       this.ctx.save();
-      this.ctx.translate(this.labelWidth + j * this.cellSize + this.cellSize/2, this.labelHeight - 10);
+      this.ctx.translate(
+        this.labelWidth + j * this.cellSize + this.cellSize / 2,
+        this.labelHeight - 10,
+      );
       this.ctx.rotate(-Math.PI / 4);
-      this.ctx.textAlign = 'right';
+      this.ctx.textAlign = "right";
       this.ctx.fillText(this.truncateLabel(strategies[j], 15), 0, 0);
       this.ctx.restore();
     }
-    
+
     for (let i = 0; i < n; i++) {
-      this.ctx.textAlign = 'right';
-      this.ctx.textBaseline = 'middle';
-      this.ctx.fillText(this.truncateLabel(strategies[i], 15), this.labelWidth - 10, this.labelHeight + i * this.cellSize + this.cellSize/2);
+      this.ctx.textAlign = "right";
+      this.ctx.textBaseline = "middle";
+      this.ctx.fillText(
+        this.truncateLabel(strategies[i], 15),
+        this.labelWidth - 10,
+        this.labelHeight + i * this.cellSize + this.cellSize / 2,
+      );
     }
-    
-    this.ctx.strokeStyle = '#3b82f6';
+
+    this.ctx.strokeStyle = "#3b82f6";
     this.ctx.lineWidth = 2;
     for (let i = 0; i < n; i++) {
       const x = this.labelWidth + i * this.cellSize;
@@ -6043,7 +6153,7 @@ class CorrelationHeatmap {
 
   getColor(correlation) {
     const absCorr = Math.abs(correlation);
-    
+
     if (correlation < 0) {
       const intensity = Math.min(absCorr, 1.0);
       const r = Math.round(30 + (1 - intensity) * 225);
@@ -6057,59 +6167,63 @@ class CorrelationHeatmap {
       const b = Math.round(59 + (1 - intensity) * 196);
       return `rgb(${r}, ${g}, ${b})`;
     }
-    
-    return '#ffffff';
+
+    return "#ffffff";
   }
 
   truncateLabel(label, maxLength) {
     if (label.length <= maxLength) return label;
-    return label.substring(0, maxLength - 3) + '...';
+    return label.substring(0, maxLength - 3) + "...";
   }
 
   updateStats() {
     if (!this.data) return;
-    
-    const divScoreEl = document.getElementById('div-score');
-    const highPairsEl = document.getElementById('high-pairs');
-    const clusterCountEl = document.getElementById('cluster-count');
-    
-    if (divScoreEl) divScoreEl.textContent = this.data.diversification_score.toFixed(3);
-    if (highPairsEl) highPairsEl.textContent = this.data.high_correlation_pairs.length;
+
+    const divScoreEl = document.getElementById("div-score");
+    const highPairsEl = document.getElementById("high-pairs");
+    const clusterCountEl = document.getElementById("cluster-count");
+
+    if (divScoreEl)
+      divScoreEl.textContent = this.data.diversification_score.toFixed(3);
+    if (highPairsEl)
+      highPairsEl.textContent = this.data.high_correlation_pairs.length;
     if (clusterCountEl) clusterCountEl.textContent = this.data.clusters.length;
   }
 
   updateClusters() {
-    const list = document.getElementById('cluster-list');
+    const list = document.getElementById("cluster-list");
     if (!list || !this.data) return;
-    
-    list.innerHTML = '';
-    
+
+    list.innerHTML = "";
+
     if (this.data.clusters.length === 0) {
-      list.innerHTML = '<li class="empty-cluster">No significant clusters found</li>';
+      list.innerHTML =
+        '<li class="empty-cluster">No significant clusters found</li>';
       return;
     }
-    
+
     this.data.clusters.forEach((cluster, idx) => {
-      const li = document.createElement('li');
-      li.innerHTML = `<strong>Cluster ${idx + 1}:</strong> ${cluster.join(', ')}`;
+      const li = document.createElement("li");
+      li.innerHTML = `<strong>Cluster ${idx + 1}:</strong> ${cluster.join(", ")}`;
       list.appendChild(li);
     });
   }
 
   updatePairs() {
-    const tbody = document.getElementById('pairs-tbody');
+    const tbody = document.getElementById("pairs-tbody");
     if (!tbody || !this.data) return;
-    
-    tbody.innerHTML = '';
-    
+
+    tbody.innerHTML = "";
+
     if (this.data.high_correlation_pairs.length === 0) {
-      tbody.innerHTML = '<tr class="empty-row"><td colspan="3">No high correlation pairs found</td></tr>';
+      tbody.innerHTML =
+        '<tr class="empty-row"><td colspan="3">No high correlation pairs found</td></tr>';
       return;
     }
-    
+
     this.data.high_correlation_pairs.forEach(([stratA, stratB, corr]) => {
-      const row = document.createElement('tr');
-      const corrClass = corr > 0.8 ? 'high' : corr > 0.7 ? 'medium' : 'low';
+      const row = document.createElement("tr");
+      const corrClass = corr > 0.8 ? "high" : corr > 0.7 ? "medium" : "low";
       row.innerHTML = `
         <td>${stratA}</td>
         <td>${stratB}</td>
@@ -6120,7 +6234,7 @@ class CorrelationHeatmap {
   }
 
   refresh() {
-    const thresholdSlider = document.getElementById('correlation-threshold');
+    const thresholdSlider = document.getElementById("correlation-threshold");
     const threshold = thresholdSlider ? parseFloat(thresholdSlider.value) : 0.7;
     this.loadData(threshold);
   }
@@ -6128,30 +6242,130 @@ class CorrelationHeatmap {
 
 let correlationHeatmap = null;
 
+async function runCorrelationAnalysis() {
+  const thresholdSlider = document.getElementById("correlation-threshold");
+  const threshold = thresholdSlider ? parseFloat(thresholdSlider.value) : 0.7;
+
+  try {
+    showLoading("correlation-ui");
+
+    // Update visibility based on backtest results
+    const unavailableMsg = document.getElementById(
+      "correlation-unavailable-msg",
+    );
+    const correlationUI = document.getElementById("correlation-ui");
+    const correlationCard = document.getElementById("correlation-in-backtest");
+
+    if (AppState.selectedStrategies.length < 2) {
+      if (correlationCard) correlationCard.style.display = "none";
+      return;
+    }
+
+    // Show correlation card
+    if (correlationCard) correlationCard.style.display = "block";
+
+    // Check if we have backtest results
+    const hasBacktestData = AppState.selectedStrategies.some(
+      (s) => AppState.backtestResults && AppState.backtestResults[s],
+    );
+
+    if (!hasBacktestData) {
+      if (unavailableMsg) {
+        unavailableMsg.textContent =
+          "Run backtests on selected strategies to view correlation analysis";
+        unavailableMsg.style.display = "block";
+      }
+      if (correlationUI) correlationUI.style.display = "none";
+      return;
+    }
+
+    if (unavailableMsg) unavailableMsg.style.display = "none";
+    if (correlationUI) correlationUI.style.display = "block";
+
+    // Collect equity curves from all backtested strategies
+    const strategies = [];
+    const equityCurves = [];
+
+    for (const strategyName of AppState.selectedStrategies) {
+      if (AppState.backtestResults && AppState.backtestResults[strategyName]) {
+        const result = AppState.backtestResults[strategyName];
+        strategies.push(strategyName);
+        equityCurves.push(result.equity_curve || result.equity);
+      }
+    }
+
+    if (equityCurves.length < 2) {
+      throw new Error("Need at least 2 strategies with backtest data");
+    }
+
+    // Call correlation API
+    const response = await fetch(`${API_BASE}/analysis/correlation`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        strategies,
+        equity_curves: equityCurves,
+        threshold,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.success && correlationHeatmap) {
+      correlationHeatmap.data = data;
+      correlationHeatmap.render();
+      correlationHeatmap.updateStats();
+      correlationHeatmap.updateClusters();
+      correlationHeatmap.updatePairs();
+    } else {
+      console.error("Correlation analysis error:", data.error);
+    }
+  } catch (error) {
+    console.error("Failed to run correlation analysis:", error);
+    const errorMsg = document.getElementById("correlation-unavailable-msg");
+    if (errorMsg) {
+      errorMsg.textContent =
+        "Failed to load correlation analysis: " + error.message;
+    }
+  } finally {
+    hideLoading("correlation-ui");
+  }
+}
+
 function initCorrelationHeatmap() {
   if (!correlationHeatmap) {
     correlationHeatmap = new CorrelationHeatmap();
   }
   correlationHeatmap.loadData(0.7);
-  
-  const thresholdSlider = document.getElementById('correlation-threshold');
-  const thresholdValue = document.getElementById('threshold-value');
-  
+
+  const thresholdSlider = document.getElementById("correlation-threshold");
+  const thresholdValue = document.getElementById("threshold-value");
+
   if (thresholdSlider && thresholdValue) {
-    thresholdSlider.addEventListener('input', (e) => {
+    thresholdSlider.addEventListener("input", (e) => {
       thresholdValue.textContent = parseFloat(e.target.value).toFixed(2);
     });
-    
-    thresholdSlider.addEventListener('change', (e) => {
-      correlationHeatmap.loadData(parseFloat(e.target.value));
+
+    thresholdSlider.addEventListener("change", (e) => {
+      runCorrelationAnalysis();
     });
   }
 }
 
+// Initialize correlation when entering backtest tab if applicable
 const originalSwitchTab = switchTab;
-switchTab = function(tabName) {
+switchTab = function (tabName) {
   originalSwitchTab(tabName);
-  if (tabName === 'correlation') {
-    initCorrelationHeatmap();
+  if (tabName === "backtest") {
+    if (correlationHeatmap) {
+      // Re-render heatmap if backtest data exists
+      if (AppState.selectedStrategies.length >= 2 && AppState.backtestResults) {
+        runCorrelationAnalysis();
+      }
+    }
   }
 };

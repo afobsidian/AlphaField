@@ -453,7 +453,12 @@ pub struct ValidateRequest {
     pub model_type: String,
     pub train_window_days: Option<usize>,
     pub test_window_days: Option<usize>,
+    #[serde(default = "default_trading_mode")]
     pub trading_mode: String,
+}
+
+fn default_trading_mode() -> String {
+    "Spot".to_string()
 }
 
 #[derive(Serialize)]
