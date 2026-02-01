@@ -210,11 +210,11 @@ impl MultiStrategyBacktestEngine {
                 total = total,
                 "Invalid weight total, falling back to equal weights"
             );
-            // Fall back to equal weights
-            let num_strategies = weights.len() as f64;
+            // Fall back to equal weights using registered strategies as source of truth
+            let num_strategies = self.strategies.len() as f64;
             if num_strategies > 0.0 {
                 let equal_weight = 1.0 / num_strategies;
-                self.weights = weights.keys().map(|k| (k.clone(), equal_weight)).collect();
+                self.weights = self.strategies.keys().map(|k| (k.clone(), equal_weight)).collect();
             }
             return;
         }
@@ -515,8 +515,9 @@ impl MultiStrategyBacktestEngine {
 
             // Calculate P&L from equity curve (final - initial)
             let gross_pnl = final_val - initial;
-            // Net P&L would subtract per-strategy fees, but we don't track that separately
-            // For now, use the same value (actual fees are tracked at portfolio level)
+            // Net P&L would subtract per-strategy fees, but we don't track fees per strategy.
+            // Total fees are accumulated in the `run()` method as `total_fees` and included
+            // in the overall backtest result. For per-strategy net P&L, we use gross P&L.
             let net_pnl = gross_pnl;
 
             performances.push(StrategyPerformance {
