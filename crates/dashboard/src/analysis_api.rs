@@ -28,6 +28,7 @@ use crate::api::AppState;
 use crate::services::data_service::fetch_data_with_cache;
 use crate::services::strategy_service::StrategyFactory;
 use alphafield_backtest::strategy::Strategy as BacktestStrategy;
+use alphafield_core::TradingMode;
 use chrono::{Duration, Utc};
 use std::collections::HashMap;
 
@@ -204,6 +205,12 @@ pub struct SensitivityRequest {
     /// Any fixed parameters to include
     #[serde(default)]
     pub fixed_params: HashMap<String, f64>,
+    #[serde(default = "default_trading_mode")]
+    pub trading_mode: String,
+}
+
+fn default_trading_mode() -> String {
+    "Spot".to_string()
 }
 
 #[derive(Deserialize)]
@@ -287,6 +294,10 @@ pub async fn run_sensitivity(
     let strategy_name = req.strategy.clone();
     let fixed_params = req.fixed_params.clone();
     let req_symbol = req.symbol.clone();
+    let trading_mode = match req.trading_mode.to_lowercase().as_str() {
+        "margin" => TradingMode::Margin,
+        _ => TradingMode::Spot,
+    };
 
     let range_x = ParameterRange::new(
         &req.param.name,
@@ -299,6 +310,7 @@ pub async fn run_sensitivity(
         let range_y = ParameterRange::new(&py.name, py.min, py.max, py.step);
         let sym = req_symbol.clone();
         let s_name = strategy_name.clone();
+        let tm = trading_mode;
 
         // Use create_backtest which returns properly wrapped strategies
         let factory_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -310,7 +322,7 @@ pub async fn run_sensitivity(
                 // Use create_backtest for properly adapted strategies
                 // If invalid params, return strategy with default params but mark as invalid or let it fail?
                 // Better to return None and handle it in result processing
-                StrategyFactory::create_backtest(&s_name, &p, &sym, 100_000.0)
+                StrategyFactory::create_backtest(&s_name, &p, &sym, 100_000.0, tm)
             })
         }));
 
@@ -331,6 +343,7 @@ pub async fn run_sensitivity(
     } else {
         let sym = req_symbol.clone();
         let s_name = strategy_name.clone();
+        let tm = trading_mode;
 
         let factory_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             analyzer.analyze_1d(&bars, &req.symbol, &range_x, |v1| {
@@ -338,7 +351,7 @@ pub async fn run_sensitivity(
                 p.insert(req.param.name.clone(), v1);
 
                 // Use create_backtest for properly adapted strategies
-                StrategyFactory::create_backtest(&s_name, &p, &sym, 100_000.0)
+                StrategyFactory::create_backtest(&s_name, &p, &sym, 100_000.0, tm)
             })
         }));
 
