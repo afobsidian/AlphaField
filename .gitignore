@@ -22,6 +22,6 @@ target
 .env
 
 # Log files
-logs/
+.logs/
 
 .openode
