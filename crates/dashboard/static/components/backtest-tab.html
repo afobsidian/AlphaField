@@ -1,0 +1,746 @@
+<!-- ==================== TAB 3: BACKTEST ==================== -->
+<section id="backtest-view" class="view-section">
+    <div class="view-header">
+        <h1>📊 Backtest</h1>
+        <p>Validate your strategy against historical data</p>
+    </div>
+
+    <div class="backtest-grid">
+        <!-- Config Summary + Run -->
+        <div class="card run-card">
+            <h3>Run Backtest</h3>
+
+            <div class="config-summary">
+                <div class="summary-row">
+                    <span>Strategy:</span>
+                    <strong id="bt-summary-strategy">—</strong>
+                </div>
+                <div class="summary-row">
+                    <span>Asset Category:</span>
+                    <strong id="bt-summary-category">—</strong>
+                </div>
+                <div class="summary-row">
+                    <span>Parameters:</span>
+                    <span id="bt-summary-params" class="params-inline">—</span>
+                </div>
+            </div>
+
+            <!-- Symbol Selection for Backtest -->
+            <div class="form-group">
+                <label>Test Symbol</label>
+                <p style="font-size: 12px; opacity: 0.8; margin-bottom: 8px">
+                    Select which symbol to backtest with optimized parameters
+                </p>
+                <div
+                    class="custom-select-wrapper"
+                    id="backtest-symbol-select-wrapper"
+                >
+                    <div
+                        class="custom-select-trigger"
+                        id="backtest-symbol-trigger"
+                    >
+                        <span id="backtest-selected-symbol-text"
+                            >Select Symbol...</span
+                        >
+                    </div>
+                    <div class="custom-options">
+                        <div class="symbol-search-box">
+                            <input
+                                type="text"
+                                class="symbol-search-input"
+                                id="backtest-symbol-search-input"
+                                placeholder="Search symbol..."
+                                autocomplete="off"
+                            />
+                        </div>
+                        <div
+                            class="options-list"
+                            id="backtest-symbol-options-list"
+                        >
+                            <div
+                                class="placeholder-content"
+                                style="min-height: 100px"
+                            >
+                                <span class="text-muted">Loading...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <input type="hidden" id="backtest-symbol" />
+            </div>
+
+            <div class="form-group">
+                <label>Backtest Period</label>
+                <div class="period-selector">
+                    <button
+                        type="button"
+                        class="period-btn active"
+                        data-days="90"
+                    >
+                        90d
+                    </button>
+                    <button type="button" class="period-btn" data-days="180">
+                        180d
+                    </button>
+                    <button type="button" class="period-btn" data-days="365">
+                        1y
+                    </button>
+                    <button type="button" class="period-btn" data-days="1095">
+                        3y
+                    </button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Data Interval</label>
+                <div class="interval-selector">
+                    <button
+                        type="button"
+                        class="interval-btn"
+                        data-interval="15m"
+                    >
+                        15m
+                    </button>
+                    <button
+                        type="button"
+                        class="interval-btn active"
+                        data-interval="1h"
+                    >
+                        1h
+                    </button>
+                    <button
+                        type="button"
+                        class="interval-btn"
+                        data-interval="4h"
+                    >
+                        4h
+                    </button>
+                    <button
+                        type="button"
+                        class="interval-btn"
+                        data-interval="1d"
+                    >
+                        1d
+                    </button>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button
+                    type="button"
+                    class="btn btn-primary btn-action"
+                    id="btn-run-backtest"
+                    onclick="runBacktest()"
+                >
+                    ▶️ Run Backtest
+                </button>
+            </div>
+        </div>
+
+        <!-- Results Panel -->
+        <div class="card results-card" id="backtest-results">
+            <h3>Results</h3>
+            <div id="backtest-results-placeholder" class="placeholder-content">
+                <span class="placeholder-icon">📈</span>
+                <span>Run a backtest to see results</span>
+            </div>
+
+            <div id="backtest-results-content" class="results-content hidden">
+                <div class="metrics-grid">
+                    <div class="metric">
+                        <span class="metric-label">Total Return</span>
+                        <span class="metric-value" id="bt-return">—</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Sharpe Ratio</span>
+                        <span class="metric-value" id="bt-sharpe">—</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Max Drawdown</span>
+                        <span class="metric-value" id="bt-drawdown">—</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Win Rate</span>
+                        <span class="metric-value" id="bt-winrate">—</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Total Trades</span>
+                        <span class="metric-value" id="bt-trades">—</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">vs Benchmark</span>
+                        <span class="metric-value" id="bt-alpha">—</span>
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button
+                        type="button"
+                        class="btn btn-secondary"
+                        onclick="goToOptimize()"
+                    >
+                        🔧 Optimize Parameters
+                    </button>
+                    <button
+                        type="button"
+                        class="btn btn-primary"
+                        onclick="goToDeploy()"
+                    >
+                        🚀 Deploy Strategy
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Equity Chart -->
+        <div class="card chart-card-full">
+            <h3>Equity Curve</h3>
+            <div id="equity-chart" style="width: 100%; height: 350px"></div>
+        </div>
+
+        <!-- Interactive Price Chart -->
+        <div class="card chart-card-full">
+            <div
+                style="
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 16px;
+                "
+            >
+                <h3>📈 Interactive Price Chart</h3>
+                <div style="display: flex; gap: 8px; align-items: center">
+                    <!-- Chart Type Selector -->
+                    <div class="chart-type-selector">
+                        <button
+                            type="button"
+                            class="chart-type-btn active"
+                            data-type="candlestick"
+                            onclick="switchChartType('candlestick')"
+                        >
+                            📊 Candlestick
+                        </button>
+                        <button
+                            type="button"
+                            class="chart-type-btn"
+                            data-type="line"
+                            onclick="switchChartType('line')"
+                        >
+                            📈 Line
+                        </button>
+                        <button
+                            type="button"
+                            class="chart-type-btn"
+                            data-type="area"
+                            onclick="switchChartType('area')"
+                        >
+                            📉 Area
+                        </button>
+                    </div>
+                    <!-- Indicator Controls -->
+                    <button
+                        type="button"
+                        class="btn btn-secondary btn-sm"
+                        onclick="toggleIndicatorPanel()"
+                    >
+                        ⚙️ Indicators
+                    </button>
+                </div>
+            </div>
+
+            <!-- Indicator Control Panel (Initially Hidden) -->
+            <div
+                id="indicator-panel"
+                class="indicator-panel"
+                style="display: none; margin-bottom: 16px"
+            >
+                <h4 style="margin-bottom: 12px">Add Technical Indicators</h4>
+                <div
+                    style="
+                        display: grid;
+                        grid-template-columns: repeat(
+                            auto-fit,
+                            minmax(200px, 1fr)
+                        );
+                        gap: 12px;
+                    "
+                >
+                    <div class="indicator-control">
+                        <label>
+                            <input
+                                type="checkbox"
+                                id="ind-sma-50"
+                                onchange="updateChartIndicators()"
+                            />
+                            SMA (50)
+                        </label>
+                    </div>
+                    <div class="indicator-control">
+                        <label>
+                            <input
+                                type="checkbox"
+                                id="ind-sma-200"
+                                onchange="updateChartIndicators()"
+                            />
+                            SMA (200)
+                        </label>
+                    </div>
+                    <div class="indicator-control">
+                        <label>
+                            <input
+                                type="checkbox"
+                                id="ind-ema-20"
+                                onchange="updateChartIndicators()"
+                            />
+                            EMA (20)
+                        </label>
+                    </div>
+                    <div class="indicator-control">
+                        <label>
+                            <input
+                                type="checkbox"
+                                id="ind-bb"
+                                onchange="updateChartIndicators()"
+                            />
+                            Bollinger Bands
+                        </label>
+                    </div>
+                    <div class="indicator-control">
+                        <label>
+                            <input
+                                type="checkbox"
+                                id="ind-rsi"
+                                onchange="updateChartIndicators()"
+                            />
+                            RSI (14)
+                        </label>
+                    </div>
+                    <div class="indicator-control">
+                        <label>
+                            <input
+                                type="checkbox"
+                                id="ind-macd"
+                                onchange="updateChartIndicators()"
+                            />
+                            MACD
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Price Chart -->
+            <div id="price-chart" style="width: 100%; height: 450px"></div>
+
+            <!-- RSI Panel (Initially Hidden) -->
+            <div id="rsi-panel" style="display: none; margin-top: 20px">
+                <h4>RSI (14)</h4>
+                <div id="rsi-chart" style="width: 100%; height: 150px"></div>
+            </div>
+
+            <!-- MACD Panel (Initially Hidden) -->
+            <div id="macd-panel" style="display: none; margin-top: 20px">
+                <h4>MACD (12, 26, 9)</h4>
+                <div id="macd-chart" style="width: 100%; height: 150px"></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Reports Tab -->
+<section id="reports-view" class="view-section">
+    <div class="view-header display-flex justify-content-between">
+        <div>
+            <h1>📊 Trade Reports</h1>
+            <p>Performance analytics, trade journal, and tax reporting</p>
+        </div>
+    </div>
+
+    <div class="card">
+        <div
+            class="card-header d-flex justify-content-between align-items-center"
+        >
+            <ul
+                class="nav nav-tabs card-header-tabs"
+                id="reportTabs"
+                role="tablist"
+            >
+                <li class="nav-item">
+                    <button
+                        class="nav-link active"
+                        data-bs-toggle="tab"
+                        data-bs-target="#performance-report"
+                        type="button"
+                    >
+                        Performance
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button
+                        class="nav-link"
+                        data-bs-toggle="tab"
+                        data-bs-target="#tax-report"
+                        type="button"
+                    >
+                        Tax
+                    </button>
+                </li>
+                <li class="nav-item">
+                    <button
+                        class="nav-link"
+                        data-bs-toggle="tab"
+                        data-bs-target="#trade-journal"
+                        type="button"
+                    >
+                        Journal
+                    </button>
+                </li>
+            </ul>
+            <button
+                class="btn btn-outline-primary btn-sm"
+                id="export-csv-btn"
+                onclick="exportReportCSV()"
+            >
+                <i class="fas fa-download"></i> Export CSV
+            </button>
+        </div>
+        <div class="card-body">
+            <div class="tab-content" id="reportContent">
+                <!-- Performance Report -->
+                <div class="tab-pane fade show active" id="performance-report">
+                    <div class="row mb-3 align-items-center">
+                        <div class="col-auto">
+                            <label class="form-label mb-0">Period:</label>
+                        </div>
+                        <div class="col-auto">
+                            <select
+                                class="form-select form-select-sm"
+                                id="report-period"
+                                onchange="updatePerformanceReport()"
+                            >
+                                <option value="Daily">Daily</option>
+                                <option value="Weekly">Weekly</option>
+                                <option value="Monthly" selected>
+                                    Monthly
+                                </option>
+                                <option value="Yearly">Yearly</option>
+                            </select>
+                        </div>
+                        <div class="col text-end">
+                            <div
+                                class="text-muted small"
+                                id="report-last-generated"
+                            ></div>
+                        </div>
+                    </div>
+
+                    <div id="performance-summary-container">
+                        <div class="alert alert-info" id="report-placeholder">
+                            Run a backtest to generate performance data.
+                        </div>
+
+                        <div id="report-metrics" style="display: none">
+                            <!-- Overall Stats -->
+                            <div class="row g-3 mb-4">
+                                <div class="col-md-3">
+                                    <div class="metric-card">
+                                        <div class="metric-label">
+                                            Total P&L
+                                        </div>
+                                        <div
+                                            class="metric-value big"
+                                            id="report-total-pnl"
+                                        >
+                                            --
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="metric-card">
+                                        <div class="metric-label">Win Rate</div>
+                                        <div
+                                            class="metric-value"
+                                            id="report-win-rate"
+                                        >
+                                            --
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="metric-card">
+                                        <div class="metric-label">
+                                            Profit Factor
+                                        </div>
+                                        <div
+                                            class="metric-value"
+                                            id="report-profit-factor"
+                                        >
+                                            --
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="metric-card">
+                                        <div class="metric-label">Trades</div>
+                                        <div
+                                            class="metric-value"
+                                            id="report-total-trades"
+                                        >
+                                            --
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Period Breakdown Chart -->
+                            <div
+                                class="chart-container mb-4"
+                                style="height: 300px"
+                            >
+                                <div id="report-pnl-chart"></div>
+                            </div>
+
+                            <!-- Period Table -->
+                            <h5>Period Breakdown</h5>
+                            <div class="table-responsive">
+                                <table
+                                    class="table table-sm table-hover"
+                                    id="report-period-table"
+                                >
+                                    <thead>
+                                        <tr>
+                                            <th>Period</th>
+                                            <th>P&L</th>
+                                            <th>Trades</th>
+                                            <th>Win Rate</th>
+                                            <th>Best Trade</th>
+                                            <th>Worst Trade</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tax Report -->
+                <div class="tab-pane fade" id="tax-report">
+                    <div class="row mb-4 align-items-center">
+                        <div class="col-auto">
+                            <label class="form-label mb-0"
+                                >Cost Basis Method:</label
+                            >
+                        </div>
+                        <div class="col-auto">
+                            <select
+                                class="form-select form-select-sm"
+                                id="tax-method"
+                            >
+                                <option value="FIFO">
+                                    FIFO (First-In First-Out)
+                                </option>
+                                <option value="LIFO">
+                                    LIFO (Last-In First-Out)
+                                </option>
+                            </select>
+                        </div>
+                        <div class="col-auto">
+                            <button
+                                class="btn btn-primary btn-sm"
+                                onclick="generateTaxReport()"
+                            >
+                                Calculate
+                            </button>
+                        </div>
+                        <div class="col text-end">
+                            <button
+                                class="btn btn-outline-secondary btn-sm"
+                                onclick="exportTaxCSV()"
+                                disabled
+                                id="btn-export-tax"
+                            >
+                                Download Tax CSV
+                            </button>
+                        </div>
+                    </div>
+                    <div id="tax-summary-container">
+                        <div class="alert alert-info" id="tax-placeholder">
+                            Calculates realized gains/losses based on completed
+                            trades.
+                        </div>
+
+                        <div id="tax-results" style="display: none">
+                            <h5>Annual Summary</h5>
+                            <table
+                                class="table table-sm table-bordered mb-4"
+                                id="tax-yearly-table"
+                            >
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Year</th>
+                                        <th>Short-Term Gain</th>
+                                        <th>Long-Term Gain</th>
+                                        <th>Total Net Gain/Loss</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+
+                            <h5>Taxable Events</h5>
+                            <div
+                                class="table-responsive"
+                                style="max_height: 400px; overflow-y: auto"
+                            >
+                                <table
+                                    class="table table-sm table-hover"
+                                    id="tax-events-table"
+                                >
+                                    <thead>
+                                        <tr>
+                                            <th>Date Sold</th>
+                                            <th>Symbol</th>
+                                            <th>Qty</th>
+                                            <th>Proceeds</th>
+                                            <th>Cost Basis</th>
+                                            <th>Gain/Loss</th>
+                                            <th>Term</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trade Journal -->
+                <div class="tab-pane fade" id="trade-journal">
+                    <div class="table-responsive">
+                        <table
+                            class="table table-hover align-middle"
+                            id="journal-table"
+                        >
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Symbol</th>
+                                    <th>Side</th>
+                                    <th>P&L</th>
+                                    <th>Tags</th>
+                                    <th style="width: 30%">Notes</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- Journal entries -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="text-center p-3 text-muted" id="journal-empty">
+                        No journal entries found. Run trades to populate
+                        journal.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Correlation Matrix -->
+    <div class="page-header" style="margin-top: 32px">
+        <h1 class="page-title">Correlation Matrix</h1>
+        <p class="page-subtitle">
+            Visualize strategy interdependencies and identify highly correlated
+            positions
+        </p>
+    </div>
+
+    <div class="correlation-container">
+        <!-- Controls Panel -->
+        <div class="card correlation-controls">
+            <h3>Settings</h3>
+            <div class="control-group">
+                <label for="correlation-threshold">
+                    Correlation Threshold:
+                    <span id="threshold-value">0.70</span>
+                </label>
+                <input
+                    type="range"
+                    id="correlation-threshold"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value="0.7"
+                />
+            </div>
+            <div class="button-group">
+                <button
+                    type="button"
+                    class="btn btn-primary"
+                    id="refresh-correlation"
+                    onclick="correlationHeatmap.refresh()"
+                >
+                    🔄 Refresh
+                </button>
+            </div>
+        </div>
+
+        <!-- Stats Panel -->
+        <div class="card correlation-stats">
+            <h3>Statistics</h3>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <span class="stat-label">Diversification Score</span>
+                    <span class="stat-value" id="div-score">-</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">High Correlation Pairs</span>
+                    <span class="stat-value" id="high-pairs">-</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Strategy Clusters</span>
+                    <span class="stat-value" id="cluster-count">-</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Heatmap Panel -->
+        <div class="card correlation-heatmap-card">
+            <h3>Correlation Heatmap</h3>
+            <div class="heatmap-container">
+                <canvas id="correlation-heatmap"></canvas>
+            </div>
+            <div class="heatmap-legend">
+                <span class="legend-item negative">-1.0</span>
+                <span class="legend-gradient"></span>
+                <span class="legend-item positive">+1.0</span>
+            </div>
+        </div>
+
+        <!-- Clusters Panel -->
+        <div class="card correlation-clusters">
+            <h3>Strategy Clusters</h3>
+            <ul id="cluster-list" class="cluster-list">
+                <li class="empty-cluster">No clusters identified</li>
+            </ul>
+        </div>
+
+        <!-- High Correlation Pairs Panel -->
+        <div class="card correlation-pairs">
+            <h3>High Correlation Pairs</h3>
+            <table class="pairs-table" id="pairs-table">
+                <thead>
+                    <tr>
+                        <th>Strategy A</th>
+                        <th>Strategy B</th>
+                        <th>Correlation</th>
+                    </tr>
+                </thead>
+                <tbody id="pairs-tbody">
+                    <tr class="empty-row">
+                        <td colspan="3">No high correlation pairs found</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
