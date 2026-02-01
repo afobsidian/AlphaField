@@ -23,3 +23,5 @@ target
 
 # Log files
 logs/
+
+.openode
