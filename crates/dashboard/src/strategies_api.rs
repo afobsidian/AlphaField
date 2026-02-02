@@ -14,8 +14,7 @@ use std::sync::Arc;
 
 // Import strategy framework types
 use alphafield_strategy::{
-    HoldBaseline, MarketAverageBaseline, MarketRegime, StrategyCategory, StrategyMetadata,
-    StrategyRegistry, StrategyWithMetadata,
+    MarketRegime, StrategyCategory, StrategyMetadata, StrategyRegistry, StrategyWithMetadata,
 };
 
 // Re-use AppState from api.rs
@@ -114,7 +113,7 @@ impl AppError {
     fn get_valid_values(filter: &str) -> String {
         match filter {
             "category" => {
-                "TrendFollowing, MeanReversion, Momentum, VolatilityBased, SentimentBased, MultiIndicator, Baseline"
+                "TrendFollowing, MeanReversion, Momentum, VolatilityBased, SentimentBased, MultiIndicator"
             }
             "regime" => {
                 "Bull, Bear, Sideways, HighVolatility, LowVolatility, Trending, Ranging"
@@ -153,20 +152,6 @@ impl axum::response::IntoResponse for AppError {
 /// the registry with initial strategies.
 pub fn initialize_registry() -> Arc<StrategyRegistry> {
     let registry = Arc::new(StrategyRegistry::new());
-
-    // Register HODL baseline strategy
-    let hodl = Arc::new(HoldBaseline::new()) as Arc<dyn StrategyWithMetadata>;
-    if let Err(e) = registry.register(hodl) {
-        eprintln!("Failed to register HODL baseline: {}", e);
-    }
-
-    // Register Market Average baseline strategy
-    let symbols = vec!["BTC".to_string(), "ETH".to_string(), "SOL".to_string()];
-    let market_avg =
-        Arc::new(MarketAverageBaseline::equal_weighted(symbols)) as Arc<dyn StrategyWithMetadata>;
-    if let Err(e) = registry.register(market_avg) {
-        eprintln!("Failed to register Market Average baseline: {}", e);
-    }
 
     // ------------------------------------------------------------------------
     // Trend Following Strategies (Phase 12.2)
@@ -538,7 +523,6 @@ fn parse_strategy_category(s: &str) -> Result<StrategyCategory, AppError> {
         }
         "sentimentbased" | "sentiment" | "sentiment-based" => Ok(StrategyCategory::SentimentBased),
         "multiindicator" | "multi" | "multi-indicator" => Ok(StrategyCategory::MultiIndicator),
-        "baseline" => Ok(StrategyCategory::Baseline),
         _ => Err(AppError::invalid_filter("category", s)),
     }
 }
@@ -584,7 +568,7 @@ fn metadata_to_summary(metadata: &StrategyMetadata) -> StrategySummary {
 /// List all registered strategies with optional filtering
 ///
 /// # Query Parameters
-/// - `category` (optional): Filter by strategy category (e.g., "TrendFollowing", "MeanReversion", "Baseline")
+/// - `category` (optional): Filter by strategy category (e.g., "TrendFollowing", "MeanReversion", "Momentum")
 /// - `regime` (optional): Filter by suitable market regime (e.g., "Bull", "Bear", "Sideways")
 ///
 /// # Returns
@@ -629,15 +613,15 @@ pub async fn list_strategies(
 /// Get detailed information about a specific strategy
 ///
 /// # Path Parameters
-/// - `name`: Strategy name (e.g., "HODL_Baseline", "GoldenCross")
+/// - `name`: Strategy name (e.g., "GoldenCross", "BollingerBands")
 ///
 /// # Returns
 /// Complete strategy metadata if found, or 404 if not found
 ///
 /// # Examples
 /// ```bash
-/// curl http://localhost:8080/api/strategies/HODL_Baseline
 /// curl http://localhost:8080/api/strategies/GoldenCross
+/// curl http://localhost:8080/api/strategies/BollingerBands
 /// ```
 pub async fn get_strategy_details(
     State(state): State<Arc<AppState>>,
@@ -671,7 +655,6 @@ pub async fn list_categories() -> Json<Vec<String>> {
         "VolatilityBased".to_string(),
         "SentimentBased".to_string(),
         "MultiIndicator".to_string(),
-        "Baseline".to_string(),
     ])
 }
 
@@ -781,10 +764,7 @@ mod tests {
             parse_strategy_category("multi").unwrap(),
             StrategyCategory::MultiIndicator
         ));
-        assert!(matches!(
-            parse_strategy_category("baseline").unwrap(),
-            StrategyCategory::Baseline
-        ));
+        // Baseline category removed - no longer available
 
         // Test case insensitivity / separator handling
         assert!(matches!(

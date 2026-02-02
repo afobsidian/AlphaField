@@ -156,6 +156,6 @@ The reconciliation can be automated via a scheduled job:
 ## Audit Trail
 
 All reconciliations should be:
-1. Logged to `logs/reconciliation/`
+1. Logged to `.logs/reconciliation/`
 2. Retained for 90 days minimum
 3. Available for compliance review

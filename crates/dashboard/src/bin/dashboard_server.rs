@@ -7,9 +7,9 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Set up daily log rotation
-    // Logs are written to logs/alphafield.log (current day) and logs/alphafield.log.YYYY-MM-DD (previous days)
+    // Logs are written to .logs/alphafield.log (current day) and .logs/alphafield.log.YYYY-MM-DD (previous days)
     // A new log file is created automatically at midnight each day
-    let file_appender = rolling::daily("logs", "alphafield.log");
+    let file_appender = rolling::daily(".logs", "alphafield.log");
 
     // Initialize tracing subscriber to write to file
     // Use RUST_LOG env var to control log levels, e.g.:
@@ -29,7 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("Starting AlphaField Dashboard Server");
     println!(
-        "🚀 Dashboard server starting - logs written to logs/alphafield.log with daily rotation"
+        "🚀 Dashboard server starting - logs written to .logs/alphafield.log with daily rotation"
     );
 
     run_server("0.0.0.0:8080").await?;

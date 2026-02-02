@@ -415,6 +415,45 @@ cargo run --example golden_cross_backtest -p alphafield-backtest --release
 cargo run --bin dashboard_server --release
 ```
 
+### Debugging
+
+AlphaField writes logs to the `.logs/` directory with daily rotation:
+
+```bash
+# View current log file
+tail -f .logs/alphafield.log
+
+# View logs from previous days
+ls -la .logs/
+
+# Search for errors
+grep -i error .logs/alphafield.log
+
+# Search for specific strategy or module
+grep "GoldenCross" .logs/alphafield.log
+grep "RiskManager" .logs/alphafield.log
+
+# For AI debugging assistants:
+# 1. Always check .logs/alphafield.log first when investigating issues
+# 2. Look for error patterns: QuantError, BacktestError, validation failures
+# 3. Check for risk manager rejections: "Order rejected", "circuit breaker", "PositionDrift"
+# 4. Verify strategy signals are being generated: search for "Signal generated"
+# 5. Check database connection issues: search for "Database", "TimescaleDB", "connection"
+# 6. For backtesting issues: look for "No bars found", "Insufficient data", "Warmup period"
+```
+
+**Log Levels**: Configure via `RUST_LOG` environment variable:
+- `error` - Only errors (default)
+- `warn` - Warnings and errors
+- `info` - General informational messages
+- `debug` - Detailed debug information (useful for strategy issues)
+- `trace` - Very verbose tracing (use sparingly, generates lots of output)
+
+Example:
+```bash
+RUST_LOG=debug,alphafield_backtest=trace cargo run --example golden_cross_backtest
+```
+
 ### Docker Deployment
 
 ```bash

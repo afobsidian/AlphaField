@@ -68,8 +68,6 @@ pub enum StrategyCategory {
     SentimentBased,
     /// Combines multiple indicators
     MultiIndicator,
-    /// Baseline strategies for comparison
-    Baseline,
 }
 
 /// Market regimes for strategy classification
@@ -617,8 +615,6 @@ pub fn canonicalize_strategy_name(name: &str) -> String {
         "Bollinger Bands Mean Reversion" => "BollingerBands".to_string(),
         "EMA-MACD Momentum" => "Momentum".to_string(),
         "EMA-MACD" => "Momentum".to_string(),
-        "HODL Baseline" => "HODL_Baseline".to_string(),
-        "Market Average Baseline" => "Market_Average_Baseline".to_string(),
         "RSI" => "RSIReversion".to_string(),
         "Stochastic" => "StochReversion".to_string(),
         "Z Score" => "ZScoreReversion".to_string(),
@@ -790,7 +786,7 @@ mod tests {
         fn metadata(&self) -> StrategyMetadata {
             StrategyMetadata {
                 name: self.name.clone(),
-                category: StrategyCategory::Baseline,
+                category: StrategyCategory::TrendFollowing,
                 sub_type: Some("mock".to_string()),
                 description: "Mock strategy for testing".to_string(),
                 hypothesis_path: "hypotheses/mock.md".to_string(),
@@ -846,7 +842,7 @@ mod tests {
 
         let meta = metadata.unwrap();
         assert_eq!(meta.name, "TestStrategy");
-        assert_eq!(meta.category, StrategyCategory::Baseline);
+        assert_eq!(meta.category, StrategyCategory::TrendFollowing);
     }
 
     #[test]
@@ -877,7 +873,7 @@ mod tests {
             .register(Arc::new(MockStrategy::new("Baseline2")))
             .unwrap();
 
-        let strategies = registry.list_by_category(StrategyCategory::Baseline);
+        let strategies = registry.list_by_category(StrategyCategory::TrendFollowing);
         assert_eq!(strategies.len(), 2);
     }
 

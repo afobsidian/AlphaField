@@ -809,9 +809,8 @@ async fn main() -> Result<()> {
                     "momentum" => StrategyCategory::Momentum,
                     "volatility" => StrategyCategory::VolatilityBased,
                     "sentiment" => StrategyCategory::SentimentBased,
-                    "baseline" => StrategyCategory::Baseline,
                     _ => {
-                        eprintln!("Unknown category: {}. Valid options: trend_following, mean_reversion, momentum, volatility, sentiment, baseline", cat_filter);
+                        eprintln!("Unknown category: {}. Valid options: trend_following, mean_reversion, momentum, volatility, sentiment", cat_filter);
                         std::process::exit(1);
                     }
                 };

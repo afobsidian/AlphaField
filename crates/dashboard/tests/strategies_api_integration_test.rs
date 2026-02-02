@@ -36,16 +36,6 @@ async fn test_strategies_api_integration() {
     // Verify we have the expected strategies
     let strategy_names: Vec<String> = strategies_vec.iter().map(|s| s.name.clone()).collect();
 
-    // Baselines
-    assert!(
-        strategy_names.contains(&"HODL_Baseline".to_string()),
-        "Should have HODL baseline"
-    );
-    assert!(
-        strategy_names.contains(&"Market_Average_Baseline".to_string()),
-        "Should have Market Average baseline"
-    );
-
     // Trend Following (Phase 12.2)
     assert!(
         strategy_names.contains(&"Golden Cross".to_string()),

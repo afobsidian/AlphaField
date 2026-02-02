@@ -498,6 +498,8 @@ pub struct OptimizeRequest {
     pub symbol: String,
     pub interval: String,
     pub days: u32,
+    #[serde(default = "default_trading_mode")]
+    pub trading_mode: String,
 }
 
 #[derive(Serialize)]
@@ -625,6 +627,10 @@ pub async fn optimize_params(
     let optimizer = ParameterOptimizer::new(100_000.0, 0.001);
     let strategy_name_owned = strategy_name.to_string(); // Convert &str to owned String for closure
     let symbol = req.symbol.clone();
+    let trading_mode = match req.trading_mode.to_lowercase().as_str() {
+        "margin" => TradingMode::Margin,
+        _ => TradingMode::Spot,
+    };
 
     // Run optimizer in blocking task to avoid blocking async runtime
     let optimization_result = tokio::task::spawn_blocking(move || {
@@ -633,7 +639,13 @@ pub async fn optimize_params(
             &symbol,
             |params| {
                 // Create strategy adapter for backtest
-                StrategyFactory::create_backtest(&strategy_name_owned, params, &symbol, 100_000.0)
+                StrategyFactory::create_backtest(
+                    &strategy_name_owned,
+                    params,
+                    &symbol,
+                    100_000.0,
+                    trading_mode,
+                )
             },
             &bounds,
         )
@@ -918,10 +930,11 @@ pub async fn run_optimization_workflow(
         monte_carlo_config: Some(alphafield_backtest::MonteCarloConfig::default()), // Monte Carlo enabled by default
         risk_free_rate: req.risk_free_rate.unwrap_or(0.02), // Default 2% risk-free rate
         trading_mode: match req.trading_mode.as_str() {
-            "Margin" => alphafield_core::TradingMode::Margin,
-            _ => alphafield_core::TradingMode::Spot,
+            "Margin" => TradingMode::Margin,
+            _ => TradingMode::Spot,
         },
     };
+    let workflow_trading_mode = workflow_config.trading_mode;
 
     // 5. Determine sensitivity parameters (first two from bounds for 3D visualization)
     let sensitivity_params = if workflow_config.include_3d_sensitivity && bounds.len() >= 2 {
@@ -951,7 +964,13 @@ pub async fn run_optimization_workflow(
 
         // Create factory closure
         let factory = |params: &HashMap<String, f64>| {
-            StrategyFactory::create_backtest(&strategy_name, params, &symbol, 100_000.0)
+            StrategyFactory::create_backtest(
+                &strategy_name,
+                params,
+                &symbol,
+                100_000.0,
+                workflow_trading_mode,
+            )
         };
 
         workflow.run(&bars, &symbol, &factory, &bounds, sensitivity_params)
@@ -1071,6 +1090,8 @@ pub struct MultiSymbolWorkflowRequest {
     pub train_window_days: Option<usize>,
     /// Optional: Testing window for walk-forward (in days, default: 63)
     pub test_window_days: Option<usize>,
+    #[serde(default = "default_trading_mode")]
+    pub trading_mode: String,
 }
 
 /// Result for a single symbol in multi-symbol optimization
@@ -1231,9 +1252,18 @@ pub async fn run_multi_symbol_workflow(
     let strategy_name = req.strategy.clone();
     let bounds_clone = bounds.clone();
     let symbol_data_clone = symbol_data.clone();
+    let trading_mode = match req.trading_mode.to_lowercase().as_str() {
+        "margin" => TradingMode::Margin,
+        _ => TradingMode::Spot,
+    };
 
     let sweep_result = tokio::task::spawn_blocking(move || {
-        run_combined_parameter_sweep(&symbol_data_clone, &strategy_name, &bounds_clone)
+        run_combined_parameter_sweep(
+            &symbol_data_clone,
+            &strategy_name,
+            &bounds_clone,
+            trading_mode,
+        )
     })
     .await;
 
@@ -1305,6 +1335,7 @@ pub async fn run_multi_symbol_workflow(
     let strategy_name_wf = req.strategy.clone();
     let best_params_wf = best_params.clone();
     let symbol_data_wf = symbol_data.clone();
+    let trading_mode_wf = trading_mode;
 
     let walk_forward_result = tokio::task::spawn_blocking(move || {
         run_multi_symbol_walk_forward(
@@ -1314,6 +1345,7 @@ pub async fn run_multi_symbol_workflow(
             train_window_bars,
             test_window_bars,
             TRADING_DAYS_PER_MONTH * bars_per_day,
+            trading_mode_wf,
         )
     })
     .await;
@@ -1374,6 +1406,7 @@ fn run_combined_parameter_sweep(
     symbol_data: &[(String, Vec<alphafield_core::Bar>)],
     strategy_name: &str,
     bounds: &[alphafield_backtest::ParamBounds],
+    trading_mode: TradingMode,
 ) -> Result<
     (
         Vec<ParamSweepResult>,
@@ -1421,11 +1454,16 @@ fn run_combined_parameter_sweep(
         // Test on ALL symbols
         for (symbol, bars) in symbol_data {
             // Create strategy
-            let strategy =
-                match StrategyFactory::create_backtest(strategy_name, params, symbol, 100_000.0) {
-                    Some(s) => s,
-                    None => continue,
-                };
+            let strategy = match StrategyFactory::create_backtest(
+                strategy_name,
+                params,
+                symbol,
+                100_000.0,
+                trading_mode,
+            ) {
+                Some(s) => s,
+                None => continue,
+            };
 
             // Run backtest
             let mut engine =
@@ -1492,6 +1530,7 @@ fn run_combined_parameter_sweep(
             &best_params,
             symbol,
             100_000.0,
+            trading_mode,
         ) {
             Some(s) => s,
             None => continue,
@@ -1537,6 +1576,7 @@ fn run_multi_symbol_walk_forward(
     train_window: usize,
     test_window: usize,
     step_size: usize,
+    trading_mode: TradingMode,
 ) -> Result<alphafield_backtest::WalkForwardResult, String> {
     use alphafield_backtest::{BacktestEngine, SlippageModel};
     use rand::seq::SliceRandom;
@@ -1580,14 +1620,19 @@ fn run_multi_symbol_walk_forward(
 
         // Run train backtest
         let train_metrics = {
-            let strategy =
-                match StrategyFactory::create_backtest(strategy_name, params, symbol, 100_000.0) {
-                    Some(s) => s,
-                    None => {
-                        window_idx += 1;
-                        continue;
-                    }
-                };
+            let strategy = match StrategyFactory::create_backtest(
+                strategy_name,
+                params,
+                symbol,
+                100_000.0,
+                trading_mode,
+            ) {
+                Some(s) => s,
+                None => {
+                    window_idx += 1;
+                    continue;
+                }
+            };
 
             let mut engine =
                 BacktestEngine::new(100_000.0, 0.001, SlippageModel::FixedPercent(0.0005));
@@ -1605,14 +1650,19 @@ fn run_multi_symbol_walk_forward(
 
         // Run test backtest
         let test_metrics = {
-            let strategy =
-                match StrategyFactory::create_backtest(strategy_name, params, symbol, 100_000.0) {
-                    Some(s) => s,
-                    None => {
-                        window_idx += 1;
-                        continue;
-                    }
-                };
+            let strategy = match StrategyFactory::create_backtest(
+                strategy_name,
+                params,
+                symbol,
+                100_000.0,
+                trading_mode,
+            ) {
+                Some(s) => s,
+                None => {
+                    window_idx += 1;
+                    continue;
+                }
+            };
 
             let mut engine =
                 BacktestEngine::new(100_000.0, 0.001, SlippageModel::FixedPercent(0.0005));
