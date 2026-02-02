@@ -8,7 +8,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::Stochastic;
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -89,8 +89,9 @@ impl fmt::Display for StochReversionConfig {
 pub struct StochReversionStrategy {
     config: StochReversionConfig,
     stoch: Stochastic,
-    last_position: SignalType,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
     last_k: Option<f64>,
     last_d: Option<f64>,
 }
@@ -107,8 +108,9 @@ impl StochReversionStrategy {
         Self {
             stoch: Stochastic::new(config.k_period, config.d_period, config.smooth_period),
             config,
-            last_position: SignalType::Hold,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
             last_k: None,
             last_d: None,
         }
@@ -133,9 +135,10 @@ impl MetadataStrategy for StochReversionStrategy {
             category: StrategyCategory::MeanReversion,
             sub_type: Some("stochastic_reversion".to_string()),
             description: format!(
-                "Stochastic oscillator mean reversion strategy with %K period {}, %D period {}, smooth period {}.
-                Oversold {:.0}, overbought {:.0}. Buys when %K drops below oversold,
-                sells when %K rises above overbought or crosses below %D.",
+                "Stochastic oscillator mean reversion strategy with %K period {}, %D period {}, smooth period {}. \
+                Oversold {:.0}, overbought {:.0}. \
+                Long: Buys when %K drops below oversold, exits when %K crosses below %D. \
+                Short: Sells when %K rises above overbought, exits when %K crosses above %D.",
                 self.config.k_period, self.config.d_period, self.config.smooth_period,
                 self.config.oversold, self.config.overbought
             ),
@@ -172,49 +175,49 @@ impl Strategy for StochReversionStrategy {
         self.last_k = Some(k_value);
         self.last_d = Some(d_value);
 
-        // EXIT LOGIC
-        if self.last_position == SignalType::Buy {
-            if let Some(entry) = self.entry_price {
+        // === LONG POSITION EXIT LOGIC ===
+        if self.position == PositionState::Long {
+            if let Some(entry) = self.long_entry_price {
                 let profit_pct = (price - entry) / entry * 100.0;
 
-                // Exit condition 1: Stop loss
+                // Long Exit 1: Stop loss
                 if profit_pct <= -self.config.stop_loss {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
-                        metadata: Some(format!("Stop Loss Exit: {:.1}% loss", profit_pct)),
+                        metadata: Some(format!("Long Stop Loss: {:.1}% loss", profit_pct)),
                     }]);
                 }
 
-                // Exit condition 2: %K overbought
+                // Long Exit 2: %K overbought
                 if k_value >= self.config.overbought {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
-                        metadata: Some(format!("Stoch Overbought Exit: %K = {:.1}", k_value)),
+                        metadata: Some(format!("Stoch Overbought Long Exit: %K = {:.1}", k_value)),
                     }]);
                 }
 
-                // Exit condition 3: %K crosses below %D (bearish crossover)
+                // Long Exit 3: %K crosses below %D (bearish crossover)
                 if let (Some(pk), Some(pd)) = (prev_k, prev_d) {
                     if pk >= pd && k_value < d_value {
-                        self.last_position = SignalType::Hold;
-                        self.entry_price = None;
+                        self.position = PositionState::Flat;
+                        self.long_entry_price = None;
                         return Some(vec![Signal {
                             timestamp: bar.timestamp,
                             symbol: "UNKNOWN".to_string(),
                             signal_type: SignalType::Sell,
                             strength: 0.9,
                             metadata: Some(format!(
-                                "Stoch Bearish Crossover Exit: %K={:.1} crossed below %D={:.1}",
+                                "Stoch Bearish Crossover Long Exit: %K={:.1} crossed below %D={:.1}",
                                 k_value, d_value
                             )),
                         }]);
@@ -223,39 +226,136 @@ impl Strategy for StochReversionStrategy {
             }
         }
 
-        // ENTRY LOGIC - %K oversold and optionally crosses above %D
-        if self.last_position != SignalType::Buy && k_value <= self.config.oversold {
-            // Optional: Confirm with bullish crossover (K crosses above D)
-            let crossover_confirmed = if let (Some(pk), Some(pd)) = (prev_k, prev_d) {
-                pk <= pd && k_value > d_value
-            } else {
-                false
-            };
+        // === SHORT POSITION EXIT LOGIC ===
+        if self.position == PositionState::Short {
+            if let Some(entry) = self.short_entry_price {
+                // For shorts: profit when price drops
+                let profit_pct = (entry - price) / entry * 100.0;
 
-            if crossover_confirmed || k_value <= self.config.oversold {
-                self.last_position = SignalType::Buy;
-                self.entry_price = Some(price);
-                let strength = (self.config.oversold - k_value) / self.config.oversold;
-                let signal_strength = if crossover_confirmed {
-                    1.0
+                // Short Exit 1: Stop loss
+                if profit_pct <= -self.config.stop_loss {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!("Short Stop Loss: {:.1}% loss", profit_pct)),
+                    }]);
+                }
+
+                // Short Exit 2: %K oversold
+                if k_value <= self.config.oversold {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!("Stoch Oversold Short Exit: %K = {:.1}", k_value)),
+                    }]);
+                }
+
+                // Short Exit 3: %K crosses above %D (bullish crossover - exit short)
+                if let (Some(pk), Some(pd)) = (prev_k, prev_d) {
+                    if pk <= pd && k_value > d_value {
+                        self.position = PositionState::Flat;
+                        self.short_entry_price = None;
+                        return Some(vec![Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 0.9,
+                            metadata: Some(format!(
+                                "Stoch Bullish Crossover Short Exit: %K={:.1} crossed above %D={:.1}",
+                                k_value, d_value
+                            )),
+                        }]);
+                    }
+                }
+            }
+        }
+
+        // === ENTRY LOGIC (only when flat) ===
+        if self.position == PositionState::Flat {
+            // Long Entry: %K oversold and optionally crosses above %D
+            if k_value <= self.config.oversold {
+                // Confirm with bullish crossover (K crosses above D)
+                let crossover_confirmed = if let (Some(pk), Some(pd)) = (prev_k, prev_d) {
+                    pk <= pd && k_value > d_value
                 } else {
-                    strength.clamp(0.3, 0.9)
+                    false
                 };
 
-                return Some(vec![Signal {
-                    timestamp: bar.timestamp,
-                    symbol: "UNKNOWN".to_string(),
-                    signal_type: SignalType::Buy,
-                    strength: signal_strength,
-                    metadata: Some(format!(
-                        "Stoch Oversold Entry: %K={:.1}, %D={:.1}, Crossover={}",
-                        k_value, d_value, crossover_confirmed
-                    )),
-                }]);
+                if crossover_confirmed || k_value <= self.config.oversold / 2.0 {
+                    self.position = PositionState::Long;
+                    self.long_entry_price = Some(price);
+                    let strength = (self.config.oversold - k_value) / self.config.oversold;
+                    let signal_strength = if crossover_confirmed {
+                        1.0
+                    } else {
+                        strength.clamp(0.3, 0.9)
+                    };
+
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: signal_strength,
+                        metadata: Some(format!(
+                            "Stoch Long Entry: %K={:.1}, %D={:.1}, Crossover={}",
+                            k_value, d_value, crossover_confirmed
+                        )),
+                    }]);
+                }
+            }
+
+            // Short Entry: %K overbought and optionally crosses below %D
+            if k_value >= self.config.overbought {
+                // Confirm with bearish crossover (K crosses below D)
+                let crossover_confirmed = if let (Some(pk), Some(pd)) = (prev_k, prev_d) {
+                    pk >= pd && k_value < d_value
+                } else {
+                    false
+                };
+
+                if crossover_confirmed || k_value >= (100.0 + self.config.overbought) / 2.0 {
+                    self.position = PositionState::Short;
+                    self.short_entry_price = Some(price);
+                    let strength =
+                        (k_value - self.config.overbought) / (100.0 - self.config.overbought);
+                    let signal_strength = if crossover_confirmed {
+                        1.0
+                    } else {
+                        strength.clamp(0.3, 0.9)
+                    };
+
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Sell,
+                        strength: signal_strength,
+                        metadata: Some(format!(
+                            "Stoch Short Entry: %K={:.1}, %D={:.1}, Crossover={}",
+                            k_value, d_value, crossover_confirmed
+                        )),
+                    }]);
+                }
             }
         }
 
         None
+    }
+
+    fn reset(&mut self) {
+        self.stoch.reset();
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
+        self.last_k = None;
+        self.last_d = None;
     }
 }
 

@@ -8,7 +8,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::{Atr, Ema, Indicator};
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
@@ -85,8 +85,9 @@ pub struct KeltnerReversionStrategy {
     ema: Ema,
     atr: Atr,
     volumes: VecDeque<f64>,
-    last_position: SignalType,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
 }
 
 impl Default for KeltnerReversionStrategy {
@@ -110,8 +111,9 @@ impl KeltnerReversionStrategy {
             atr: Atr::new(config.atr_period),
             volumes: VecDeque::with_capacity(config.ema_period),
             config,
-            last_position: SignalType::Hold,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
         }
     }
 
@@ -136,12 +138,12 @@ impl MetadataStrategy for KeltnerReversionStrategy {
             category: StrategyCategory::MeanReversion,
             sub_type: Some("keltner_reversion".to_string()),
             description: format!(
-                "Keltner channel mean reversion strategy with EMA period {}, ATR period {}, multiplier {:.1}.
-                Requires volume >= {:.1}x average for entry confirmation.
-                Buys when price touches lower channel (EMA - {}*ATR) with high volume,
-                exits at middle band (EMA) or upper channel.",
+                "Keltner channel mean reversion strategy with EMA period {}, ATR period {}, multiplier {:.1}. \
+                Requires volume >= {:.1}x average for entry confirmation. \
+                Long: Buys when price touches lower channel (EMA - {}*ATR) with high volume, exits at middle band. \
+                Short: Sells when price touches upper channel (EMA + {}*ATR) with high volume, exits at middle band.",
                 self.config.ema_period, self.config.atr_period, self.config.atr_multiplier,
-                self.config.volume_multiplier, self.config.atr_multiplier
+                self.config.volume_multiplier, self.config.atr_multiplier, self.config.atr_multiplier
             ),
             hypothesis_path: "hypotheses/mean_reversion/keltner_reversion.md".to_string(),
             required_indicators: vec!["EMA".to_string(), "ATR".to_string(), "Volume".to_string()],
@@ -185,51 +187,51 @@ impl Strategy for KeltnerReversionStrategy {
         // Check volume confirmation
         let volume_confirmed = bar.volume >= self.config.volume_multiplier * avg_volume;
 
-        // EXIT LOGIC
-        if self.last_position == SignalType::Buy {
-            if let Some(entry) = self.entry_price {
+        // === LONG POSITION EXIT LOGIC ===
+        if self.position == PositionState::Long {
+            if let Some(entry) = self.long_entry_price {
                 let profit_pct = (price - entry) / entry * 100.0;
 
-                // Exit condition 1: Stop loss
+                // Long Exit 1: Stop loss
                 if profit_pct <= -self.config.stop_loss {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
-                        metadata: Some(format!("Stop Loss Exit: {:.1}% loss", profit_pct)),
+                        metadata: Some(format!("Long Stop Loss: {:.1}% loss", profit_pct)),
                     }]);
                 }
 
-                // Exit condition 2: Price reaches middle band (EMA)
+                // Long Exit 2: Price reaches middle band (EMA)
                 if price >= middle {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
                         metadata: Some(format!(
-                            "Keltner Middle Exit: Price {:.2} >= EMA {:.2}",
+                            "Keltner Middle Long Exit: Price {:.2} >= EMA {:.2}",
                             price, middle
                         )),
                     }]);
                 }
 
-                // Exit condition 3: Price reaches upper band (profit target)
+                // Long Exit 3: Price reaches upper band (profit target)
                 if price >= upper_band {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
                         metadata: Some(format!(
-                            "Keltner Upper Exit: Price {:.2} >= Upper {:.2}",
+                            "Keltner Upper Long Exit: Price {:.2} >= Upper {:.2}",
                             price, upper_band
                         )),
                     }]);
@@ -237,29 +239,116 @@ impl Strategy for KeltnerReversionStrategy {
             }
         }
 
-        // ENTRY LOGIC - Price touches lower band AND high volume
-        if self.last_position != SignalType::Buy && price <= lower_band && volume_confirmed {
-            self.last_position = SignalType::Buy;
-            self.entry_price = Some(price);
-            let distance = (middle - price) / middle;
-            let strength = distance.clamp(0.3, 1.0);
+        // === SHORT POSITION EXIT LOGIC ===
+        if self.position == PositionState::Short {
+            if let Some(entry) = self.short_entry_price {
+                // For shorts: profit when price drops
+                let profit_pct = (entry - price) / entry * 100.0;
 
-            return Some(vec![Signal {
-                timestamp: bar.timestamp,
-                symbol: "UNKNOWN".to_string(),
-                signal_type: SignalType::Buy,
-                strength,
-                metadata: Some(format!(
-                    "Keltner Lower Entry: Price {:.2} <= Lower {:.2}, Volume {:.0} ({:.1}x avg)",
-                    price,
-                    lower_band,
-                    bar.volume,
-                    bar.volume / avg_volume
-                )),
-            }]);
+                // Short Exit 1: Stop loss
+                if profit_pct <= -self.config.stop_loss {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!("Short Stop Loss: {:.1}% loss", profit_pct)),
+                    }]);
+                }
+
+                // Short Exit 2: Price reaches middle band (EMA)
+                if price <= middle {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!(
+                            "Keltner Middle Short Exit: Price {:.2} <= EMA {:.2}",
+                            price, middle
+                        )),
+                    }]);
+                }
+
+                // Short Exit 3: Price reaches lower band (profit target)
+                if price <= lower_band {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!(
+                            "Keltner Lower Short Exit: Price {:.2} <= Lower {:.2}",
+                            price, lower_band
+                        )),
+                    }]);
+                }
+            }
+        }
+
+        // === ENTRY LOGIC (only when flat) ===
+        if self.position == PositionState::Flat {
+            // Long Entry: Price touches lower band AND high volume
+            if price <= lower_band && volume_confirmed {
+                self.position = PositionState::Long;
+                self.long_entry_price = Some(price);
+                let distance = (middle - price) / middle;
+                let strength = distance.clamp(0.3, 1.0);
+
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Buy,
+                    strength,
+                    metadata: Some(format!(
+                        "Keltner Long Entry: Price {:.2} <= Lower {:.2}, Volume {:.0} ({:.1}x avg)",
+                        price,
+                        lower_band,
+                        bar.volume,
+                        bar.volume / avg_volume
+                    )),
+                }]);
+            }
+
+            // Short Entry: Price touches upper band AND high volume
+            if price >= upper_band && volume_confirmed {
+                self.position = PositionState::Short;
+                self.short_entry_price = Some(price);
+                let distance = (price - middle) / middle;
+                let strength = distance.clamp(0.3, 1.0);
+
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Sell,
+                    strength,
+                    metadata: Some(format!(
+                        "Keltner Short Entry: Price {:.2} >= Upper {:.2}, Volume {:.0} ({:.1}x avg)",
+                        price,
+                        upper_band,
+                        bar.volume,
+                        bar.volume / avg_volume
+                    )),
+                }]);
+            }
         }
 
         None
+    }
+
+    fn reset(&mut self) {
+        self.ema.reset();
+        self.atr.reset();
+        self.volumes.clear();
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
     }
 }
 

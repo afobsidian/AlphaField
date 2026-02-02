@@ -12,7 +12,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::{Adx, Atr, Indicator, Macd, Rsi};
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use std::collections::VecDeque;
 
 /// MACD Trend Strategy
@@ -39,8 +39,11 @@ pub struct MacdTrendStrategy {
     volume_history: VecDeque<f64>,
     last_macd: Option<f64>,
     last_signal: Option<f64>,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
     highest_since_entry: Option<f64>,
+    lowest_since_entry: Option<f64>,
     trailing_stop_level: Option<f64>,
     position_size: f64,
 }
@@ -92,9 +95,11 @@ impl MacdTrendStrategy {
             volume_history: VecDeque::with_capacity(20),
             last_macd: None,
             last_signal: None,
-
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
             highest_since_entry: None,
+            lowest_since_entry: None,
             trailing_stop_level: None,
             position_size: 1.0,
         }
@@ -180,9 +185,22 @@ impl MacdTrendStrategy {
         }
     }
 
-    /// Check partial take profit conditions
-    fn check_partial_exit(&mut self, price: f64, bar: &Bar) -> Option<Signal> {
-        if let Some(entry) = self.entry_price {
+    /// Calculate trailing stop level for short positions
+    fn calculate_trailing_stop_short(&self, price: f64, atr_value: Option<f64>) -> f64 {
+        if let (Some(atr), Some(trailing_pct)) = (atr_value, self.config.trailing_stop) {
+            let atr_based_stop = price + (atr * self.config.atr_multiplier.unwrap_or(2.0));
+            let pct_based_stop = price * (1.0 + trailing_pct / 100.0);
+            atr_based_stop.max(pct_based_stop)
+        } else if let Some(trailing_pct) = self.config.trailing_stop {
+            price * (1.0 + trailing_pct / 100.0)
+        } else {
+            price * 1.05 // Default 5% trailing stop for shorts
+        }
+    }
+
+    /// Check partial take profit conditions for long positions
+    fn check_partial_exit_long(&mut self, price: f64, bar: &Bar) -> Option<Signal> {
+        if let Some(entry) = self.long_entry_price {
             let profit_pct = (price - entry) / entry * 100.0;
 
             // TP: Close full position at take profit level
@@ -199,7 +217,34 @@ impl MacdTrendStrategy {
                     symbol: "UNKNOWN".to_string(),
                     signal_type: SignalType::Sell,
                     strength: exit_size,
-                    metadata: Some(format!("Take Profit: {:.1}% profit", profit_pct)),
+                    metadata: Some(format!("Long Take Profit: {:.1}% profit", profit_pct)),
+                });
+            }
+        }
+        None
+    }
+
+    /// Check partial take profit conditions for short positions
+    fn check_partial_exit_short(&mut self, price: f64, bar: &Bar) -> Option<Signal> {
+        if let Some(entry) = self.short_entry_price {
+            // For shorts: profit when price drops below entry
+            let profit_pct = (entry - price) / entry * 100.0;
+
+            // TP: Close full position at take profit level
+            if profit_pct >= self.config.take_profit {
+                let exit_size = self.position_size;
+                self.position_size = 0.0;
+
+                // Set trailing stop after TP
+                let atr_val = self.atr.value();
+                self.trailing_stop_level = Some(self.calculate_trailing_stop_short(price, atr_val));
+
+                return Some(Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Buy,
+                    strength: exit_size,
+                    metadata: Some(format!("Short Take Profit: {:.1}% profit", profit_pct)),
                 });
             }
         }
@@ -208,8 +253,11 @@ impl MacdTrendStrategy {
 
     /// Reset strategy state
     fn reset_state(&mut self) {
-        self.entry_price = None;
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
         self.highest_since_entry = None;
+        self.lowest_since_entry = None;
         self.trailing_stop_level = None;
         self.position_size = 1.0;
     }
@@ -233,9 +281,10 @@ impl MetadataStrategy for MacdTrendStrategy {
             category: StrategyCategory::TrendFollowing,
             sub_type: Some("macd_trend".to_string()),
             description: format!(
-                "MACD Trend strategy using {}, {}, {} periods with {:.1}% TP and {:.1}% SL.
-                Generates buy signals on MACD crossover above signal line, enhanced with {}RSI filter, {}ADX filter, {}volume confirmation, and {}ATR-based stops.
-                Classic trend-following momentum strategy with robust confirmation filters.",
+                "MACD Trend strategy using {}, {}, {} periods with {:.1}% TP and {:.1}% SL. \
+                Enhanced with {}RSI filter, {}ADX filter, {}volume confirmation, and {}ATR-based stops. \
+                Long: Bullish MACD crossover (MACD > Signal). \
+                Short: Bearish MACD crossover (MACD < Signal).",
                 self.config.fast_period,
                 self.config.slow_period,
                 self.config.signal_period,
@@ -290,12 +339,12 @@ impl Strategy for MacdTrendStrategy {
         let (macd, signal, _histogram) = macd_result?;
         let price = bar.close;
 
-        // EXIT LOGIC FIRST (priority: partial TP > trailing stop > SL > MACD crossover down)
-        if let Some(entry) = self.entry_price {
+        // === LONG POSITION EXIT LOGIC ===
+        if self.position == PositionState::Long {
             let mut signals = Vec::new();
 
             // Check partial take profit first
-            if let Some(tp_signal) = self.check_partial_exit(price, bar) {
+            if let Some(tp_signal) = self.check_partial_exit_long(price, bar) {
                 signals.push(tp_signal);
 
                 // If position closed completely, reset state and return
@@ -308,7 +357,11 @@ impl Strategy for MacdTrendStrategy {
             }
 
             // Update highest price for trailing stop
-            self.highest_since_entry = Some(self.highest_since_entry.unwrap_or(entry).max(price));
+            self.highest_since_entry = Some(
+                self.highest_since_entry
+                    .unwrap_or(self.long_entry_price.unwrap_or(price))
+                    .max(price),
+            );
 
             // Calculate and update trailing stop
             let atr_val = self.atr.value();
@@ -331,7 +384,7 @@ impl Strategy for MacdTrendStrategy {
                         signal_type: SignalType::Sell,
                         strength: self.position_size.max(1.0),
                         metadata: Some(format!(
-                            "Trailing Stop Triggered: Price {:.2} <= Stop {:.2}",
+                            "Long Trailing Stop: Price {:.2} <= Stop {:.2}",
                             price, trailing_stop
                         )),
                     });
@@ -339,26 +392,27 @@ impl Strategy for MacdTrendStrategy {
                 }
             }
 
-            // Check initial stop loss (if no trailing stop yet)
-            let profit_pct = (price - entry) / entry * 100.0;
-            if profit_pct <= -self.config.stop_loss && self.position_size > 0.0 {
-                self.reset_state();
-                self.last_macd = Some(macd);
-                self.last_signal = Some(signal);
-                signals.push(Signal {
-                    timestamp: bar.timestamp,
-                    symbol: "UNKNOWN".to_string(),
-                    signal_type: SignalType::Sell,
-                    strength: 1.0,
-                    metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
-                });
-                return Some(signals);
+            // Check initial stop loss
+            if let Some(entry) = self.long_entry_price {
+                let profit_pct = (price - entry) / entry * 100.0;
+                if profit_pct <= -self.config.stop_loss && self.position_size > 0.0 {
+                    self.reset_state();
+                    self.last_macd = Some(macd);
+                    self.last_signal = Some(signal);
+                    signals.push(Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Sell,
+                        strength: 1.0,
+                        metadata: Some(format!("Long Stop Loss: {:.1}%", profit_pct)),
+                    });
+                    return Some(signals);
+                }
             }
 
-            // Check if MACD crossed below signal line (bearish crossover - exit signal)
+            // Check if MACD crossed below signal line (bearish crossover - exit long)
             if let Some(crossover) = self.check_crossover(macd, signal) {
                 if !crossover && self.position_size > 0.0 {
-                    // Bearish crossover detected
                     let remaining_size = self.position_size.max(1.0);
                     self.reset_state();
                     self.last_macd = Some(macd);
@@ -369,7 +423,7 @@ impl Strategy for MacdTrendStrategy {
                         signal_type: SignalType::Sell,
                         strength: remaining_size,
                         metadata: Some(format!(
-                            "MACD Bearish Crossover: MACD {:.2} < Signal {:.2}",
+                            "MACD Bearish Crossover Long Exit: MACD {:.2} < Signal {:.2}",
                             macd, signal
                         )),
                     });
@@ -388,41 +442,141 @@ impl Strategy for MacdTrendStrategy {
             return None;
         }
 
-        // ENTRY LOGIC
-        if self.last_macd.is_some() && self.last_signal.is_some() {
-            // Check for bullish MACD crossover (MACD crosses above signal line)
+        // === SHORT POSITION EXIT LOGIC ===
+        if self.position == PositionState::Short {
+            let mut signals = Vec::new();
+
+            // Check partial take profit first
+            if let Some(tp_signal) = self.check_partial_exit_short(price, bar) {
+                signals.push(tp_signal);
+
+                // If position closed completely, reset state and return
+                if self.position_size <= 0.0 {
+                    self.reset_state();
+                    self.last_macd = Some(macd);
+                    self.last_signal = Some(signal);
+                    return Some(signals);
+                }
+            }
+
+            // Update lowest price for trailing stop (for shorts)
+            self.lowest_since_entry = Some(
+                self.lowest_since_entry
+                    .unwrap_or(self.short_entry_price.unwrap_or(price))
+                    .min(price),
+            );
+
+            // Calculate and update trailing stop for shorts
+            let atr_val = self.atr.value();
+            let new_trailing_stop = self.calculate_trailing_stop_short(price, atr_val);
+            self.trailing_stop_level = Some(
+                self.trailing_stop_level
+                    .unwrap_or(new_trailing_stop)
+                    .min(new_trailing_stop),
+            );
+
+            // Check trailing stop for shorts
+            if let Some(trailing_stop) = self.trailing_stop_level {
+                if price >= trailing_stop && self.position_size > 0.0 {
+                    self.reset_state();
+                    self.last_macd = Some(macd);
+                    self.last_signal = Some(signal);
+                    signals.push(Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: self.position_size.max(1.0),
+                        metadata: Some(format!(
+                            "Short Trailing Stop: Price {:.2} >= Stop {:.2}",
+                            price, trailing_stop
+                        )),
+                    });
+                    return Some(signals);
+                }
+            }
+
+            // Check initial stop loss for shorts
+            if let Some(entry) = self.short_entry_price {
+                let profit_pct = (entry - price) / entry * 100.0;
+                if profit_pct <= -self.config.stop_loss && self.position_size > 0.0 {
+                    self.reset_state();
+                    self.last_macd = Some(macd);
+                    self.last_signal = Some(signal);
+                    signals.push(Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!("Short Stop Loss: {:.1}%", profit_pct)),
+                    });
+                    return Some(signals);
+                }
+            }
+
+            // Check if MACD crossed above signal line (bullish crossover - exit short)
+            if let Some(crossover) = self.check_crossover(macd, signal) {
+                if crossover && self.position_size > 0.0 {
+                    let remaining_size = self.position_size.max(1.0);
+                    self.reset_state();
+                    self.last_macd = Some(macd);
+                    self.last_signal = Some(signal);
+                    signals.push(Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: remaining_size,
+                        metadata: Some(format!(
+                            "MACD Bullish Crossover Short Exit: MACD {:.2} > Signal {:.2}",
+                            macd, signal
+                        )),
+                    });
+                    return Some(signals);
+                }
+            }
+
+            // Update stored values
+            self.last_macd = Some(macd);
+            self.last_signal = Some(signal);
+
+            // Return partial exit signals if any
+            if !signals.is_empty() {
+                return Some(signals);
+            }
+            return None;
+        }
+
+        // === ENTRY LOGIC (only when flat) ===
+        if self.position == PositionState::Flat
+            && self.last_macd.is_some()
+            && self.last_signal.is_some()
+        {
+            // LONG ENTRY: Bullish MACD crossover (MACD crosses above signal line)
             if let Some(crossover) = self.check_crossover(macd, signal) {
                 if crossover {
                     // Bullish crossover detected - apply all filters
-
-                    // Note: Histogram confirmation removed since we're using the existing MACD implementation
-                    // that doesn't store histogram values separately
-
                     if !self.check_rsi_filter() {
-                        // RSI filter failed (overbought)
                         self.last_macd = Some(macd);
                         self.last_signal = Some(signal);
                         return None;
                     }
 
                     if !self.check_adx_filter() {
-                        // ADX filter failed (not trending)
                         self.last_macd = Some(macd);
                         self.last_signal = Some(signal);
                         return None;
                     }
 
                     if !self.check_volume_filter(bar.volume) {
-                        // Volume filter failed
                         self.last_macd = Some(macd);
                         self.last_signal = Some(signal);
                         return None;
                     }
 
-                    // All filters passed - Bullish MACD crossover entry
-                    self.entry_price = Some(price);
+                    // All filters passed - Long Entry
+                    self.position = PositionState::Long;
+                    self.long_entry_price = Some(price);
                     self.highest_since_entry = Some(price);
-                    self.position_size = 1.0; // Full position
+                    self.position_size = 1.0;
                     self.last_macd = Some(macd);
                     self.last_signal = Some(signal);
 
@@ -432,7 +586,42 @@ impl Strategy for MacdTrendStrategy {
                         signal_type: SignalType::Buy,
                         strength: 1.0,
                         metadata: Some(format!(
-                            "MACD Bullish Crossover: MACD {:.2} > Signal {:.2}",
+                            "MACD Bullish Crossover Long Entry: MACD {:.2} > Signal {:.2}",
+                            macd, signal
+                        )),
+                    }]);
+                }
+
+                // SHORT ENTRY: Bearish MACD crossover (MACD crosses below signal line)
+                if !crossover {
+                    // Bearish crossover detected - apply all filters
+                    if !self.check_adx_filter() {
+                        self.last_macd = Some(macd);
+                        self.last_signal = Some(signal);
+                        return None;
+                    }
+
+                    if !self.check_volume_filter(bar.volume) {
+                        self.last_macd = Some(macd);
+                        self.last_signal = Some(signal);
+                        return None;
+                    }
+
+                    // All filters passed - Short Entry
+                    self.position = PositionState::Short;
+                    self.short_entry_price = Some(price);
+                    self.lowest_since_entry = Some(price);
+                    self.position_size = 1.0;
+                    self.last_macd = Some(macd);
+                    self.last_signal = Some(signal);
+
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Sell,
+                        strength: 1.0,
+                        metadata: Some(format!(
+                            "MACD Bearish Crossover Short Entry: MACD {:.2} < Signal {:.2}",
                             macd, signal
                         )),
                     }]);
@@ -443,6 +632,21 @@ impl Strategy for MacdTrendStrategy {
         self.last_macd = Some(macd);
         self.last_signal = Some(signal);
         None
+    }
+
+    fn reset(&mut self) {
+        self.macd.reset();
+        self.atr.reset();
+        if let Some(ref mut rsi) = self.rsi {
+            rsi.reset();
+        }
+        if let Some(ref mut adx) = self.adx {
+            adx.reset();
+        }
+        self.volume_history.clear();
+        self.last_macd = None;
+        self.last_signal = None;
+        self.reset_state();
     }
 }
 

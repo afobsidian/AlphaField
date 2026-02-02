@@ -24,4 +24,5 @@ target
 # Log files
 .logs/
 
-.openode
+.opencode
+thoughts

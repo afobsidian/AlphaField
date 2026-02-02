@@ -8,7 +8,7 @@ use crate::framework::{
     CorrelationSensitivity, MarketRegime, MetadataStrategy, RiskProfile, StrategyCategory,
     StrategyMetadata, VolatilityLevel,
 };
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
@@ -87,8 +87,9 @@ impl fmt::Display for StatArbConfig {
 pub struct StatArbStrategy {
     config: StatArbConfig,
     prices: VecDeque<f64>,
-    last_position: SignalType,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
 }
 
 impl Default for StatArbStrategy {
@@ -110,8 +111,9 @@ impl StatArbStrategy {
         Self {
             prices: VecDeque::with_capacity(config.lookback_period),
             config,
-            last_position: SignalType::Hold,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
         }
     }
 
@@ -161,14 +163,24 @@ impl MetadataStrategy for StatArbStrategy {
             category: StrategyCategory::MeanReversion,
             sub_type: Some("statistical_arbitrage".to_string()),
             description: format!(
-                "Statistical arbitrage mean reversion strategy with {}-period lookback.
-                Entry z-score {:.1}, exit z-score {:.1}.
-                Adapted for spot-only trading using price deviation from mean.
-                In a full implementation, this would trade pairs based on correlation and spread z-scores.",
-                self.config.lookback_period, self.config.entry_zscore, self.config.exit_zscore
+                "Statistical arbitrage mean reversion strategy using z-score analysis. \
+                Calculates z-score over {}-period lookback. \
+                Long: Entry when z-score < -{:.1}, exit when z-score > -{:.1}. \
+                Short: Entry when z-score > {:.1}, exit when z-score < {:.1}. \
+                {:.1}% stop loss.",
+                self.config.lookback_period,
+                self.config.entry_zscore,
+                self.config.exit_zscore,
+                self.config.entry_zscore,
+                self.config.exit_zscore,
+                self.config.stop_loss
             ),
             hypothesis_path: "hypotheses/mean_reversion/stat_arb.md".to_string(),
-            required_indicators: vec!["Mean".to_string(), "StdDev".to_string(), "ZScore".to_string()],
+            required_indicators: vec![
+                "Mean".to_string(),
+                "StdDev".to_string(),
+                "ZScore".to_string(),
+            ],
             expected_regimes: vec![MarketRegime::Sideways, MarketRegime::Ranging],
             risk_profile: RiskProfile {
                 max_drawdown_expected: 0.25,
@@ -207,35 +219,35 @@ impl Strategy for StatArbStrategy {
         let zscore = self.calculate_zscore(price)?;
         let abs_zscore = zscore.abs();
 
-        // EXIT LOGIC
-        if self.last_position == SignalType::Buy {
-            if let Some(entry) = self.entry_price {
+        // === LONG POSITION EXIT LOGIC ===
+        if self.position == PositionState::Long {
+            if let Some(entry) = self.long_entry_price {
                 let profit_pct = (price - entry) / entry * 100.0;
 
-                // Exit condition 1: Stop loss
+                // Long Exit 1: Stop loss
                 if profit_pct <= -self.config.stop_loss {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
-                        metadata: Some(format!("Stop Loss Exit: {:.1}% loss", profit_pct)),
+                        metadata: Some(format!("Long Stop Loss: {:.1}% loss", profit_pct)),
                     }]);
                 }
 
-                // Exit condition 2: Z-score returns to exit threshold
-                if abs_zscore <= self.config.exit_zscore {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                // Long Exit 2: Z-score returns to exit threshold
+                if zscore >= -self.config.exit_zscore {
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
                         metadata: Some(format!(
-                            "StatArb Exit: z-score={:.2} (returned to mean)",
+                            "StatArb Long Exit: z-score={:.2} (returned to mean)",
                             zscore
                         )),
                     }]);
@@ -243,28 +255,92 @@ impl Strategy for StatArbStrategy {
             }
         }
 
-        // ENTRY LOGIC - Z-score exceeds entry threshold
-        // Note: In pairs trading, we would check if spread is overextended
-        // Here we trade when price is significantly below mean (negative z-score)
-        if self.last_position != SignalType::Buy && zscore <= -self.config.entry_zscore {
-            self.last_position = SignalType::Buy;
-            self.entry_price = Some(price);
-            let strength = ((abs_zscore - self.config.entry_zscore) / self.config.entry_zscore)
-                .clamp(0.3, 1.0);
+        // === SHORT POSITION EXIT LOGIC ===
+        if self.position == PositionState::Short {
+            if let Some(entry) = self.short_entry_price {
+                // For shorts: profit when price drops
+                let profit_pct = (entry - price) / entry * 100.0;
 
-            return Some(vec![Signal {
-                timestamp: bar.timestamp,
-                symbol: "UNKNOWN".to_string(),
-                signal_type: SignalType::Buy,
-                strength,
-                metadata: Some(format!(
-                    "StatArb Entry: z-score={:.2} (< -{:.1})",
-                    zscore, self.config.entry_zscore
-                )),
-            }]);
+                // Short Exit 1: Stop loss
+                if profit_pct <= -self.config.stop_loss {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!("Short Stop Loss: {:.1}% loss", profit_pct)),
+                    }]);
+                }
+
+                // Short Exit 2: Z-score returns to exit threshold
+                if zscore <= self.config.exit_zscore {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!(
+                            "StatArb Short Exit: z-score={:.2} (returned to mean)",
+                            zscore
+                        )),
+                    }]);
+                }
+            }
+        }
+
+        // === ENTRY LOGIC (only when flat) ===
+        if self.position == PositionState::Flat {
+            // Long Entry: Z-score exceeds negative entry threshold
+            if zscore <= -self.config.entry_zscore {
+                self.position = PositionState::Long;
+                self.long_entry_price = Some(price);
+                let strength = ((abs_zscore - self.config.entry_zscore) / self.config.entry_zscore)
+                    .clamp(0.3, 1.0);
+
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Buy,
+                    strength,
+                    metadata: Some(format!(
+                        "StatArb Long Entry: z-score={:.2} (< -{:.1})",
+                        zscore, self.config.entry_zscore
+                    )),
+                }]);
+            }
+
+            // Short Entry: Z-score exceeds positive entry threshold
+            if zscore >= self.config.entry_zscore {
+                self.position = PositionState::Short;
+                self.short_entry_price = Some(price);
+                let strength = ((abs_zscore - self.config.entry_zscore) / self.config.entry_zscore)
+                    .clamp(0.3, 1.0);
+
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Sell,
+                    strength,
+                    metadata: Some(format!(
+                        "StatArb Short Entry: z-score={:.2} (> {:.1})",
+                        zscore, self.config.entry_zscore
+                    )),
+                }]);
+            }
         }
 
         None
+    }
+
+    fn reset(&mut self) {
+        self.prices.clear();
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
     }
 }
 

@@ -13,7 +13,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::{Adx, Atr, Ema, Indicator, Rsi, Sma};
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use std::collections::VecDeque;
 
 /// MA Crossover Strategy
@@ -41,8 +41,11 @@ pub struct MACrossoverStrategy {
     volume_history: VecDeque<f64>,
     last_fast: Option<f64>,
     last_slow: Option<f64>,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
     highest_since_entry: Option<f64>,
+    lowest_since_entry: Option<f64>,
     trailing_stop_level: Option<f64>,
     position_size: f64,
 }
@@ -101,17 +104,20 @@ impl MACrossoverStrategy {
         let atr_period = config.atr_period;
 
         Self {
-            config,
             fast_ma,
             slow_ma,
             rsi,
             adx,
             atr: Atr::new(atr_period),
             volume_history: VecDeque::with_capacity(20),
+            config,
             last_fast: None,
             last_slow: None,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
             highest_since_entry: None,
+            lowest_since_entry: None,
             trailing_stop_level: None,
             position_size: 1.0,
         }
@@ -182,9 +188,9 @@ impl MACrossoverStrategy {
         }
     }
 
-    /// Check partial take profit conditions
-    fn check_partial_exit(&mut self, price: f64, bar: &Bar) -> Option<Signal> {
-        if let Some(entry) = self.entry_price {
+    /// Check partial take profit conditions for long positions
+    fn check_partial_exit_long(&mut self, price: f64, bar: &Bar) -> Option<Signal> {
+        if let Some(entry) = self.long_entry_price {
             let profit_pct = (price - entry) / entry * 100.0;
 
             // TP: Close full position at take profit level
@@ -201,17 +207,60 @@ impl MACrossoverStrategy {
                     symbol: "UNKNOWN".to_string(),
                     signal_type: SignalType::Sell,
                     strength: exit_size,
-                    metadata: Some(format!("Take Profit: {:.1}% profit", profit_pct)),
+                    metadata: Some(format!("Long Take Profit: {:.1}% profit", profit_pct)),
                 });
             }
         }
         None
     }
 
+    /// Check partial take profit conditions for short positions
+    fn check_partial_exit_short(&mut self, price: f64, bar: &Bar) -> Option<Signal> {
+        if let Some(entry) = self.short_entry_price {
+            // For shorts: profit when price drops below entry
+            let profit_pct = (entry - price) / entry * 100.0;
+
+            // TP: Close full position at take profit level
+            if profit_pct >= self.config.take_profit {
+                let exit_size = self.position_size;
+                self.position_size = 0.0;
+
+                // Set trailing stop after TP (for shorts, trailing stop moves down)
+                let atr_val = self.atr.value();
+                self.trailing_stop_level = Some(self.calculate_trailing_stop_short(price, atr_val));
+
+                return Some(Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Buy,
+                    strength: exit_size,
+                    metadata: Some(format!("Short Take Profit: {:.1}% profit", profit_pct)),
+                });
+            }
+        }
+        None
+    }
+
+    /// Calculate trailing stop level for short positions
+    fn calculate_trailing_stop_short(&self, price: f64, atr_value: Option<f64>) -> f64 {
+        if let (Some(atr), Some(trailing_pct)) = (atr_value, self.config.trailing_stop) {
+            let atr_based_stop = price + (atr * self.config.atr_multiplier.unwrap_or(2.0));
+            let pct_based_stop = price * (1.0 + trailing_pct / 100.0);
+            atr_based_stop.max(pct_based_stop)
+        } else if let Some(trailing_pct) = self.config.trailing_stop {
+            price * (1.0 + trailing_pct / 100.0)
+        } else {
+            price * 1.05 // Default 5% trailing stop for shorts
+        }
+    }
+
     /// Reset strategy state
     fn reset_state(&mut self) {
-        self.entry_price = None;
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
         self.highest_since_entry = None;
+        self.lowest_since_entry = None;
         self.trailing_stop_level = None;
         self.position_size = 1.0;
     }
@@ -236,9 +285,10 @@ impl MetadataStrategy for MACrossoverStrategy {
             category: StrategyCategory::TrendFollowing,
             sub_type: Some("moving_average_crossover".to_string()),
             description: format!(
-                "{} Crossover strategy using {} and {} period {}s with {:.1}% TP and {:.1}% SL.
-                Requires {:.1}% MA separation, enhanced with {}RSI filter, {}ADX filter, {}volume confirmation, and {}ATR-based stops.
-                Generates buy signals on {}MA crossovers and sell signals on death crosses.",
+                "{} Crossover strategy using {} and {} period {}s with {:.1}% TP and {:.1}% SL. \
+                Requires {:.1}% MA separation, enhanced with {}RSI filter, {}ADX filter, {}volume confirmation, and {}ATR-based stops. \
+                Long: Golden cross entry, death cross exit. \
+                Short: Death cross entry, golden cross exit.",
                 self.config.ma_type,
                 self.config.fast_period,
                 self.config.slow_period,
@@ -249,8 +299,7 @@ impl MetadataStrategy for MACrossoverStrategy {
                 if self.rsi.is_some() { "" } else { "no " },
                 if self.adx.is_some() { "" } else { "no " },
                 if self.config.volume_min_multiplier.is_some() { "" } else { "no " },
-                if self.config.atr_multiplier.is_some() { "" } else { "no " },
-                self.config.ma_type
+                if self.config.atr_multiplier.is_some() { "" } else { "no " }
             ),
             hypothesis_path: "hypotheses/trend_following/ma_crossover.md".to_string(),
             required_indicators,
@@ -298,12 +347,12 @@ impl Strategy for MACrossoverStrategy {
         let slow = slow_opt?;
         let price = bar.close;
 
-        // EXIT LOGIC FIRST (priority: partial TP > trailing stop > SL > death cross)
-        if let Some(entry) = self.entry_price {
+        // === LONG POSITION EXIT LOGIC ===
+        if self.position == PositionState::Long {
             let mut signals = Vec::new();
 
             // Check partial take profit first
-            if let Some(tp_signal) = self.check_partial_exit(price, bar) {
+            if let Some(tp_signal) = self.check_partial_exit_long(price, bar) {
                 signals.push(tp_signal);
 
                 // If position closed completely, reset state and return
@@ -316,7 +365,11 @@ impl Strategy for MACrossoverStrategy {
             }
 
             // Update highest price for trailing stop
-            self.highest_since_entry = Some(self.highest_since_entry.unwrap_or(entry).max(price));
+            self.highest_since_entry = Some(
+                self.highest_since_entry
+                    .unwrap_or(self.long_entry_price.unwrap_or(price))
+                    .max(price),
+            );
 
             // Calculate and update trailing stop
             let atr_val = self.atr.value();
@@ -339,7 +392,7 @@ impl Strategy for MACrossoverStrategy {
                         signal_type: SignalType::Sell,
                         strength: self.position_size.max(1.0),
                         metadata: Some(format!(
-                            "Trailing Stop Triggered: Price {:.2} <= Stop {:.2}",
+                            "Long Trailing Stop: Price {:.2} <= Stop {:.2}",
                             price, trailing_stop
                         )),
                     });
@@ -347,20 +400,22 @@ impl Strategy for MACrossoverStrategy {
                 }
             }
 
-            // Check initial stop loss (if no trailing stop yet)
-            let profit_pct = (price - entry) / entry * 100.0;
-            if profit_pct <= -self.config.stop_loss && self.position_size > 0.0 {
-                self.reset_state();
-                self.last_fast = Some(fast);
-                self.last_slow = Some(slow);
-                signals.push(Signal {
-                    timestamp: bar.timestamp,
-                    symbol: "UNKNOWN".to_string(),
-                    signal_type: SignalType::Sell,
-                    strength: 1.0,
-                    metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
-                });
-                return Some(signals);
+            // Check initial stop loss
+            if let Some(entry) = self.long_entry_price {
+                let profit_pct = (price - entry) / entry * 100.0;
+                if profit_pct <= -self.config.stop_loss && self.position_size > 0.0 {
+                    self.reset_state();
+                    self.last_fast = Some(fast);
+                    self.last_slow = Some(slow);
+                    signals.push(Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Sell,
+                        strength: 1.0,
+                        metadata: Some(format!("Long Stop Loss: {:.1}%", profit_pct)),
+                    });
+                    return Some(signals);
+                }
             }
 
             // Check death cross (full position exit)
@@ -375,7 +430,10 @@ impl Strategy for MACrossoverStrategy {
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: remaining_size,
-                        metadata: Some(format!("Death Cross: Fast {:.2} < Slow {:.2}", fast, slow)),
+                        metadata: Some(format!(
+                            "Death Cross Long Exit: Fast {:.2} < Slow {:.2}",
+                            fast, slow
+                        )),
                     });
                     return Some(signals);
                 }
@@ -392,64 +450,231 @@ impl Strategy for MACrossoverStrategy {
             return None;
         }
 
-        // ENTRY LOGIC
-        if let (Some(prev_fast), Some(prev_slow)) = (self.last_fast, self.last_slow) {
-            // Check for golden cross
-            if prev_fast <= prev_slow && fast > slow {
-                // Apply all filters
-                if !self.check_separation(fast, slow) {
-                    // Separation filter failed
+        // === SHORT POSITION EXIT LOGIC ===
+        if self.position == PositionState::Short {
+            let mut signals = Vec::new();
+
+            // Check partial take profit first
+            if let Some(tp_signal) = self.check_partial_exit_short(price, bar) {
+                signals.push(tp_signal);
+
+                // If position closed completely, reset state and return
+                if self.position_size <= 0.0 {
+                    self.reset_state();
                     self.last_fast = Some(fast);
                     self.last_slow = Some(slow);
-                    return None;
+                    return Some(signals);
                 }
+            }
 
-                if !self.check_rsi_filter() {
-                    // RSI filter failed (overbought)
+            // Update lowest price for trailing stop (for shorts, track lowest price)
+            self.lowest_since_entry = Some(
+                self.lowest_since_entry
+                    .unwrap_or(self.short_entry_price.unwrap_or(price))
+                    .min(price),
+            );
+
+            // Calculate and update trailing stop for shorts
+            let atr_val = self.atr.value();
+            let new_trailing_stop = self.calculate_trailing_stop_short(price, atr_val);
+            self.trailing_stop_level = Some(
+                self.trailing_stop_level
+                    .unwrap_or(new_trailing_stop)
+                    .min(new_trailing_stop),
+            );
+
+            // Check trailing stop for shorts
+            if let Some(trailing_stop) = self.trailing_stop_level {
+                if price >= trailing_stop && self.position_size > 0.0 {
+                    self.reset_state();
                     self.last_fast = Some(fast);
                     self.last_slow = Some(slow);
-                    return None;
+                    signals.push(Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: self.position_size.max(1.0),
+                        metadata: Some(format!(
+                            "Short Trailing Stop: Price {:.2} >= Stop {:.2}",
+                            price, trailing_stop
+                        )),
+                    });
+                    return Some(signals);
                 }
+            }
 
-                if !self.check_adx_filter() {
-                    // ADX filter failed (not trending)
+            // Check initial stop loss for shorts
+            if let Some(entry) = self.short_entry_price {
+                let profit_pct = (entry - price) / entry * 100.0;
+                if profit_pct <= -self.config.stop_loss && self.position_size > 0.0 {
+                    self.reset_state();
                     self.last_fast = Some(fast);
                     self.last_slow = Some(slow);
-                    return None;
+                    signals.push(Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!("Short Stop Loss: {:.1}%", profit_pct)),
+                    });
+                    return Some(signals);
                 }
+            }
 
-                if !self.check_volume_filter(bar.volume) {
-                    // Volume filter failed
+            // Check golden cross (exit short position)
+            if let (Some(prev_fast), Some(prev_slow)) = (self.last_fast, self.last_slow) {
+                if prev_fast <= prev_slow && fast > slow && self.position_size > 0.0 {
+                    let remaining_size = self.position_size.max(1.0);
+                    self.reset_state();
                     self.last_fast = Some(fast);
                     self.last_slow = Some(slow);
-                    return None;
+                    signals.push(Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: remaining_size,
+                        metadata: Some(format!(
+                            "Golden Cross Short Exit: Fast {:.2} > Slow {:.2}",
+                            fast, slow
+                        )),
+                    });
+                    return Some(signals);
+                }
+            }
+
+            // Update stored values
+            self.last_fast = Some(fast);
+            self.last_slow = Some(slow);
+
+            // Return partial exit signals if any
+            if !signals.is_empty() {
+                return Some(signals);
+            }
+            return None;
+        }
+
+        // === ENTRY LOGIC (only when flat) ===
+        if self.position == PositionState::Flat {
+            if let (Some(prev_fast), Some(prev_slow)) = (self.last_fast, self.last_slow) {
+                // LONG ENTRY: Golden Cross
+                if prev_fast <= prev_slow && fast > slow {
+                    // Apply all filters
+                    if !self.check_separation(fast, slow) {
+                        self.last_fast = Some(fast);
+                        self.last_slow = Some(slow);
+                        return None;
+                    }
+
+                    if !self.check_rsi_filter() {
+                        self.last_fast = Some(fast);
+                        self.last_slow = Some(slow);
+                        return None;
+                    }
+
+                    if !self.check_adx_filter() {
+                        self.last_fast = Some(fast);
+                        self.last_slow = Some(slow);
+                        return None;
+                    }
+
+                    if !self.check_volume_filter(bar.volume) {
+                        self.last_fast = Some(fast);
+                        self.last_slow = Some(slow);
+                        return None;
+                    }
+
+                    // All filters passed - Long Entry
+                    self.position = PositionState::Long;
+                    self.long_entry_price = Some(price);
+                    self.highest_since_entry = Some(price);
+                    self.position_size = 1.0;
+                    self.last_fast = Some(fast);
+                    self.last_slow = Some(slow);
+
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!(
+                            "Golden Cross Long Entry: Fast {:.2} > Slow {:.2}, Separation: {:.2}%",
+                            fast,
+                            slow,
+                            ((fast - slow) / slow) * 100.0
+                        )),
+                    }]);
                 }
 
-                // All filters passed - Golden Cross entry
-                self.entry_price = Some(price);
-                self.highest_since_entry = Some(price);
-                self.position_size = 1.0; // Full position
-                self.last_fast = Some(fast);
-                self.last_slow = Some(slow);
+                // SHORT ENTRY: Death Cross
+                if prev_fast >= prev_slow && fast < slow {
+                    // Apply all filters (inverse for shorts)
+                    if !self.check_separation(fast, slow) {
+                        self.last_fast = Some(fast);
+                        self.last_slow = Some(slow);
+                        return None;
+                    }
 
-                return Some(vec![Signal {
-                    timestamp: bar.timestamp,
-                    symbol: "UNKNOWN".to_string(),
-                    signal_type: SignalType::Buy,
-                    strength: 1.0,
-                    metadata: Some(format!(
-                        "Golden Cross: Fast {:.2} > Slow {:.2}, Separation: {:.2}%",
-                        fast,
-                        slow,
-                        ((fast - slow) / slow) * 100.0
-                    )),
-                }]);
+                    if !self.check_adx_filter() {
+                        self.last_fast = Some(fast);
+                        self.last_slow = Some(slow);
+                        return None;
+                    }
+
+                    if !self.check_volume_filter(bar.volume) {
+                        self.last_fast = Some(fast);
+                        self.last_slow = Some(slow);
+                        return None;
+                    }
+
+                    // All filters passed - Short Entry
+                    self.position = PositionState::Short;
+                    self.short_entry_price = Some(price);
+                    self.lowest_since_entry = Some(price);
+                    self.position_size = 1.0;
+                    self.last_fast = Some(fast);
+                    self.last_slow = Some(slow);
+
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Sell,
+                        strength: 1.0,
+                        metadata: Some(format!(
+                            "Death Cross Short Entry: Fast {:.2} < Slow {:.2}, Separation: {:.2}%",
+                            fast,
+                            slow,
+                            ((slow - fast) / slow) * 100.0
+                        )),
+                    }]);
+                }
             }
         }
 
         self.last_fast = Some(fast);
         self.last_slow = Some(slow);
         None
+    }
+
+    fn reset(&mut self) {
+        self.fast_ma.reset();
+        self.slow_ma.reset();
+        self.atr.reset();
+        if let Some(ref mut rsi) = self.rsi {
+            rsi.reset();
+        }
+        if let Some(ref mut adx) = self.adx {
+            adx.reset();
+        }
+        self.volume_history.clear();
+        self.last_fast = None;
+        self.last_slow = None;
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
+        self.highest_since_entry = None;
+        self.lowest_since_entry = None;
+        self.trailing_stop_level = None;
+        self.position_size = 1.0;
     }
 }
 

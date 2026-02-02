@@ -5,8 +5,10 @@
 //! # Strategy Logic
 //! - **Entry (Long)**: Price crosses above SAR (SAR is below price) and (optional) price > SMA trend filter.
 //! - **Exit (Long)**: Price crosses below SAR (SAR is above price) or SAR trailing stop is hit.
+//! - **Entry (Short)**: Price crosses below SAR (SAR is above price).
+//! - **Exit (Short)**: Price crosses above SAR (SAR is below price).
 //!
-//! Spot-only: this strategy never opens shorts.
+//! Now supports both long and short positions.
 //!
 //! References:
 //! - Wilder, J. Welles. "New Concepts in Technical Trading Systems" (Parabolic SAR)
@@ -16,7 +18,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::{Indicator, Sma};
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 
 /// Configuration for the Parabolic SAR strategy.
 ///
@@ -244,14 +246,49 @@ pub struct ParabolicSARStrategy {
     sar: ParabolicSar,
     trend_sma: Option<Sma>,
 
-    in_position: bool,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
 }
 
 impl Default for ParabolicSARStrategy {
     fn default() -> Self {
         // Default: 0.02 step, 0.2 max_step, 50-period SMA trend filter
         Self::from_config(ParabolicSarConfig::default_config())
+    }
+}
+
+impl MetadataStrategy for ParabolicSARStrategy {
+    fn metadata(&self) -> StrategyMetadata {
+        StrategyMetadata {
+            name: "Parabolic SAR".to_string(),
+            category: StrategyCategory::TrendFollowing,
+            sub_type: Some("parabolic_sar".to_string()),
+            description: format!(
+                "Parabolic SAR trend-following strategy with step {:.3}, max_step {:.3}, {}-period SMA trend filter. \
+                 Long: Enters when price crosses above SAR (and > SMA if filter enabled). \
+                 Short: Enters when price crosses below SAR (and < SMA if filter enabled). \
+                 Exit when SAR flips or trailing stop hit.",
+                self.config.step, self.config.max_step, self.config.trend_sma_period
+            ),
+            hypothesis_path: "hypotheses/trend_following/parabolic_sar.md".to_string(),
+            required_indicators: vec!["ParabolicSAR".to_string(), "SMA".to_string()],
+            expected_regimes: vec![
+                MarketRegime::Trending,
+                MarketRegime::HighVolatility,
+                MarketRegime::LowVolatility,
+            ],
+            risk_profile: RiskProfile {
+                max_drawdown_expected: 0.20,
+                volatility_level: VolatilityLevel::High,
+                correlation_sensitivity: CorrelationSensitivity::Low,
+                leverage_requirement: 1.0,
+            },
+        }
+    }
+
+    fn category(&self) -> StrategyCategory {
+        StrategyCategory::TrendFollowing
     }
 }
 
@@ -274,8 +311,9 @@ impl ParabolicSARStrategy {
             sar: ParabolicSar::new(config.step, config.max_step),
             config,
             trend_sma,
-            in_position: false,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
         }
     }
 
@@ -291,8 +329,9 @@ impl ParabolicSARStrategy {
     }
 
     fn reset_state(&mut self) {
-        self.in_position = false;
-        self.entry_price = None;
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
     }
 }
 
@@ -311,9 +350,9 @@ impl Strategy for ParabolicSARStrategy {
         let sar = self.sar.update(bar)?;
         let price = bar.close;
 
-        // Entry/Exit logic (spot-only)
-        if self.in_position {
-            // Exit if price crosses below SAR (SAR above price) or touches SAR trailing stop
+        // === LONG POSITION EXIT LOGIC ===
+        if self.position == PositionState::Long {
+            // Exit if price crosses below SAR (SAR above price)
             if price <= sar {
                 self.reset_state();
                 return Some(vec![Signal {
@@ -322,7 +361,7 @@ impl Strategy for ParabolicSARStrategy {
                     signal_type: SignalType::Sell,
                     strength: 1.0,
                     metadata: Some(format!(
-                        "Parabolic SAR Exit: price {:.4} <= sar {:.4}",
+                        "Parabolic SAR Long Exit: price {:.4} <= sar {:.4}",
                         price, sar
                     )),
                 }]);
@@ -330,64 +369,70 @@ impl Strategy for ParabolicSARStrategy {
             return None;
         }
 
-        // Not in position: Entry if price crosses above SAR and filter passes
-        // We use close vs SAR as the crossover proxy.
-        if price > sar && self.trend_filter_allows_entry(price) {
-            self.in_position = true;
-            self.entry_price = Some(price);
-            return Some(vec![Signal {
-                timestamp: bar.timestamp,
-                symbol: "UNKNOWN".to_string(),
-                signal_type: SignalType::Buy,
-                strength: 1.0,
-                metadata: Some(format!(
-                    "Parabolic SAR Entry: price {:.4} > sar {:.4}",
-                    price, sar
-                )),
-            }]);
+        // === SHORT POSITION EXIT LOGIC ===
+        if self.position == PositionState::Short {
+            // Exit if price crosses above SAR (SAR below price)
+            if price >= sar {
+                self.reset_state();
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Buy,
+                    strength: 1.0,
+                    metadata: Some(format!(
+                        "Parabolic SAR Short Exit: price {:.4} >= sar {:.4}",
+                        price, sar
+                    )),
+                }]);
+            }
+            return None;
+        }
+
+        // === ENTRY LOGIC (only when flat) ===
+        if self.position == PositionState::Flat {
+            // LONG ENTRY: Price crosses above SAR and filter passes
+            if price > sar && self.trend_filter_allows_entry(price) {
+                self.position = PositionState::Long;
+                self.long_entry_price = Some(price);
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Buy,
+                    strength: 1.0,
+                    metadata: Some(format!(
+                        "Parabolic SAR Long Entry: price {:.4} > sar {:.4}",
+                        price, sar
+                    )),
+                }]);
+            }
+
+            // SHORT ENTRY: Price crosses below SAR (for downtrends)
+            if price < sar {
+                self.position = PositionState::Short;
+                self.short_entry_price = Some(price);
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Sell,
+                    strength: 1.0,
+                    metadata: Some(format!(
+                        "Parabolic SAR Short Entry: price {:.4} < sar {:.4}",
+                        price, sar
+                    )),
+                }]);
+            }
         }
 
         None
     }
 
-    fn on_tick(&mut self, _tick: &alphafield_core::Tick) -> Option<Signal> {
-        None
-    }
-}
-
-impl MetadataStrategy for ParabolicSARStrategy {
-    fn metadata(&self) -> StrategyMetadata {
-        let mut required_indicators = vec!["ParabolicSAR".to_string(), "Price".to_string()];
-        if self.trend_sma.is_some() {
-            required_indicators.push(format!("SMA({})", self.config.trend_sma_period));
+    fn reset(&mut self) {
+        // ParabolicSar doesn't have a reset method, just create new instance
+        self.sar = ParabolicSar::new(self.config.step, self.config.max_step);
+        if let Some(ref mut sma) = self.trend_sma {
+            sma.reset();
         }
-
-        StrategyMetadata {
-            name: self.config.strategy_name().to_string(),
-            category: StrategyCategory::TrendFollowing,
-            sub_type: Some("parabolic_sar".to_string()),
-            description: format!(
-                "Parabolic SAR trend-following strategy with step {:.3}, max_step {:.3}. {}trend filter via SMA({}). \
-                Enters when price crosses above SAR; exits on SAR trailing stop.",
-                self.config.step,
-                self.config.max_step,
-                if self.config.trend_filter_enabled { "" } else { "no " },
-                self.config.trend_sma_period
-            ),
-            hypothesis_path: "hypotheses/trend_following/parabolic_sar.md".to_string(),
-            required_indicators,
-            expected_regimes: vec![MarketRegime::Bull, MarketRegime::Trending],
-            risk_profile: RiskProfile {
-                max_drawdown_expected: 22.0,
-                volatility_level: VolatilityLevel::Medium,
-                correlation_sensitivity: CorrelationSensitivity::High,
-                leverage_requirement: 1.0,
-            },
-        }
-    }
-
-    fn category(&self) -> StrategyCategory {
-        StrategyCategory::TrendFollowing
+        self.reset_state();
     }
 }
 

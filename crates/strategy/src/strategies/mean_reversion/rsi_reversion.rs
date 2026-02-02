@@ -8,7 +8,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::{Indicator, Rsi, Sma};
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -103,8 +103,9 @@ pub struct RSIReversionStrategy {
     config: RSIReversionConfig,
     rsi: Rsi,
     trend_sma: Option<Sma>,
-    last_position: SignalType,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
     rsi_state: RsiState,
 }
 
@@ -127,8 +128,9 @@ impl RSIReversionStrategy {
             rsi: Rsi::new(config.rsi_period),
             trend_sma,
             config,
-            last_position: SignalType::Hold,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
             rsi_state: RsiState::Neutral,
         }
     }
@@ -152,9 +154,10 @@ impl MetadataStrategy for RSIReversionStrategy {
             category: StrategyCategory::MeanReversion,
             sub_type: Some("rsi_reversion".to_string()),
             description: format!(
-                "RSI-based mean reversion strategy with period {}, oversold {:.0}, overbought {:.0}.
-                {} {:.0}-period SMA trend filter. Buys on oversold RSI (not in strong downtrend),
-                sells on neutral RSI or overbought.",
+                "RSI-based mean reversion strategy with period {}, oversold {:.0}, overbought {:.0}. \
+                {} {:.0}-period SMA trend filter. \
+                Long: Buys on oversold RSI (not in strong downtrend), sells on neutral/overbought. \
+                Short: Sells on overbought RSI, buys on neutral/oversold.",
                 self.config.rsi_period, self.config.oversold_threshold, self.config.overbought_threshold,
                 if self.config.trend_filter { "Uses" } else { "No" }, self.config.trend_period
             ),
@@ -195,8 +198,7 @@ impl Strategy for RSIReversionStrategy {
             true // Trend filter disabled
         };
 
-        // Track RSI state and generate signals on transitions
-        let mut signals = Vec::new();
+        // Update RSI state
         let current_state = if rsi_value >= self.config.overbought_threshold {
             RsiState::Overbought
         } else if rsi_value <= self.config.oversold_threshold {
@@ -204,107 +206,151 @@ impl Strategy for RSIReversionStrategy {
         } else {
             RsiState::Neutral
         };
-
-        // Generate sell signal when entering overbought territory
-        if current_state == RsiState::Overbought && self.rsi_state != RsiState::Overbought {
-            signals.push(Signal {
-                timestamp: bar.timestamp,
-                symbol: "UNKNOWN".to_string(),
-                signal_type: SignalType::Sell,
-                strength: 1.0,
-                metadata: Some(format!("RSI Overbought Signal: RSI = {:.1}", rsi_value)),
-            });
-        }
-
-        // Generate buy signal when entering oversold territory (trend filter applies)
-        if current_state == RsiState::Oversold
-            && self.rsi_state != RsiState::Oversold
-            && trend_allowed
-        {
-            signals.push(Signal {
-                timestamp: bar.timestamp,
-                symbol: "UNKNOWN".to_string(),
-                signal_type: SignalType::Buy,
-                strength: 1.0,
-                metadata: Some(format!("RSI Oversold Signal: RSI = {:.1}", rsi_value)),
-            });
-        }
-
-        // Update RSI state
         self.rsi_state = current_state;
 
-        // EXIT LOGIC (position-based exits, separate from signal generation)
-        if self.last_position == SignalType::Buy {
-            if let Some(entry) = self.entry_price {
+        // === LONG POSITION EXIT LOGIC ===
+        if self.position == PositionState::Long {
+            if let Some(entry) = self.long_entry_price {
                 let profit_pct = (price - entry) / entry * 100.0;
 
-                // Exit condition 1: Stop loss
+                // Long Exit 1: Stop loss
                 if profit_pct <= -self.config.stop_loss {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    signals.push(Signal {
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
+                    return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
-                        metadata: Some(format!("Stop Loss Exit: {:.1}% loss", profit_pct)),
-                    });
+                        metadata: Some(format!("Long Stop Loss: {:.1}% loss", profit_pct)),
+                    }]);
                 }
 
-                // Exit condition 2: RSI overbought
+                // Long Exit 2: RSI overbought
                 if rsi_value >= self.config.overbought_threshold {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    signals.push(Signal {
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
+                    return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
-                        metadata: Some(format!("RSI Overbought Exit: RSI = {:.1}", rsi_value)),
-                    });
+                        metadata: Some(format!("RSI Overbought Long Exit: {:.1}", rsi_value)),
+                    }]);
                 }
 
-                // Exit condition 3: RSI returns to neutral
+                // Long Exit 3: RSI returns to neutral
                 if rsi_value >= self.config.exit_threshold {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    signals.push(Signal {
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
+                    return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 0.8,
-                        metadata: Some(format!("RSI Neutral Exit: RSI = {:.1}", rsi_value)),
-                    });
+                        metadata: Some(format!("RSI Neutral Long Exit: {:.1}", rsi_value)),
+                    }]);
                 }
             }
         }
 
-        // ENTRY LOGIC - RSI oversold and trend filter passed (position-based entry)
-        // Only generate if we haven't already generated a Buy signal from state transition
-        let buy_signal_exists = signals.iter().any(|s| s.signal_type == SignalType::Buy);
-        if self.last_position != SignalType::Buy
-            && rsi_value <= self.config.oversold_threshold
-            && trend_allowed
-            && !buy_signal_exists
-        {
-            self.last_position = SignalType::Buy;
-            self.entry_price = Some(price);
-            let strength =
-                (self.config.oversold_threshold - rsi_value) / self.config.oversold_threshold;
-            signals.push(Signal {
-                timestamp: bar.timestamp,
-                symbol: "UNKNOWN".to_string(),
-                signal_type: SignalType::Buy,
-                strength: strength.clamp(0.1, 1.0),
-                metadata: Some(format!("RSI Oversold Entry: RSI = {:.1}", rsi_value)),
-            });
+        // === SHORT POSITION EXIT LOGIC ===
+        if self.position == PositionState::Short {
+            if let Some(entry) = self.short_entry_price {
+                // For shorts: profit when price drops
+                let profit_pct = (entry - price) / entry * 100.0;
+
+                // Short Exit 1: Stop loss
+                if profit_pct <= -self.config.stop_loss {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!("Short Stop Loss: {:.1}% loss", profit_pct)),
+                    }]);
+                }
+
+                // Short Exit 2: RSI oversold
+                if rsi_value <= self.config.oversold_threshold {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!("RSI Oversold Short Exit: {:.1}", rsi_value)),
+                    }]);
+                }
+
+                // Short Exit 3: RSI returns to neutral
+                if rsi_value <= self.config.exit_threshold {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 0.8,
+                        metadata: Some(format!("RSI Neutral Short Exit: {:.1}", rsi_value)),
+                    }]);
+                }
+            }
         }
 
-        if signals.is_empty() {
-            None
-        } else {
-            Some(signals)
+        // === ENTRY LOGIC (only when flat) ===
+        if self.position == PositionState::Flat {
+            // Long Entry: RSI oversold and trend filter passed
+            if rsi_value <= self.config.oversold_threshold && trend_allowed {
+                self.position = PositionState::Long;
+                self.long_entry_price = Some(price);
+                let strength =
+                    (self.config.oversold_threshold - rsi_value) / self.config.oversold_threshold;
+
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Buy,
+                    strength: strength.clamp(0.3, 1.0),
+                    metadata: Some(format!(
+                        "RSI Long Entry: Oversold {:.1} (trend filter: {})",
+                        rsi_value, trend_allowed
+                    )),
+                }]);
+            }
+
+            // Short Entry: RSI overbought (no trend filter requirement for shorts)
+            if rsi_value >= self.config.overbought_threshold {
+                self.position = PositionState::Short;
+                self.short_entry_price = Some(price);
+                let strength = (rsi_value - self.config.overbought_threshold)
+                    / (100.0 - self.config.overbought_threshold);
+
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Sell,
+                    strength: strength.clamp(0.3, 1.0),
+                    metadata: Some(format!("RSI Short Entry: Overbought {:.1}", rsi_value)),
+                }]);
+            }
         }
+
+        None
+    }
+
+    fn reset(&mut self) {
+        self.rsi.reset();
+        if let Some(ref mut sma) = self.trend_sma {
+            sma.reset();
+        }
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
+        self.rsi_state = RsiState::Neutral;
     }
 }
 

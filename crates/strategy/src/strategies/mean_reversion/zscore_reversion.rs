@@ -7,7 +7,7 @@ use crate::framework::{
     CorrelationSensitivity, MarketRegime, MetadataStrategy, RiskProfile, StrategyCategory,
     StrategyMetadata, VolatilityLevel,
 };
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
@@ -82,8 +82,9 @@ impl fmt::Display for ZScoreReversionConfig {
 pub struct ZScoreReversionStrategy {
     config: ZScoreReversionConfig,
     prices: VecDeque<f64>,
-    last_position: SignalType,
-    entry_price: Option<f64>,
+    position: PositionState,       // Track current position (Long/Short/Flat)
+    long_entry_price: Option<f64>, // Track long entry price
+    short_entry_price: Option<f64>, // Track short entry price
 }
 
 impl Default for ZScoreReversionStrategy {
@@ -105,8 +106,9 @@ impl ZScoreReversionStrategy {
         Self {
             prices: VecDeque::with_capacity(config.lookback_period),
             config,
-            last_position: SignalType::Hold,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
         }
     }
 
@@ -170,11 +172,14 @@ impl MetadataStrategy for ZScoreReversionStrategy {
             category: StrategyCategory::MeanReversion,
             sub_type: Some("zscore_reversion".to_string()),
             description: format!(
-                "Statistical z-score mean reversion strategy with {}-period lookback.
-                Entry z-score {:.1}, exit z-score {:.1}. Requires minimum {:.1}% price change to avoid flat markets.
-                Buys when price is > {:.0} standard deviations below mean, sells when returns to mean.",
-                self.config.lookback_period, self.config.entry_zscore, self.config.exit_zscore,
-                self.config.min_price_change, self.config.entry_zscore.abs()
+                "Statistical z-score mean reversion strategy with {}-period lookback. \
+                Long: Buys when z-score < {:.1} (oversold), sells when z-score > {:.1}. \
+                Short: Sells when z-score > +{:.1} (overbought), buys when z-score < {:.1}.",
+                self.config.lookback_period,
+                self.config.entry_zscore,
+                self.config.exit_zscore,
+                self.config.entry_zscore.abs(),
+                -self.config.exit_zscore
             ),
             hypothesis_path: "hypotheses/mean_reversion/zscore_reversion.md".to_string(),
             required_indicators: vec!["Mean".to_string(), "StdDev".to_string()],
@@ -218,75 +223,143 @@ impl Strategy for ZScoreReversionStrategy {
         // Check for sufficient price movement
         let has_movement = self.has_sufficient_movement();
 
-        // EXIT LOGIC
-        if self.last_position == SignalType::Buy {
-            if let Some(entry) = self.entry_price {
+        // === LONG POSITION EXIT LOGIC ===
+        if self.position == PositionState::Long {
+            if let Some(entry) = self.long_entry_price {
                 let profit_pct = (price - entry) / entry * 100.0;
 
-                // Exit condition 1: Stop loss
+                // Long Exit 1: Stop loss
                 if profit_pct <= -self.config.stop_loss {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
-                        metadata: Some(format!("Stop Loss Exit: {:.1}% loss", profit_pct)),
+                        metadata: Some(format!("Long Stop Loss: {:.1}%", profit_pct)),
                     }]);
                 }
 
-                // Exit condition 2: Z-score returns to exit threshold (mean)
+                // Long Exit 2: Z-score returns to exit threshold
                 if zscore >= self.config.exit_zscore {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
-                        metadata: Some(format!("Z-Score Exit: z={:.2} (returned to mean)", zscore)),
+                        metadata: Some(format!("Z-Score Long Exit: z={:.2}", zscore)),
                     }]);
                 }
 
-                // Exit condition 3: Z-score becomes positive (profit target)
+                // Long Exit 3: Z-score becomes positive (profit target)
                 if zscore >= 1.0 {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
-                        metadata: Some(format!("Z-Score Profit Target: z={:.2}", zscore)),
+                        metadata: Some(format!("Z-Score Long Profit Target: z={:.2}", zscore)),
                     }]);
                 }
             }
         }
 
-        // ENTRY LOGIC - Z-score extreme negative and sufficient price movement
-        if self.last_position != SignalType::Buy
-            && zscore <= self.config.entry_zscore
-            && has_movement
-        {
-            self.last_position = SignalType::Buy;
-            self.entry_price = Some(price);
-            let strength =
-                (zscore.abs() - self.config.entry_zscore.abs()) / self.config.entry_zscore.abs();
+        // === SHORT POSITION EXIT LOGIC ===
+        if self.position == PositionState::Short {
+            if let Some(entry) = self.short_entry_price {
+                // For shorts: profit when price drops
+                let profit_pct = (entry - price) / entry * 100.0;
 
-            return Some(vec![Signal {
-                timestamp: bar.timestamp,
-                symbol: "UNKNOWN".to_string(),
-                signal_type: SignalType::Buy,
-                strength: strength.clamp(0.3, 1.0),
-                metadata: Some(format!(
-                    "Z-Score Extreme Entry: z={:.2} (< {:.1})",
-                    zscore, self.config.entry_zscore
-                )),
-            }]);
+                // Short Exit 1: Stop loss
+                if profit_pct <= -self.config.stop_loss {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!("Short Stop Loss: {:.1}%", profit_pct)),
+                    }]);
+                }
+
+                // Short Exit 2: Z-score returns to exit threshold (negative of exit_zscore)
+                if zscore <= -self.config.exit_zscore {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!("Z-Score Short Exit: z={:.2}", zscore)),
+                    }]);
+                }
+
+                // Short Exit 3: Z-score becomes negative (profit target)
+                if zscore <= -1.0 {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!("Z-Score Short Profit Target: z={:.2}", zscore)),
+                    }]);
+                }
+            }
+        }
+
+        // === ENTRY LOGIC (only when flat) ===
+        if self.position == PositionState::Flat && has_movement {
+            // Long Entry: Z-score extreme negative (oversold)
+            if zscore <= self.config.entry_zscore {
+                self.position = PositionState::Long;
+                self.long_entry_price = Some(price);
+                let strength = (zscore.abs() - self.config.entry_zscore.abs())
+                    / self.config.entry_zscore.abs();
+
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Buy,
+                    strength: strength.clamp(0.3, 1.0),
+                    metadata: Some(format!("Z-Score Long Entry: z={:.2}", zscore)),
+                }]);
+            }
+
+            // Short Entry: Z-score extreme positive (overbought)
+            // Use positive of entry_zscore for symmetric threshold
+            let short_entry_threshold = -self.config.entry_zscore;
+            if zscore >= short_entry_threshold {
+                self.position = PositionState::Short;
+                self.short_entry_price = Some(price);
+                let strength = (zscore - short_entry_threshold) / short_entry_threshold;
+
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Sell,
+                    strength: strength.clamp(0.3, 1.0),
+                    metadata: Some(format!("Z-Score Short Entry: z={:.2}", zscore)),
+                }]);
+            }
         }
 
         None
+    }
+
+    fn reset(&mut self) {
+        self.prices.clear();
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
     }
 }
 

@@ -7,7 +7,7 @@ use crate::framework::{
     CorrelationSensitivity, MarketRegime, MetadataStrategy, RiskProfile, StrategyCategory,
     StrategyMetadata, VolatilityLevel,
 };
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
@@ -69,8 +69,9 @@ pub struct PriceChannelStrategy {
     config: PriceChannelConfig,
     highs: VecDeque<f64>,
     lows: VecDeque<f64>,
-    last_position: SignalType,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
 }
 
 impl Default for PriceChannelStrategy {
@@ -93,8 +94,9 @@ impl PriceChannelStrategy {
             highs: VecDeque::with_capacity(config.lookback_period),
             lows: VecDeque::with_capacity(config.lookback_period),
             config,
-            last_position: SignalType::Hold,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
         }
     }
 
@@ -140,10 +142,14 @@ impl MetadataStrategy for PriceChannelStrategy {
             category: StrategyCategory::MeanReversion,
             sub_type: Some("price_channel".to_string()),
             description: format!(
-                "Donchian price channel mean reversion strategy with {}-period lookback.
-                Buys when price touches lowest low, exits at {:.0}% of channel range or highest high.
+                "Donchian price channel mean reversion strategy with {}-period lookback. \
+                Long: Buys when price touches lowest low, exits at {:.0}% of channel range. \
+                Short: Sells when price touches highest high, exits at {:.0}% of channel range. \
                 Uses {:.1}% stop loss.",
-                self.config.lookback_period, self.config.exit_percent, self.config.stop_loss
+                self.config.lookback_period,
+                self.config.exit_percent,
+                self.config.exit_percent,
+                self.config.stop_loss
             ),
             hypothesis_path: "hypotheses/mean_reversion/price_channel.md".to_string(),
             required_indicators: vec!["HighestHigh".to_string(), "LowestLow".to_string()],
@@ -188,51 +194,51 @@ impl Strategy for PriceChannelStrategy {
         let lowest_low = self.lowest_low()?;
         let exit_level = self.exit_level()?;
 
-        // EXIT LOGIC
-        if self.last_position == SignalType::Buy {
-            if let Some(entry) = self.entry_price {
+        // === LONG POSITION EXIT LOGIC ===
+        if self.position == PositionState::Long {
+            if let Some(entry) = self.long_entry_price {
                 let profit_pct = (price - entry) / entry * 100.0;
 
-                // Exit condition 1: Stop loss
+                // Long Exit 1: Stop loss
                 if profit_pct <= -self.config.stop_loss {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
-                        metadata: Some(format!("Stop Loss Exit: {:.1}% loss", profit_pct)),
+                        metadata: Some(format!("Long Stop Loss: {:.1}% loss", profit_pct)),
                     }]);
                 }
 
-                // Exit condition 2: Price reaches channel middle/exit level
+                // Long Exit 2: Price reaches channel middle/exit level
                 if price >= exit_level {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
                         metadata: Some(format!(
-                            "Channel Exit: Price {:.2} >= Exit Level {:.2}",
+                            "Channel Long Exit: Price {:.2} >= Exit Level {:.2}",
                             price, exit_level
                         )),
                     }]);
                 }
 
-                // Exit condition 3: Price reaches highest high (profit target)
+                // Long Exit 3: Price reaches highest high (profit target)
                 if price >= highest_high {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
                         metadata: Some(format!(
-                            "Upper Channel Exit: Price {:.2} >= Highest High {:.2}",
+                            "Upper Channel Long Exit: Price {:.2} >= Highest High {:.2}",
                             price, highest_high
                         )),
                     }]);
@@ -240,27 +246,115 @@ impl Strategy for PriceChannelStrategy {
             }
         }
 
-        // ENTRY LOGIC - Price touches lowest low
-        if self.last_position != SignalType::Buy && price <= lowest_low {
-            self.last_position = SignalType::Buy;
-            self.entry_price = Some(price);
-            let channel_range = highest_high - lowest_low;
-            let distance_from_low = (price - lowest_low) / channel_range;
-            let strength = (1.0 - distance_from_low).clamp(0.3, 1.0);
+        // === SHORT POSITION EXIT LOGIC ===
+        if self.position == PositionState::Short {
+            if let Some(entry) = self.short_entry_price {
+                // For shorts: profit when price drops
+                let profit_pct = (entry - price) / entry * 100.0;
 
-            return Some(vec![Signal {
-                timestamp: bar.timestamp,
-                symbol: "UNKNOWN".to_string(),
-                signal_type: SignalType::Buy,
-                strength,
-                metadata: Some(format!(
-                    "Lower Channel Entry: Price {:.2} <= Lowest Low {:.2}",
-                    price, lowest_low
-                )),
-            }]);
+                // Short Exit 1: Stop loss
+                if profit_pct <= -self.config.stop_loss {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!("Short Stop Loss: {:.1}% loss", profit_pct)),
+                    }]);
+                }
+
+                // Short Exit 2: Price reaches channel middle/exit level
+                // For shorts, we exit when price reaches the exit level (which is below entry for shorts)
+                let channel_range = highest_high - lowest_low;
+                let short_exit_level =
+                    highest_high - (channel_range * self.config.exit_percent / 100.0);
+                if price <= short_exit_level {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!(
+                            "Channel Short Exit: Price {:.2} <= Exit Level {:.2}",
+                            price, short_exit_level
+                        )),
+                    }]);
+                }
+
+                // Short Exit 3: Price reaches lowest low (profit target)
+                if price <= lowest_low {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!(
+                            "Lower Channel Short Exit: Price {:.2} <= Lowest Low {:.2}",
+                            price, lowest_low
+                        )),
+                    }]);
+                }
+            }
+        }
+
+        // === ENTRY LOGIC (only when flat) ===
+        if self.position == PositionState::Flat {
+            // Long Entry: Price touches lowest low
+            if price <= lowest_low {
+                self.position = PositionState::Long;
+                self.long_entry_price = Some(price);
+                let channel_range = highest_high - lowest_low;
+                let distance_from_low = (price - lowest_low) / channel_range;
+                let strength = (1.0 - distance_from_low).clamp(0.3, 1.0);
+
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Buy,
+                    strength,
+                    metadata: Some(format!(
+                        "Lower Channel Long Entry: Price {:.2} <= Lowest Low {:.2}",
+                        price, lowest_low
+                    )),
+                }]);
+            }
+
+            // Short Entry: Price touches highest high
+            if price >= highest_high {
+                self.position = PositionState::Short;
+                self.short_entry_price = Some(price);
+                let channel_range = highest_high - lowest_low;
+                let distance_from_high = (highest_high - price) / channel_range;
+                let strength = (1.0 - distance_from_high).clamp(0.3, 1.0);
+
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Sell,
+                    strength,
+                    metadata: Some(format!(
+                        "Upper Channel Short Entry: Price {:.2} >= Highest High {:.2}",
+                        price, highest_high
+                    )),
+                }]);
+            }
         }
 
         None
+    }
+
+    fn reset(&mut self) {
+        self.highs.clear();
+        self.lows.clear();
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
     }
 }
 

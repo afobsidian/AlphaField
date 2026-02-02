@@ -8,10 +8,9 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::{BollingerBands, Indicator, Rsi};
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use tracing::debug;
 
 /// Configuration for Bollinger Bands Reversion strategy
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,7 +86,7 @@ impl fmt::Display for BollingerBandsConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "BollingerBands(period={}, std_dev={:.1}, rsi_period={}, tp={:.1}%, sl={:.1}%)",
+            "BollingerBands(period={}, num_std_dev={:.1}, rsi_period={}, tp={:.1}%, sl={:.1}%)",
             self.period, self.num_std_dev, self.rsi_period, self.take_profit, self.stop_loss
         )
     }
@@ -108,13 +107,14 @@ impl fmt::Display for BollingerBandsConfig {
 pub struct BollingerBandsStrategy {
     config: BollingerBandsConfig,
     bb: BollingerBands,
-    rsi: Rsi,
-    last_position: SignalType,
-    entry_price: Option<f64>,
-    // State tracking for crossover detection
-    last_price: Option<f64>,
-    last_middle: Option<f64>,
-    last_lower: Option<f64>,
+    rsi: Rsi,                       // RSI indicator for confirmation
+    position: PositionState,        // Track current position (Long/Short/Flat)
+    long_entry_price: Option<f64>,  // Track long entry price
+    short_entry_price: Option<f64>, // Track short entry price
+    last_price: Option<f64>,        // Previous price for crossover detection
+    last_upper: Option<f64>,        // Previous upper band
+    last_middle: Option<f64>,       // Previous middle band
+    last_lower: Option<f64>,        // Previous lower band
 }
 
 impl BollingerBandsStrategy {
@@ -136,9 +136,11 @@ impl BollingerBandsStrategy {
             bb: BollingerBands::new(config.period, config.num_std_dev),
             rsi: Rsi::new(config.rsi_period),
             config,
-            last_position: SignalType::Hold,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
             last_price: None,
+            last_upper: None,
             last_middle: None,
             last_lower: None,
         }
@@ -163,17 +165,18 @@ impl MetadataStrategy for BollingerBandsStrategy {
             category: StrategyCategory::MeanReversion,
             sub_type: Some("bollinger_bands".to_string()),
             description: format!(
-                "Mean Reversion strategy using Bollinger Bands with period {} and {:.1} standard deviations,
-                with RSI confirmation (period {}, oversold {:.0}, overbought {:.0}).
-                Uses {:.1}% TP and {:.1}% SL. Buys when price crosses below lower band and RSI is oversold,
-                sells on middle band crossover or RSI overbought.",
-                self.config.period, self.config.num_std_dev, self.config.rsi_period,
-                self.config.rsi_oversold, self.config.rsi_overbought,
-                self.config.take_profit, self.config.stop_loss
+                "Bollinger Bands mean reversion strategy with {} period, {} std dev multiplier. \
+                 Long: Buys on touch lower band, sells on touch upper band. \
+                 Short: Sells on touch upper band, buys on touch lower band.",
+                self.config.period, self.config.num_std_dev
             ),
             hypothesis_path: "hypotheses/mean_reversion/bollinger_bands.md".to_string(),
             required_indicators: vec!["BollingerBands".to_string(), "RSI".to_string()],
-            expected_regimes: vec![MarketRegime::Sideways, MarketRegime::LowVolatility, MarketRegime::Ranging],
+            expected_regimes: vec![
+                MarketRegime::Sideways,
+                MarketRegime::LowVolatility,
+                MarketRegime::Ranging,
+            ],
             risk_profile: RiskProfile {
                 max_drawdown_expected: 0.25,
                 volatility_level: VolatilityLevel::Medium,
@@ -194,82 +197,79 @@ impl Strategy for BollingerBandsStrategy {
     }
 
     fn on_bar(&mut self, bar: &Bar) -> Option<Vec<Signal>> {
-        let (_upper, middle, lower) = self.bb.update(bar.close)?;
+        let (upper, middle, lower) = self.bb.update(bar.close)?;
         let rsi_value = self.rsi.update(bar.close)?;
 
         let price = bar.close;
 
         // Get previous state
         let prev_price = self.last_price;
+        let prev_upper = self.last_upper;
         let prev_middle = self.last_middle;
         let prev_lower = self.last_lower;
 
         // Update state for next bar
         self.last_price = Some(price);
+        self.last_upper = Some(upper);
         self.last_middle = Some(middle);
         self.last_lower = Some(lower);
 
-        // EXIT LOGIC FIRST (before entry) - check if we should close position
-        if self.last_position == SignalType::Buy {
-            if let Some(entry) = self.entry_price {
+        // === LONG POSITION EXIT LOGIC ===
+        if self.position == PositionState::Long {
+            if let Some(entry) = self.long_entry_price {
                 let profit_pct = (price - entry) / entry * 100.0;
 
-                // Exit condition 1: Take profit (price-based)
+                // Long Exit 1: Take profit (price-based)
                 if profit_pct >= self.config.take_profit {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
-                        metadata: Some(format!("Take Profit Exit: {:.1}% gain", profit_pct)),
+                        metadata: Some(format!("Long Take Profit: {:.1}%", profit_pct)),
                     }]);
                 }
 
-                // Exit condition 2: Stop loss (price-based)
+                // Long Exit 2: Stop loss (price-based)
                 if profit_pct <= -self.config.stop_loss {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
-                        metadata: Some(format!("Stop Loss Exit: {:.1}% loss", profit_pct)),
+                        metadata: Some(format!("Long Stop Loss: {:.1}%", profit_pct)),
                     }]);
                 }
 
-                // Exit condition 3: RSI overbought
+                // Long Exit 3: RSI overbought
                 if rsi_value >= self.config.rsi_overbought {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    self.position = PositionState::Flat;
+                    self.long_entry_price = None;
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
                         strength: 1.0,
-                        metadata: Some(format!("RSI Overbought Exit: RSI = {:.1}", rsi_value)),
+                        metadata: Some(format!("RSI Overbought Long Exit: {:.1}", rsi_value)),
                     }]);
                 }
 
-                // Exit condition 4: Price crosses above middle band (actual crossover)
+                // Long Exit 4: Price crosses above middle band
                 if let (Some(prev_p), Some(prev_m)) = (prev_price, prev_middle) {
                     if prev_p < prev_m && price >= middle {
-                        debug!(
-                            price = price,
-                            middle = middle,
-                            "Bollinger Bands Crossover Exit Triggered!"
-                        );
-                        self.last_position = SignalType::Hold;
-                        self.entry_price = None;
+                        self.position = PositionState::Flat;
+                        self.long_entry_price = None;
                         return Some(vec![Signal {
                             timestamp: bar.timestamp,
                             symbol: "UNKNOWN".to_string(),
                             signal_type: SignalType::Sell,
                             strength: 1.0,
                             metadata: Some(format!(
-                                "BB Middle Band Crossover Exit: Price crossed above {:.2}",
+                                "BB Middle Band Long Exit: Crossed above {:.2}",
                                 middle
                             )),
                         }]);
@@ -278,13 +278,78 @@ impl Strategy for BollingerBandsStrategy {
             }
         }
 
-        // ENTRY LOGIC - Price crosses below lower band AND RSI oversold (actual crossover)
-        if self.last_position != SignalType::Buy {
+        // === SHORT POSITION EXIT LOGIC ===
+        if self.position == PositionState::Short {
+            if let Some(entry) = self.short_entry_price {
+                // For shorts: profit when price drops
+                let profit_pct = (entry - price) / entry * 100.0;
+
+                // Short Exit 1: Take profit
+                if profit_pct >= self.config.take_profit {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!("Short Take Profit: {:.1}%", profit_pct)),
+                    }]);
+                }
+
+                // Short Exit 2: Stop loss
+                if profit_pct <= -self.config.stop_loss {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!("Short Stop Loss: {:.1}%", profit_pct)),
+                    }]);
+                }
+
+                // Short Exit 3: RSI oversold
+                if rsi_value <= self.config.rsi_oversold {
+                    self.position = PositionState::Flat;
+                    self.short_entry_price = None;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!("RSI Oversold Short Exit: {:.1}", rsi_value)),
+                    }]);
+                }
+
+                // Short Exit 4: Price crosses below middle band
+                if let (Some(prev_p), Some(prev_m)) = (prev_price, prev_middle) {
+                    if prev_p > prev_m && price <= middle {
+                        self.position = PositionState::Flat;
+                        self.short_entry_price = None;
+                        return Some(vec![Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!(
+                                "BB Middle Band Short Exit: Crossed below {:.2}",
+                                middle
+                            )),
+                        }]);
+                    }
+                }
+            }
+        }
+
+        // === ENTRY LOGIC (only when flat) ===
+        if self.position == PositionState::Flat {
+            // Long Entry: Price crosses below lower band AND RSI oversold
             if let (Some(prev_p), Some(prev_l)) = (prev_price, prev_lower) {
-                // Check for lower band crossover AND RSI oversold confirmation
                 if prev_p >= prev_l && price < lower && rsi_value <= self.config.rsi_oversold {
-                    self.last_position = SignalType::Buy;
-                    self.entry_price = Some(price);
+                    self.position = PositionState::Long;
+                    self.long_entry_price = Some(price);
                     let distance = (middle - price) / middle;
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
@@ -292,8 +357,27 @@ impl Strategy for BollingerBandsStrategy {
                         signal_type: SignalType::Buy,
                         strength: distance.min(1.0),
                         metadata: Some(format!(
-                            "BB Lower Band + RSI Oversold Entry: Price={:.2}, Lower={:.2}, RSI={:.1}",
-                            price, lower, rsi_value
+                            "BB Lower Band Long Entry: Price={:.2}, RSI={:.1}",
+                            price, rsi_value
+                        )),
+                    }]);
+                }
+            }
+
+            // Short Entry: Price crosses above upper band AND RSI overbought
+            if let (Some(prev_p), Some(prev_u)) = (prev_price, prev_upper) {
+                if prev_p <= prev_u && price > upper && rsi_value >= self.config.rsi_overbought {
+                    self.position = PositionState::Short;
+                    self.short_entry_price = Some(price);
+                    let distance = (price - middle) / middle;
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Sell,
+                        strength: distance.min(1.0),
+                        metadata: Some(format!(
+                            "BB Upper Band Short Entry: Price={:.2}, RSI={:.1}",
+                            price, rsi_value
                         )),
                     }]);
                 }
@@ -301,6 +385,18 @@ impl Strategy for BollingerBandsStrategy {
         }
 
         None
+    }
+
+    fn reset(&mut self) {
+        self.bb.reset();
+        self.rsi.reset();
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
+        self.last_price = None;
+        self.last_upper = None;
+        self.last_middle = None;
+        self.last_lower = None;
     }
 }
 
