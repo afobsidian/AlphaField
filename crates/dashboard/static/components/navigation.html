@@ -1,0 +1,85 @@
+<!-- Top Navigation Bar -->
+<header class="top-nav">
+    <div class="nav-brand">
+        <span class="brand-icon">🚀</span>
+        <span class="brand-text">AlphaField</span>
+    </div>
+
+    <!-- Workflow Tabs -->
+    <nav class="workflow-tabs">
+        <button
+            class="workflow-tab active"
+            data-tab="build"
+            onclick="switchTab('build')"
+        >
+            <span class="tab-number">1</span>
+            <span class="tab-label">Build</span>
+        </button>
+        <span class="tab-arrow">→</span>
+        <button
+            class="workflow-tab"
+            data-tab="optimize"
+            onclick="switchTab('optimize')"
+        >
+            <span class="tab-number">2</span>
+            <span class="tab-label">Optimize</span>
+        </button>
+        <span class="tab-arrow">→</span>
+        <button
+            class="workflow-tab"
+            data-tab="backtest"
+            onclick="switchTab('backtest')"
+        >
+            <span class="tab-number">3</span>
+            <span class="tab-label">Backtest</span>
+        </button>
+        <span class="tab-arrow">→</span>
+        <button
+            class="workflow-tab"
+            data-tab="deploy"
+            onclick="switchTab('deploy')"
+        >
+            <span class="tab-number">4</span>
+            <span class="tab-label">Deploy</span>
+        </button>
+        <span class="tab-arrow">→</span>
+        <button
+            class="workflow-tab"
+            data-tab="orders"
+            onclick="switchTab('orders')"
+        >
+            <span class="tab-number">5</span>
+            <span class="tab-label">Orders</span>
+        </button>
+    </nav>
+
+    <!-- Status Indicators -->
+    <div class="nav-status">
+        <div id="db-status" class="status-badge disconnected">
+            <span class="status-dot"></span>
+            <span>DB</span>
+        </div>
+        <div id="ws-status" class="status-badge disconnected">
+            <span class="status-dot"></span>
+            <span>Live</span>
+        </div>
+    </div>
+</header>
+
+<!-- Strategy Context Bar -->
+<div class="context-bar">
+    <div class="context-item">
+        <span class="context-label">Strategy:</span>
+        <span class="context-value" id="ctx-strategy">Not Selected</span>
+    </div>
+    <div class="context-item">
+        <span class="context-label">Symbol:</span>
+        <span class="context-value" id="ctx-symbol">—</span>
+    </div>
+    <div class="context-item">
+        <span class="context-label">Status:</span>
+        <span class="context-value" id="ctx-status"
+            >Configure strategy to begin</span
+        >
+    </div>
+</div>

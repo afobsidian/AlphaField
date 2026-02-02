@@ -58,6 +58,48 @@ COINLAYER_API_KEYS=key1
 RUST_LOG=info
 ```
 
+## 🐛 Debugging
+
+**For AI Agents and LLMs**: When debugging issues, check logs in `.logs/` directory.
+
+### Log Location
+- **Directory**: `.logs/` (hidden directory in project root)
+- **Dashboard logs**: `.logs/alphafield.log` with daily rotation (`.logs/alphafield.log.YYYY-MM-DD`)
+- **Log levels**: Controlled via `RUST_LOG` env var (e.g., `RUST_LOG=debug`, `RUST_LOG=alphafield_backtest=trace`)
+
+### Useful Debugging Commands
+
+```bash
+# Follow dashboard logs in real-time
+tail -f .logs/alphafield.log
+
+# Search for errors
+grep -i error .logs/alphafield.log
+
+# Find specific events (order fills, signals, etc.)
+grep "Order filled" .logs/alphafield.log
+grep "Signal generated" .logs/alphafield.log
+grep "Position drift" .logs/alphafield.log
+
+# View last 100 lines
+tail -100 .logs/alphafield.log
+```
+
+### Common Log Patterns for Debugging
+
+1. **Strategy Issues**: Look for `Signal generated` and `Strategy error` messages
+2. **Data Issues**: Check for `Bar validation failed` or `Data fetch error` messages
+3. **Risk Management**: Look for `Risk check failed` warnings (circuit breakers, position limits, drift)
+4. **Order Execution**: Search for `Order submitted`, `Order filled`, `Order rejected`
+5. **Database**: Check for `Database connection` and `Query error` messages
+
+### Log Rotation
+- Daily rotation at midnight UTC
+- Current day: `.logs/alphafield.log`
+- Previous days: `.logs/alphafield.log.YYYY-MM-DD`
+
+See [doc/runbooks/incident-response.md](../../doc/runbooks/incident-response.md) for detailed incident response procedures.
+
 ## 📚 References
 
 - [README.md](../../README.md): Features, architecture, and quickstart

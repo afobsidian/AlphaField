@@ -574,15 +574,6 @@ pub fn get_strategy_bounds(strategy_name: &str) -> Vec<ParamBounds> {
         ],
 
         // --------------------------------------------------------------------
-        // Baseline Strategies
-        // --------------------------------------------------------------------
-        "HODL_Baseline" => vec![ParamBounds::new("take_profit", 10.0, 50.0, 10.0)],
-        "Market_Average_Baseline" => vec![
-            ParamBounds::new("rebalance_period", 20.0, 60.0, 10.0),
-            ParamBounds::new("take_profit", 10.0, 50.0, 10.0),
-        ],
-
-        // --------------------------------------------------------------------
         // Volatility-Based Strategies
         // --------------------------------------------------------------------
         "ATRBreakout" => vec![

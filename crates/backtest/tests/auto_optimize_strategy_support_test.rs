@@ -6,11 +6,8 @@
 use alphafield_backtest::optimizer::get_strategy_bounds;
 use alphafield_strategy::framework::canonicalize_strategy_name;
 
-/// All strategies defined in the dashboard UI (30 total strategies)
+/// All strategies defined in the dashboard UI (28 total strategies)
 const UI_STRATEGIES: &[&str] = &[
-    // Baseline Strategies (2)
-    "HODL_Baseline",
-    "Market_Average_Baseline",
     // Trend Following Strategies (8)
     "Golden Cross",
     "Breakout",

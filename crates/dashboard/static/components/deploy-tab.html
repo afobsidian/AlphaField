@@ -1,0 +1,230 @@
+<!-- ==================== TAB 4: DEPLOY ==================== -->
+<section id="deploy-view" class="view-section">
+    <div class="view-header">
+        <h1>🚀 Deploy</h1>
+        <p>Go live with your validated strategy</p>
+    </div>
+
+    <div class="deploy-grid">
+        <!-- Strategy Summary & Market Sentiment -->
+        <div class="card summary-card">
+            <h3>Strategy Summary</h3>
+            <div class="deploy-summary">
+                <div class="summary-row">
+                    <span>Strategy:</span>
+                    <strong id="deploy-strategy">—</strong>
+                </div>
+                <div class="summary-row">
+                    <span>Symbol:</span>
+                    <strong id="deploy-symbol">—</strong>
+                </div>
+                <div class="summary-row">
+                    <span>Backtest Return:</span>
+                    <span id="deploy-return" class="metric-value">—</span>
+                </div>
+                <div class="summary-row">
+                    <span>Backtest Sharpe:</span>
+                    <span id="deploy-sharpe">—</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trading Controls -->
+        <div class="card controls-card">
+            <h3>Trading Controls</h3>
+            <div class="form-group">
+                <label>Trading Mode</label>
+                <select id="trade-mode" class="form-select">
+                    <option value="paper">📝 Paper Trading</option>
+                    <option value="live" disabled>
+                        🔴 Live Trading (Coming Soon)
+                    </option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Position Size</label>
+                <input
+                    type="number"
+                    id="position-size"
+                    class="form-input"
+                    value="0.5"
+                    step="0.1"
+                    min="0.1"
+                    max="1.0"
+                />
+                <span class="input-hint"
+                    >Fraction of capital per trade (0.1 - 1.0)</span
+                >
+            </div>
+
+            <div class="control-buttons">
+                <button
+                    type="button"
+                    class="btn btn-success btn-lg"
+                    id="btn-start"
+                    onclick="startTrading()"
+                >
+                    ▶️ Start Trading
+                </button>
+                <button
+                    type="button"
+                    class="btn btn-secondary btn-lg"
+                    id="btn-stop"
+                    onclick="stopTrading()"
+                    disabled
+                >
+                    ⏹ Stop
+                </button>
+                <button
+                    type="button"
+                    class="btn btn-danger"
+                    id="btn-panic"
+                    onclick="panicClose()"
+                >
+                    ⚠️ Panic Close
+                </button>
+            </div>
+            <div id="engine-status" class="engine-status stopped">Stopped</div>
+        </div>
+
+        <!-- Market Sentiment Dashboard -->
+        <div class="card sentiment-dashboard">
+            <div class="sentiment-header">
+                <h3>Market Sentiment Analysis</h3>
+                <div class="sentiment-badge" id="detailed-sentiment-badge">
+                    Loading...
+                </div>
+            </div>
+
+            <div class="sentiment-content-grid">
+                <!-- Gauge Section -->
+                <div class="sentiment-gauge-section">
+                    <div class="gauge-value-large" id="gauge-large-value">
+                        --
+                    </div>
+                    <div class="gauge-label-large" id="gauge-large-label">
+                        --
+                    </div>
+                    <div class="gauge-progress-bar">
+                        <div
+                            id="gauge-large-fill"
+                            class="fill"
+                            style="width: 0%"
+                        ></div>
+                    </div>
+                </div>
+
+                <!-- Detailed Stats -->
+                <div class="sentiment-stats-grid">
+                    <div class="stat-pill">
+                        <span class="label">Daily Change</span>
+                        <span class="value" id="sent-change">--</span>
+                    </div>
+                    <div class="stat-pill">
+                        <span class="label">7-Day Avg</span>
+                        <span class="value" id="sent-sma7">--</span>
+                    </div>
+                    <div class="stat-pill">
+                        <span class="label">Momentum</span>
+                        <span class="value" id="sent-momentum">--</span>
+                    </div>
+                    <div class="stat-pill">
+                        <span class="label">Dominance</span>
+                        <span class="value" id="sent-dominance">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History Chart -->
+            <div
+                id="sentiment-history-chart"
+                style="width: 100%; height: 300px; margin-top: 20px"
+            ></div>
+        </div>
+
+        <!-- Live Stats -->
+        <div class="live-stats">
+            <div class="stat-card">
+                <span class="stat-label">Total Value</span>
+                <span class="stat-value" id="live-total-value">$100,000</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Cash</span>
+                <span class="stat-value" id="live-cash">$100,000</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Positions</span>
+                <span class="stat-value" id="live-positions-value">$0</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">P&L</span>
+                <span class="stat-value" id="live-pnl">$0.00</span>
+            </div>
+        </div>
+
+        <!-- Live Equity Chart -->
+        <div class="card chart-card-wide">
+            <h3>Live Equity</h3>
+            <div class="chart-container">
+                <canvas id="equityChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Positions Table -->
+        <div class="card positions-card">
+            <h3>Open Positions</h3>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Symbol</th>
+                        <th>Qty</th>
+                        <th>Entry</th>
+                        <th>Current</th>
+                        <th>P&L</th>
+                        <th>%</th>
+                    </tr>
+                </thead>
+                <tbody id="positions-table">
+                    <tr>
+                        <td colspan="6" class="empty">No open positions</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Trade History -->
+        <div class="card trades-card">
+            <h3>Recent Trades</h3>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Symbol</th>
+                        <th>Side</th>
+                        <th>Qty</th>
+                        <th>Price</th>
+                        <th>P&L</th>
+                    </tr>
+                </thead>
+                <tbody id="trade-history">
+                    <tr>
+                        <td colspan="6" class="empty">No trades yet</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Activity Log -->
+        <div class="card log-card">
+            <h3>Activity Log</h3>
+            <div id="log-console" class="log-console">
+                <div class="log-entry log-info">
+                    <span class="log-time">--:--:--</span>
+                    <span class="log-msg"
+                        >Configure and start trading to see activity...</span
+                    >
+                </div>
+            </div>
+        </div>
+    </div>
+</section>

@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 pub mod algorithms;
-mod constraints;
-mod objectives;
-mod optimizer;
+pub mod constraints;
+pub mod objectives;
+pub mod optimizer;
 
 pub use algorithms::inverse_volatility::{InverseVolatilityOptimizer, InverseVolatilityWeights};
 pub use algorithms::mean_variance::{MeanVarianceOptimizer, MeanVarianceResult};
@@ -323,7 +323,7 @@ mod tests {
     #[test]
     fn test_combined_equity_curve() {
         let mut portfolio = MultiStrategyPortfolio::new("Test");
-        
+
         // Strategy A: goes from 100 to 110 (10% return)
         let equity_a = vec![100.0, 102.0, 105.0, 108.0, 110.0];
         // Strategy B: goes from 100 to 105 (5% return)

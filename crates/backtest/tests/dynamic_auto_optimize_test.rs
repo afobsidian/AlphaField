@@ -12,8 +12,6 @@ fn test_all_known_strategy_names_have_auto_optimize_support() {
     // This ensures that any new strategy added to the dashboard will be caught
     let all_possible_strategy_names = vec![
         // Core/Canonical names (what system expects internally)
-        "HODL_Baseline",
-        "Market_Average_Baseline",
         "GoldenCross",
         "Breakout",
         "MACrossover",
@@ -82,8 +80,6 @@ fn test_all_known_strategy_names_have_auto_optimize_support() {
         "Statistical Arbitrage",
         "Rate of Change (ROC)",
         // Variations and potential future names
-        "HODL Baseline",
-        "Market Average Baseline",
         "Golden Cross Strategy",
         "MA Crossover Strategy",
         "Breakout Strategy",
@@ -175,8 +171,6 @@ fn test_all_known_strategy_names_have_auto_optimize_support() {
 
     // Verify that all canonical names work
     let canonical_strategies = vec![
-        "HODL_Baseline",
-        "Market_Average_Baseline",
         "GoldenCross",
         "Breakout",
         "MACrossover",

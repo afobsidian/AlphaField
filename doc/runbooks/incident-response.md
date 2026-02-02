@@ -25,7 +25,7 @@ This runbook covers common incidents and their resolution procedures for the Alp
 
 **Immediate Actions**:
 1. Check exchange status page (e.g., https://www.binance.com/en/support/status)
-2. Review logs: `tail -f logs/alphafield.log | grep -i error`
+2. Review logs: `tail -f .logs/alphafield.log | grep -i error`
 3. If widespread, halt all order submission
 
 **Resolution**:
@@ -100,7 +100,7 @@ docker restart alphafield-api
 **Resolution**:
 ```bash
 # Check recent fills
-tail -100 logs/alphafield.log | grep "Order filled"
+tail -100 .logs/alphafield.log | grep "Order filled"
 
 # Temporarily increase drift threshold if needed (config change)
 ```

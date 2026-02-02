@@ -1,0 +1,365 @@
+<!-- ==================== TAB 2: OPTIMIZE ==================== -->
+<section id="optimize-view" class="view-section">
+    <div class="view-header">
+        <h1>⚡ Auto-Optimize Parameters</h1>
+        <p>
+            Multi-symbol optimization across random time periods to find robust
+            parameters
+        </p>
+    </div>
+
+    <div class="optimize-grid">
+        <!-- Auto Optimize Control -->
+        <div class="card optimize-controls">
+            <h3>Run Optimization</h3>
+
+            <!-- Selected Category Display -->
+            <div class="control-section">
+                <h4 class="section-title">Optimization Scope</h4>
+                <div
+                    style="
+                        padding: 12px;
+                        background: rgba(59, 130, 246, 0.1);
+                        border-radius: 8px;
+                        margin-bottom: 12px;
+                    "
+                >
+                    <div
+                        style="
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            margin-bottom: 8px;
+                        "
+                    >
+                        <span style="font-weight: 600">Strategy:</span>
+                        <span id="opt-display-strategy">—</span>
+                    </div>
+                    <div
+                        style="
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            margin-bottom: 8px;
+                        "
+                    >
+                        <span style="font-weight: 600">Asset Category:</span>
+                        <span id="opt-display-category">—</span>
+                    </div>
+                    <div
+                        style="
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                        "
+                    >
+                        <span style="font-weight: 600">ML Enhancement:</span>
+                        <span id="opt-display-ml">Disabled</span>
+                    </div>
+                </div>
+                <p style="font-size: 13px; opacity: 0.8">
+                    Optimization will test parameters across multiple symbols in
+                    the selected category using randomized time periods for
+                    robust validation.
+                </p>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Auto Optimize Button -->
+            <div class="control-section">
+                <p class="config-info" style="margin-bottom: 16px">
+                    Runs complete optimization pipeline including:<br />
+                    • Grid search across multiple assets<br />
+                    • Parameter dispersion analysis<br />
+                    • Walk-forward validation<br />
+                    • Robustness scoring<br />
+                    <span id="ml-pipeline-item" class="hidden"
+                        >• 🤖 ML model training &amp; validation</span
+                    >
+                </p>
+                <button
+                    type="button"
+                    class="btn btn-primary btn-action"
+                    onclick="runAutoOptimize()"
+                    style="width: 100%; padding: 16px; font-size: 16px"
+                >
+                    🚀 Auto-Optimize
+                </button>
+            </div>
+        </div>
+
+        <!-- Comprehensive Results Display -->
+        <div class="card results-card" id="optimize-results-container">
+            <h3>Optimization Results</h3>
+
+            <!-- Placeholder -->
+            <div id="optimize-results-placeholder" class="placeholder-content">
+                <span class="placeholder-icon">ℹ️</span>
+                <span>Click "Auto-Optimize" to find optimal parameters</span>
+            </div>
+
+            <!-- All Results Shown Together -->
+            <div id="all-results" class="results-block hidden">
+                <!-- Summary Metrics -->
+                <div class="metrics-grid">
+                    <div class="metric">
+                        <span class="metric-label">Robustness Score</span>
+                        <span
+                            class="metric-value robustness-score"
+                            id="comp-robustness"
+                            >—</span
+                        >
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Best Sharpe</span>
+                        <span class="metric-value" id="comp-sharpe">—</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">WF Stability</span>
+                        <span class="metric-value" id="comp-wf-stability"
+                            >—</span
+                        >
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Param CV</span>
+                        <span class="metric-value" id="comp-param-cv">—</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Positive %</span>
+                        <span class="metric-value" id="comp-positive-pct"
+                            >—</span
+                        >
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Iterations</span>
+                        <span class="metric-value" id="comp-iterations">—</span>
+                    </div>
+                </div>
+
+                <!-- Monte Carlo Simulation Results -->
+                <div
+                    style="
+                        margin-top: 24px;
+                        padding: 16px;
+                        background: rgba(16, 185, 129, 0.1);
+                        border-radius: 8px;
+                    "
+                >
+                    <h4 style="margin-bottom: 12px; color: #10b981">
+                        🎲 Monte Carlo Simulation
+                        <span
+                            id="mc-status"
+                            style="
+                                font-size: 12px;
+                                font-weight: normal;
+                                margin-left: 10px;
+                            "
+                            >(Not Run)</span
+                        >
+                    </h4>
+                    <div id="mc-results" class="metrics-grid">
+                        <div class="metric">
+                            <span class="metric-label"
+                                >Probability of Profit</span
+                            >
+                            <span class="metric-value" id="mc-prob-profit"
+                                >—</span
+                            >
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Equity (5th)</span>
+                            <span class="metric-value" id="mc-equity-5th"
+                                >—</span
+                            >
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Equity (50th)</span>
+                            <span class="metric-value" id="mc-equity-50th"
+                                >—</span
+                            >
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Equity (95th)</span>
+                            <span class="metric-value" id="mc-equity-95th"
+                                >—</span
+                            >
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Return (5th)</span>
+                            <span class="metric-value" id="mc-return-5th"
+                                >—</span
+                            >
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Return (50th)</span>
+                            <span class="metric-value" id="mc-return-50th"
+                                >—</span
+                            >
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Return (95th)</span>
+                            <span class="metric-value" id="mc-return-95th"
+                                >—</span
+                            >
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">DD (95th)</span>
+                            <span class="metric-value" id="mc-dd-95th">—</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Simulations</span>
+                            <span class="metric-value" id="mc-simulations"
+                                >—</span
+                            >
+                        </div>
+                    </div>
+                    <div
+                        id="mc-empty"
+                        style="
+                            display: none;
+                            text-align: center;
+                            color: #888;
+                            font-style: italic;
+                            margin-top: 10px;
+                        "
+                    >
+                        No trades generated - Monte Carlo skipped
+                    </div>
+                </div>
+
+                <!-- Optimized Parameters -->
+                <div class="param-summary" id="comp-param-summary">
+                    <!-- Populated dynamically -->
+                </div>
+
+                <!-- Walk-Forward Analysis Results -->
+                <div
+                    style="
+                        margin-top: 24px;
+                        padding: 16px;
+                        background: rgba(59, 130, 246, 0.1);
+                        border-radius: 8px;
+                    "
+                >
+                    <h4 style="margin-bottom: 12px; color: #60a5fa">
+                        📊 Walk-Forward Validation
+                    </h4>
+                    <div class="metrics-grid">
+                        <div class="metric">
+                            <span class="metric-label">Stability Score</span>
+                            <span class="metric-value" id="wfa-stability-inline"
+                                >—</span
+                            >
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Avg OOS Return</span>
+                            <span
+                                class="metric-value"
+                                id="wfa-avg-return-inline"
+                                >—</span
+                            >
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Win Rate</span>
+                            <span class="metric-value" id="wfa-win-rate-inline"
+                                >—</span
+                            >
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">OOS Sharpe</span>
+                            <span
+                                class="metric-value"
+                                id="wfa-oos-sharpe-inline"
+                                >—</span
+                            >
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Parameter Dispersion Details -->
+                <div
+                    style="
+                        margin-top: 16px;
+                        padding: 16px;
+                        background: rgba(139, 92, 246, 0.1);
+                        border-radius: 8px;
+                    "
+                >
+                    <h4 style="margin-bottom: 12px; color: #a78bfa">
+                        📈 Parameter Dispersion Analysis
+                    </h4>
+                    <div class="metrics-grid">
+                        <div class="metric">
+                            <span class="metric-label">Sharpe Std Dev</span>
+                            <span class="metric-value" id="disp-sharpe-std"
+                                >—</span
+                            >
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Return Std Dev</span>
+                            <span class="metric-value" id="disp-return-std"
+                                >—</span
+                            >
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Sharpe Range</span>
+                            <span class="metric-value" id="disp-sharpe-range"
+                                >—</span
+                            >
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Return Range</span>
+                            <span class="metric-value" id="disp-return-range"
+                                >—</span
+                            >
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-buttons" style="margin-top: 24px">
+                    <button
+                        type="button"
+                        class="btn btn-primary"
+                        onclick="goToBacktestWithOptimizedParams()"
+                    >
+                        Next: Backtest with Optimized Parameters →
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Parameter Sweep Chart -->
+        <div class="card chart-card-full">
+            <h3>Parameter Sweep Results</h3>
+            <div id="param-sweep-chart" style="width: 100%; height: 400px">
+                <div class="placeholder-content">
+                    <span class="placeholder-icon">📊</span>
+                    <span>Run optimization to see parameter sweep</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3D Sensitivity Heatmap (Hidden for multi-symbol mode) -->
+        <div class="card chart-card-full hidden" id="sensitivity-chart-card">
+            <h3>3D Sensitivity Heatmap</h3>
+            <div id="sensitivity-chart" style="width: 100%; height: 450px">
+                <div class="placeholder-content">
+                    <span class="placeholder-icon">🔥</span>
+                    <span>Run optimization to see sensitivity analysis</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Walk-Forward Windows Chart -->
+        <div class="card chart-card-full">
+            <h3>Walk-Forward Window Performance</h3>
+            <div id="walk-forward-chart" style="width: 100%; height: 400px">
+                <div class="placeholder-content">
+                    <span class="placeholder-icon">🔄</span>
+                    <span>Run optimization to see walk-forward validation</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
