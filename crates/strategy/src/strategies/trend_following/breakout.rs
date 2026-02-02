@@ -13,7 +13,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::{Adx, Atr, Indicator, Rsi, Sma};
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use std::collections::VecDeque;
 
 /// Breakout Strategy
@@ -39,7 +39,9 @@ pub struct BreakoutStrategy {
     adx: Option<Adx>,
     price_history: VecDeque<f64>,
     volume_history: VecDeque<f64>,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
     entry_date: Option<chrono::DateTime<chrono::Utc>>,
     highest_since_entry: Option<f64>,
     lowest_since_entry: Option<f64>,
@@ -107,7 +109,9 @@ impl BreakoutStrategy {
             adx,
             price_history: VecDeque::with_capacity(lookback_period),
             volume_history: VecDeque::with_capacity(20),
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
             entry_date: None,
             highest_since_entry: None,
             lowest_since_entry: None,
@@ -135,6 +139,21 @@ impl BreakoutStrategy {
                     .price_history
                     .iter()
                     .max_by(|a, b| a.partial_cmp(b).unwrap())
+                    .unwrap(),
+            )
+        } else {
+            None
+        }
+    }
+
+    /// Get the lowest price in the lookback period
+    fn get_lookback_low(&self) -> Option<f64> {
+        if self.price_history.len() >= self.config.lookback_period {
+            Some(
+                *self
+                    .price_history
+                    .iter()
+                    .min_by(|a, b| a.partial_cmp(b).unwrap())
                     .unwrap(),
             )
         } else {
@@ -187,21 +206,33 @@ impl BreakoutStrategy {
         true // ATR not ready yet
     }
 
-    /// Calculate initial stop loss based on ATR
-    fn calculate_initial_stop_loss(&self, price: f64) -> Option<f64> {
+    /// Calculate initial stop loss for long position based on ATR
+    fn calculate_initial_stop_loss_long(&self, price: f64) -> Option<f64> {
         self.atr
             .value()
             .map(|atr_value| price - (atr_value * self.config.atr_stop_multiplier))
     }
 
-    /// Calculate trailing stop level
+    /// Calculate trailing stop level for long position
     fn calculate_trailing_stop(&self, price: f64) -> f64 {
         price * (1.0 - self.config.trailing_stop_pct / 100.0)
     }
 
-    /// Check partial take profit conditions
-    fn check_partial_exit(&mut self, price: f64, bar: &Bar) -> Option<Signal> {
-        if let Some(entry) = self.entry_price {
+    /// Calculate trailing stop level for short position
+    fn calculate_trailing_stop_short(&self, price: f64) -> f64 {
+        price * (1.0 + self.config.trailing_stop_pct / 100.0)
+    }
+
+    /// Calculate initial stop loss for short position
+    fn calculate_initial_stop_loss_short(&self, price: f64) -> Option<f64> {
+        self.atr
+            .value()
+            .map(|atr_value| price + (atr_value * self.config.atr_stop_multiplier))
+    }
+
+    /// Check partial take profit conditions for long position
+    fn check_partial_exit_long(&mut self, price: f64, bar: &Bar) -> Option<Signal> {
+        if let Some(entry) = self.long_entry_price {
             let profit_pct = (price - entry) / entry * 100.0;
 
             // TP1: Close tp1_close_pct at first take profit level
@@ -266,9 +297,78 @@ impl BreakoutStrategy {
         None
     }
 
+    /// Check partial take profit conditions for short position
+    fn check_partial_exit_short(&mut self, price: f64, bar: &Bar) -> Option<Signal> {
+        if let Some(entry) = self.short_entry_price {
+            let profit_pct = (entry - price) / entry * 100.0;
+
+            // TP1: Close tp1_close_pct at first take profit level
+            if !self.tp1_hit && profit_pct >= self.config.tp1_pct {
+                let exit_size = self.config.tp1_close_pct / 100.0;
+                self.position_size -= exit_size;
+                self.tp1_hit = true;
+
+                // Set trailing stop after TP1
+                if self.position_size > 0.0 {
+                    self.trailing_stop_level = Some(self.calculate_trailing_stop_short(price));
+                }
+
+                return Some(Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Buy,
+                    strength: exit_size,
+                    metadata: Some(format!(
+                        "Take Profit 1: {:.1}% profit, closed {:.0}% of position",
+                        profit_pct, self.config.tp1_close_pct
+                    )),
+                });
+            }
+
+            // TP2: Close tp2_close_pct at second take profit level
+            if !self.tp2_hit && profit_pct >= self.config.tp2_pct {
+                let exit_size = self.config.tp2_close_pct / 100.0;
+                self.position_size -= exit_size;
+                self.tp2_hit = true;
+
+                return Some(Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Buy,
+                    strength: exit_size,
+                    metadata: Some(format!(
+                        "Take Profit 2: {:.1}% profit, closed {:.0}% of position",
+                        profit_pct, self.config.tp2_close_pct
+                    )),
+                });
+            }
+
+            // TP3: Close remaining position at third take profit level
+            if !self.tp3_hit && profit_pct >= self.config.tp3_pct {
+                let exit_size = self.position_size; // Close remaining position
+                self.position_size = 0.0;
+                self.tp3_hit = true;
+
+                return Some(Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Buy,
+                    strength: exit_size,
+                    metadata: Some(format!(
+                        "Take Profit 3: {:.1}% profit, closed remaining position",
+                        profit_pct
+                    )),
+                });
+            }
+        }
+        None
+    }
+
     /// Reset strategy state
     fn reset_state(&mut self) {
-        self.entry_price = None;
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
         self.entry_date = None;
         self.highest_since_entry = None;
         self.lowest_since_entry = None;
@@ -313,7 +413,11 @@ impl MetadataStrategy for BreakoutStrategy {
             ),
             hypothesis_path: "hypotheses/trend_following/breakout.md".to_string(),
             required_indicators,
-            expected_regimes: vec![MarketRegime::Bull, MarketRegime::Trending],
+            expected_regimes: vec![
+                MarketRegime::Bull,
+                MarketRegime::Bear,
+                MarketRegime::Trending,
+            ],
             risk_profile: RiskProfile {
                 max_drawdown_expected: 0.30,
                 volatility_level: VolatilityLevel::High,
@@ -360,11 +464,17 @@ impl Strategy for BreakoutStrategy {
         let price = bar.close;
 
         // EXIT LOGIC FIRST (priority: partial TP > trailing stop > initial SL > max days)
-        if let Some(entry) = self.entry_price {
+        if self.position != PositionState::Flat {
             let mut signals = Vec::new();
 
             // Check partial take profit first
-            if let Some(tp_signal) = self.check_partial_exit(price, bar) {
+            let tp_signal = if self.position == PositionState::Long {
+                self.check_partial_exit_long(price, bar)
+            } else {
+                self.check_partial_exit_short(price, bar)
+            };
+
+            if let Some(tp_signal) = tp_signal {
                 signals.push(tp_signal);
 
                 // If position closed completely, reset state and return
@@ -375,12 +485,60 @@ impl Strategy for BreakoutStrategy {
             }
 
             // Update highest/lowest prices for trailing stop
-            self.highest_since_entry = Some(self.highest_since_entry.unwrap_or(entry).max(price));
-            self.lowest_since_entry = Some(self.lowest_since_entry.unwrap_or(entry).min(price));
+            if let Some(long_entry) = self.long_entry_price {
+                self.highest_since_entry =
+                    Some(self.highest_since_entry.unwrap_or(long_entry).max(price));
+            }
+            if let Some(short_entry) = self.short_entry_price {
+                self.lowest_since_entry =
+                    Some(self.lowest_since_entry.unwrap_or(short_entry).min(price));
+            }
 
-            // Check trailing stop (if set)
-            if let Some(trailing_stop) = self.trailing_stop_level {
-                if price <= trailing_stop && self.position_size > 0.0 {
+            // === LONG POSITION EXIT LOGIC ===
+            if self.position == PositionState::Long {
+                // Check trailing stop (if set) for long position
+                if let Some(trailing_stop) = self.trailing_stop_level {
+                    if price <= trailing_stop && self.position_size > 0.0 {
+                        let remaining_size = self.position_size.max(0.1); // Minimum 10% signal
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: remaining_size,
+                            metadata: Some(format!(
+                                "Trailing Stop Triggered: Price {:.2} <= Stop {:.2}",
+                                price, trailing_stop
+                            )),
+                        });
+                        return Some(signals);
+                    }
+                }
+
+                // Check initial stop loss for long position
+                if let Some(stop_loss) = self.stop_loss_level {
+                    if price <= stop_loss && self.position_size > 0.0 {
+                        let remaining_size = self.position_size.max(0.1); // Minimum 10% signal
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: remaining_size,
+                            metadata: Some(format!(
+                                "Stop Loss Triggered: Price {:.2} <= Stop {:.2}",
+                                price, stop_loss
+                            )),
+                        });
+                        return Some(signals);
+                    }
+                }
+
+                // Check maximum days in position for long position
+                self.days_in_position += 1;
+                if self.days_in_position >= self.config.max_days_in_position
+                    && self.position_size > 0.0
+                {
                     let remaining_size = self.position_size.max(0.1); // Minimum 10% signal
                     self.reset_state();
                     signals.push(Signal {
@@ -389,50 +547,72 @@ impl Strategy for BreakoutStrategy {
                         signal_type: SignalType::Sell,
                         strength: remaining_size,
                         metadata: Some(format!(
-                            "Trailing Stop Triggered: Price {:.2} <= Stop {:.2}",
-                            price, trailing_stop
+                            "Max Days in Position: {} days reached",
+                            self.config.max_days_in_position
                         )),
                     });
                     return Some(signals);
                 }
             }
+            // === SHORT POSITION EXIT LOGIC ===
+            else if self.position == PositionState::Short {
+                // Check trailing stop (if set) for short position
+                if let Some(trailing_stop) = self.trailing_stop_level {
+                    if price >= trailing_stop && self.position_size > 0.0 {
+                        let remaining_size = self.position_size.max(0.1); // Minimum 10% signal
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: remaining_size,
+                            metadata: Some(format!(
+                                "Trailing Stop Triggered: Price {:.2} >= Stop {:.2}",
+                                price, trailing_stop
+                            )),
+                        });
+                        return Some(signals);
+                    }
+                }
 
-            // Check initial stop loss
-            if let Some(stop_loss) = self.stop_loss_level {
-                if price <= stop_loss && self.position_size > 0.0 {
+                // Check initial stop loss for short position
+                if let Some(stop_loss) = self.stop_loss_level {
+                    if price >= stop_loss && self.position_size > 0.0 {
+                        let remaining_size = self.position_size.max(0.1); // Minimum 10% signal
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: remaining_size,
+                            metadata: Some(format!(
+                                "Stop Loss Triggered: Price {:.2} >= Stop {:.2}",
+                                price, stop_loss
+                            )),
+                        });
+                        return Some(signals);
+                    }
+                }
+
+                // Check maximum days in position for short position
+                self.days_in_position += 1;
+                if self.days_in_position >= self.config.max_days_in_position
+                    && self.position_size > 0.0
+                {
                     let remaining_size = self.position_size.max(0.1); // Minimum 10% signal
                     self.reset_state();
                     signals.push(Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
+                        signal_type: SignalType::Buy,
                         strength: remaining_size,
                         metadata: Some(format!(
-                            "Stop Loss Triggered: Price {:.2} <= Stop {:.2}",
-                            price, stop_loss
+                            "Max Days in Position: {} days reached",
+                            self.config.max_days_in_position
                         )),
                     });
                     return Some(signals);
                 }
-            }
-
-            // Check maximum days in position
-            self.days_in_position += 1;
-            if self.days_in_position >= self.config.max_days_in_position && self.position_size > 0.0
-            {
-                let remaining_size = self.position_size.max(0.1); // Minimum 10% signal
-                self.reset_state();
-                signals.push(Signal {
-                    timestamp: bar.timestamp,
-                    symbol: "UNKNOWN".to_string(),
-                    signal_type: SignalType::Sell,
-                    strength: remaining_size,
-                    metadata: Some(format!(
-                        "Max Days in Position: {} days reached",
-                        self.config.max_days_in_position
-                    )),
-                });
-                return Some(signals);
             }
 
             // Return partial exit signals if any
@@ -442,50 +622,100 @@ impl Strategy for BreakoutStrategy {
             return None;
         }
 
-        // ENTRY LOGIC
-        if let Some(lookback_high) = self.get_lookback_high() {
-            // Check for breakout above recent high
-            if price > lookback_high {
-                // Apply all filters
-                if !self.check_volume_filter(bar.volume) {
-                    return None; // Volume filter failed
+        // ENTRY LOGIC - Only enter if in Flat position
+        if self.position == PositionState::Flat {
+            // === LONG ENTRY: Breakout above recent high ===
+            if let Some(lookback_high) = self.get_lookback_high() {
+                if price > lookback_high {
+                    // Apply all filters
+                    if !self.check_volume_filter(bar.volume) {
+                        return None; // Volume filter failed
+                    }
+
+                    if !self.check_rsi_filter() {
+                        return None; // RSI filter failed (overbought)
+                    }
+
+                    if !self.check_adx_filter() {
+                        return None; // ADX filter failed (not trending)
+                    }
+
+                    if !self.check_min_atr(price) {
+                        return None; // Minimum ATR condition not met
+                    }
+
+                    // All filters passed - Breakout entry (LONG)
+                    self.position = PositionState::Long;
+                    self.long_entry_price = Some(price);
+                    self.entry_date = Some(bar.timestamp);
+                    self.highest_since_entry = Some(price);
+                    self.lowest_since_entry = Some(price);
+                    self.breakout_level = Some(lookback_high);
+                    self.stop_loss_level = self.calculate_initial_stop_loss_long(price);
+                    self.position_size = 1.0; // Full position
+                    self.days_in_position = 0;
+
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!(
+                            "Breakout: Price {:.2} > Lookback High {:.2}, Volume {:.0}x avg, ATR {:.2}%",
+                            price,
+                            lookback_high,
+                            self.config.volume_multiplier,
+                            self.config.min_atr_pct
+                        )),
+                    }]);
                 }
+            }
 
-                if !self.check_rsi_filter() {
-                    return None; // RSI filter failed (overbought)
+            // === SHORT ENTRY: Breakdown below recent low ===
+            if let Some(lookback_low) = self.get_lookback_low() {
+                if price < lookback_low {
+                    // Apply all filters
+                    if !self.check_volume_filter(bar.volume) {
+                        return None; // Volume filter failed
+                    }
+
+                    if !self.check_rsi_filter() {
+                        return None; // RSI filter failed (overbought/oversold)
+                    }
+
+                    if !self.check_adx_filter() {
+                        return None; // ADX filter failed (not trending)
+                    }
+
+                    if !self.check_min_atr(price) {
+                        return None; // Minimum ATR condition not met
+                    }
+
+                    // All filters passed - Breakdown entry (SHORT)
+                    self.position = PositionState::Short;
+                    self.short_entry_price = Some(price);
+                    self.entry_date = Some(bar.timestamp);
+                    self.highest_since_entry = Some(price);
+                    self.lowest_since_entry = Some(price);
+                    self.breakout_level = Some(lookback_low);
+                    self.stop_loss_level = self.calculate_initial_stop_loss_short(price);
+                    self.position_size = 1.0; // Full position
+                    self.days_in_position = 0;
+
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Sell,
+                        strength: 1.0,
+                        metadata: Some(format!(
+                            "Breakdown: Price {:.2} < Lookback Low {:.2}, Volume {:.0}x avg, ATR {:.2}%",
+                            price,
+                            lookback_low,
+                            self.config.volume_multiplier,
+                            self.config.min_atr_pct
+                        )),
+                    }]);
                 }
-
-                if !self.check_adx_filter() {
-                    return None; // ADX filter failed (not trending)
-                }
-
-                if !self.check_min_atr(price) {
-                    return None; // Minimum ATR condition not met
-                }
-
-                // All filters passed - Breakout entry
-                self.entry_price = Some(price);
-                self.entry_date = Some(bar.timestamp);
-                self.highest_since_entry = Some(price);
-                self.lowest_since_entry = Some(price);
-                self.breakout_level = Some(lookback_high);
-                self.stop_loss_level = self.calculate_initial_stop_loss(price);
-                self.position_size = 1.0; // Full position
-                self.days_in_position = 0;
-
-                return Some(vec![Signal {
-                    timestamp: bar.timestamp,
-                    symbol: "UNKNOWN".to_string(),
-                    signal_type: SignalType::Buy,
-                    strength: 1.0,
-                    metadata: Some(format!(
-                        "Breakout: Price {:.2} > Lookback High {:.2}, Volume {:.0}x avg, ATR {:.2}%",
-                        price,
-                        lookback_high,
-                        self.config.volume_multiplier,
-                        self.config.min_atr_pct
-                    )),
-                }]);
             }
         }
 
@@ -628,7 +858,7 @@ mod tests {
         let strategy = BreakoutStrategy::new(5);
 
         assert!(
-            strategy.entry_price.is_none(),
+            strategy.long_entry_price.is_none() && strategy.short_entry_price.is_none(),
             "New strategy should not have entry"
         );
         assert_eq!(

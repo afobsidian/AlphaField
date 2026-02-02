@@ -12,7 +12,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::{Adx, Atr, Indicator, Kama, Rsi};
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use std::collections::VecDeque;
 
 /// Adaptive MA Strategy
@@ -39,8 +39,11 @@ pub struct AdaptiveMAStrategy {
     volume_history: VecDeque<f64>,
     price_history: VecDeque<f64>,
     last_kama: Option<f64>,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
     highest_since_entry: Option<f64>,
+    lowest_since_entry: Option<f64>,
     trailing_stop_level: Option<f64>,
     position_size: f64,
 }
@@ -98,10 +101,13 @@ impl AdaptiveMAStrategy {
             volume_history: VecDeque::with_capacity(20),
             price_history: VecDeque::with_capacity(price_period),
             last_kama: None,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
             highest_since_entry: None,
+            lowest_since_entry: None,
             trailing_stop_level: None,
-            position_size: 1.0,
+            position_size: 0.0,
         }
     }
 
@@ -148,7 +154,7 @@ impl AdaptiveMAStrategy {
         true // No filter or not enough history
     }
 
-    /// Calculate trailing stop level based on ATR
+    /// Calculate trailing stop level based on ATR for long position
     fn calculate_trailing_stop(&self, price: f64, atr_value: Option<f64>) -> f64 {
         if let (Some(atr), Some(trailing_pct)) = (atr_value, self.config.trailing_stop) {
             let atr_based_stop = price - (atr * self.config.atr_multiplier.unwrap_or(2.0));
@@ -161,17 +167,28 @@ impl AdaptiveMAStrategy {
         }
     }
 
-    /// Check partial take profit conditions
-    fn check_partial_exit(&mut self, price: f64, bar: &Bar) -> Option<Signal> {
-        if let Some(entry) = self.entry_price {
+    /// Calculate trailing stop level based on ATR for short position
+    fn calculate_trailing_stop_short(&self, price: f64, atr_value: Option<f64>) -> f64 {
+        if let (Some(atr), Some(trailing_pct)) = (atr_value, self.config.trailing_stop) {
+            let atr_based_stop = price + (atr * self.config.atr_multiplier.unwrap_or(2.0));
+            let pct_based_stop = price * (1.0 + trailing_pct / 100.0);
+            atr_based_stop.max(pct_based_stop)
+        } else if let Some(trailing_pct) = self.config.trailing_stop {
+            price * (1.0 + trailing_pct / 100.0)
+        } else {
+            price * 1.05 // Default 5% trailing stop
+        }
+    }
+
+    /// Check partial take profit conditions for long position
+    fn check_partial_exit_long(&mut self, price: f64, bar: &Bar) -> Option<Signal> {
+        if let Some(entry) = self.long_entry_price {
             let profit_pct = (price - entry) / entry * 100.0;
 
-            // TP: Close full position at take profit level
             if profit_pct >= self.config.take_profit {
                 let exit_size = self.position_size;
                 self.position_size = 0.0;
 
-                // Set trailing stop after TP
                 let atr_val = self.atr.value();
                 self.trailing_stop_level = Some(self.calculate_trailing_stop(price, atr_val));
 
@@ -187,12 +204,39 @@ impl AdaptiveMAStrategy {
         None
     }
 
+    /// Check partial take profit conditions for short position
+    fn check_partial_exit_short(&mut self, price: f64, bar: &Bar) -> Option<Signal> {
+        if let Some(entry) = self.short_entry_price {
+            let profit_pct = (entry - price) / entry * 100.0;
+
+            if profit_pct >= self.config.take_profit {
+                let exit_size = self.position_size;
+                self.position_size = 0.0;
+
+                let atr_val = self.atr.value();
+                self.trailing_stop_level = Some(self.calculate_trailing_stop_short(price, atr_val));
+
+                return Some(Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Buy,
+                    strength: exit_size,
+                    metadata: Some(format!("Take Profit: {:.1}% profit", profit_pct)),
+                });
+            }
+        }
+        None
+    }
+
     /// Reset strategy state
     fn reset_state(&mut self) {
-        self.entry_price = None;
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
         self.highest_since_entry = None;
+        self.lowest_since_entry = None;
         self.trailing_stop_level = None;
-        self.position_size = 1.0;
+        self.position_size = 0.0;
     }
 }
 
@@ -229,7 +273,7 @@ impl MetadataStrategy for AdaptiveMAStrategy {
             ),
             hypothesis_path: "hypotheses/trend_following/adaptive_ma.md".to_string(),
             required_indicators,
-            expected_regimes: vec![MarketRegime::Bull, MarketRegime::Trending],
+            expected_regimes: vec![MarketRegime::Bull, MarketRegime::Bear, MarketRegime::Trending],
             risk_profile: RiskProfile {
                 max_drawdown_expected: 0.20,
                 volatility_level: VolatilityLevel::Medium,
@@ -277,12 +321,18 @@ impl Strategy for AdaptiveMAStrategy {
         let kama = kama_opt?;
         let price = bar.close;
 
-        // EXIT LOGIC FIRST (priority: partial TP > trailing stop > SL > KAMA crossover down)
-        if let Some(entry) = self.entry_price {
+        // EXIT LOGIC FIRST (priority: partial TP > trailing stop > SL > KAMA crossover)
+        if self.position != PositionState::Flat {
             let mut signals = Vec::new();
 
             // Check partial take profit first
-            if let Some(tp_signal) = self.check_partial_exit(price, bar) {
+            let tp_signal = if self.position == PositionState::Long {
+                self.check_partial_exit_long(price, bar)
+            } else {
+                self.check_partial_exit_short(price, bar)
+            };
+
+            if let Some(tp_signal) = tp_signal {
                 signals.push(tp_signal);
 
                 // If position closed completely, reset state and return
@@ -293,69 +343,144 @@ impl Strategy for AdaptiveMAStrategy {
                 }
             }
 
-            // Update highest price for trailing stop
-            self.highest_since_entry = Some(self.highest_since_entry.unwrap_or(entry).max(price));
+            // === LONG POSITION EXIT LOGIC ===
+            if self.position == PositionState::Long {
+                if let Some(long_entry) = self.long_entry_price {
+                    // Update highest price for trailing stop
+                    self.highest_since_entry =
+                        Some(self.highest_since_entry.unwrap_or(long_entry).max(price));
 
-            // Calculate and update trailing stop
-            let atr_val = self.atr.value();
-            let new_trailing_stop = self.calculate_trailing_stop(price, atr_val);
-            self.trailing_stop_level = Some(
-                self.trailing_stop_level
-                    .unwrap_or(new_trailing_stop)
-                    .max(new_trailing_stop),
-            );
+                    // Calculate and update trailing stop
+                    let atr_val = self.atr.value();
+                    let new_trailing_stop = self.calculate_trailing_stop(price, atr_val);
+                    self.trailing_stop_level = Some(
+                        self.trailing_stop_level
+                            .unwrap_or(new_trailing_stop)
+                            .max(new_trailing_stop),
+                    );
 
-            // Check trailing stop
-            if let Some(trailing_stop) = self.trailing_stop_level {
-                if price <= trailing_stop && self.position_size > 0.0 {
-                    self.reset_state();
-                    self.last_kama = Some(kama);
-                    signals.push(Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: self.position_size.max(1.0),
-                        metadata: Some(format!(
-                            "Trailing Stop Triggered: Price {:.2} <= Stop {:.2}",
-                            price, trailing_stop
-                        )),
-                    });
-                    return Some(signals);
+                    // Check trailing stop
+                    if let Some(trailing_stop) = self.trailing_stop_level {
+                        if price <= trailing_stop && self.position_size > 0.0 {
+                            self.reset_state();
+                            self.last_kama = Some(kama);
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Sell,
+                                strength: self.position_size.max(1.0),
+                                metadata: Some(format!(
+                                    "Trailing Stop Triggered: Price {:.2} <= Stop {:.2}",
+                                    price, trailing_stop
+                                )),
+                            });
+                            return Some(signals);
+                        }
+                    }
+
+                    // Check initial stop loss
+                    let profit_pct = (price - long_entry) / long_entry * 100.0;
+                    if profit_pct <= -self.config.stop_loss && self.position_size > 0.0 {
+                        self.reset_state();
+                        self.last_kama = Some(kama);
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: 1.0,
+                            metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Check KAMA crossover down (exit signal)
+                    if kama < self.last_kama.unwrap_or(kama) && self.position_size > 0.0 {
+                        let remaining_size = self.position_size.max(1.0);
+                        self.reset_state();
+                        self.last_kama = Some(kama);
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: remaining_size,
+                            metadata: Some(format!(
+                                "KAMA Crossover Down: {:.2} -> {:.2}",
+                                kama,
+                                self.last_kama.unwrap_or(kama)
+                            )),
+                        });
+                        return Some(signals);
+                    }
                 }
             }
+            // === SHORT POSITION EXIT LOGIC ===
+            else if self.position == PositionState::Short {
+                if let Some(short_entry) = self.short_entry_price {
+                    // Update lowest price for trailing stop
+                    self.lowest_since_entry =
+                        Some(self.lowest_since_entry.unwrap_or(short_entry).min(price));
 
-            // Check initial stop loss (if no trailing stop yet)
-            let profit_pct = (price - entry) / entry * 100.0;
-            if profit_pct <= -self.config.stop_loss && self.position_size > 0.0 {
-                self.reset_state();
-                self.last_kama = Some(kama);
-                signals.push(Signal {
-                    timestamp: bar.timestamp,
-                    symbol: "UNKNOWN".to_string(),
-                    signal_type: SignalType::Sell,
-                    strength: 1.0,
-                    metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
-                });
-                return Some(signals);
-            }
+                    // Calculate and update trailing stop
+                    let atr_val = self.atr.value();
+                    let new_trailing_stop = self.calculate_trailing_stop_short(price, atr_val);
+                    self.trailing_stop_level = Some(
+                        self.trailing_stop_level
+                            .unwrap_or(new_trailing_stop)
+                            .min(new_trailing_stop),
+                    );
 
-            // Check KAMA crossover down (full position exit)
-            if let Some(prev_kama) = self.last_kama {
-                if prev_kama <= price && kama > price && self.position_size > 0.0 {
-                    let remaining_size = self.position_size.max(1.0);
-                    self.reset_state();
-                    self.last_kama = Some(kama);
-                    signals.push(Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: remaining_size,
-                        metadata: Some(format!(
-                            "KAMA Crossover Down: Price {:.2} < KAMA {:.2}",
-                            price, kama
-                        )),
-                    });
-                    return Some(signals);
+                    // Check trailing stop
+                    if let Some(trailing_stop) = self.trailing_stop_level {
+                        if price >= trailing_stop && self.position_size > 0.0 {
+                            self.reset_state();
+                            self.last_kama = Some(kama);
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Buy,
+                                strength: self.position_size.max(1.0),
+                                metadata: Some(format!(
+                                    "Trailing Stop Triggered: Price {:.2} >= Stop {:.2}",
+                                    price, trailing_stop
+                                )),
+                            });
+                            return Some(signals);
+                        }
+                    }
+
+                    // Check initial stop loss
+                    let profit_pct = (short_entry - price) / short_entry * 100.0;
+                    if profit_pct <= -self.config.stop_loss && self.position_size > 0.0 {
+                        self.reset_state();
+                        self.last_kama = Some(kama);
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Check KAMA crossover up (exit signal for short)
+                    if kama > self.last_kama.unwrap_or(kama) && self.position_size > 0.0 {
+                        let remaining_size = self.position_size.max(1.0);
+                        self.reset_state();
+                        self.last_kama = Some(kama);
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: remaining_size,
+                            metadata: Some(format!(
+                                "KAMA Crossover Up: {:.2} -> {:.2}",
+                                kama,
+                                self.last_kama.unwrap_or(kama)
+                            )),
+                        });
+                        return Some(signals);
+                    }
                 }
             }
 
@@ -369,10 +494,10 @@ impl Strategy for AdaptiveMAStrategy {
             return None;
         }
 
-        // ENTRY LOGIC
-        if let Some(prev_kama) = self.last_kama {
-            // Check for KAMA crossover up
-            if prev_kama >= price && kama < price {
+        // ENTRY LOGIC - Only enter if in Flat position
+        if self.position == PositionState::Flat {
+            // Check for KAMA crossover up (LONG ENTRY)
+            if kama > self.last_kama.unwrap_or(kama) {
                 // Apply all filters
                 if !self.check_rsi_filter() {
                     // RSI filter failed (overbought)
@@ -387,15 +512,16 @@ impl Strategy for AdaptiveMAStrategy {
                 }
 
                 if !self.check_volume_filter(bar.volume) {
-                    // Volume filter failed
+                    // Volume filter condition not met
                     self.last_kama = Some(kama);
                     return None;
                 }
 
-                // All filters passed - KAMA crossover entry
-                self.entry_price = Some(price);
+                // All filters passed - KAMA crossover up entry (LONG)
+                self.position = PositionState::Long;
+                self.long_entry_price = Some(price);
                 self.highest_since_entry = Some(price);
-                self.position_size = 1.0; // Full position
+                self.position_size = 1.0;
                 self.last_kama = Some(kama);
 
                 return Some(vec![Signal {
@@ -404,8 +530,50 @@ impl Strategy for AdaptiveMAStrategy {
                     signal_type: SignalType::Buy,
                     strength: 1.0,
                     metadata: Some(format!(
-                        "KAMA Crossover Up: Price {:.2} > KAMA {:.2}",
-                        price, kama
+                        "KAMA Crossover Up: {:.2} -> {:.2}",
+                        self.last_kama.unwrap_or(kama),
+                        kama
+                    )),
+                }]);
+            }
+
+            // Check for KAMA crossover down (SHORT ENTRY)
+            if kama < self.last_kama.unwrap_or(kama) {
+                // Apply all filters
+                if !self.check_rsi_filter() {
+                    // RSI filter failed
+                    self.last_kama = Some(kama);
+                    return None;
+                }
+
+                if !self.check_adx_filter() {
+                    // ADX filter failed (not trending)
+                    self.last_kama = Some(kama);
+                    return None;
+                }
+
+                if !self.check_volume_filter(bar.volume) {
+                    // Volume filter condition not met
+                    self.last_kama = Some(kama);
+                    return None;
+                }
+
+                // All filters passed - KAMA crossover down entry (SHORT)
+                self.position = PositionState::Short;
+                self.short_entry_price = Some(price);
+                self.lowest_since_entry = Some(price);
+                self.position_size = 1.0;
+                self.last_kama = Some(kama);
+
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Sell,
+                    strength: 1.0,
+                    metadata: Some(format!(
+                        "KAMA Crossover Down: {:.2} -> {:.2}",
+                        self.last_kama.unwrap_or(kama),
+                        kama
                     )),
                 }]);
             }

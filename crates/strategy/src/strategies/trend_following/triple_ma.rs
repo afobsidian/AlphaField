@@ -12,7 +12,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::{Adx, Atr, Ema, Indicator, Rsi, Sma};
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use std::collections::VecDeque;
 
 /// Triple MA Strategy
@@ -42,8 +42,11 @@ pub struct TripleMAStrategy {
     last_fast: Option<f64>,
     last_medium: Option<f64>,
     last_slow: Option<f64>,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
     highest_since_entry: Option<f64>,
+    lowest_since_entry: Option<f64>,
     trailing_stop_level: Option<f64>,
     position_size: f64,
 }
@@ -120,10 +123,13 @@ impl TripleMAStrategy {
             last_fast: None,
             last_medium: None,
             last_slow: None,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
             highest_since_entry: None,
+            lowest_since_entry: None,
             trailing_stop_level: None,
-            position_size: 1.0,
+            position_size: 0.0,
         }
     }
 
@@ -135,6 +141,11 @@ impl TripleMAStrategy {
     /// Check if MAs are in bullish alignment (fast > medium > slow)
     fn is_bullish_alignment(&self, fast: f64, medium: f64, slow: f64) -> bool {
         fast > medium && medium > slow
+    }
+
+    /// Check if MAs are in bearish alignment (fast < medium < slow)
+    fn is_bearish_alignment(&self, fast: f64, medium: f64, slow: f64) -> bool {
+        fast < medium && medium < slow
     }
 
     /// Check if RSI filter allows entry
@@ -188,9 +199,22 @@ impl TripleMAStrategy {
         }
     }
 
-    /// Check partial take profit conditions
-    fn check_partial_exit(&mut self, price: f64, bar: &Bar) -> Option<Signal> {
-        if let Some(entry) = self.entry_price {
+    /// Calculate trailing stop level for short position based on ATR
+    fn calculate_trailing_stop_short(&self, price: f64, atr_value: Option<f64>) -> f64 {
+        if let (Some(atr), Some(trailing_pct)) = (atr_value, self.config.trailing_stop) {
+            let atr_based_stop = price + (atr * self.config.atr_multiplier.unwrap_or(2.0));
+            let pct_based_stop = price * (1.0 + trailing_pct / 100.0);
+            atr_based_stop.max(pct_based_stop)
+        } else if let Some(trailing_pct) = self.config.trailing_stop {
+            price * (1.0 + trailing_pct / 100.0)
+        } else {
+            price * 1.05 // Default 5% trailing stop
+        }
+    }
+
+    /// Check partial take profit conditions for long position
+    fn check_partial_exit_long(&mut self, price: f64, bar: &Bar) -> Option<Signal> {
+        if let Some(entry) = self.long_entry_price {
             let profit_pct = (price - entry) / entry * 100.0;
 
             // TP: Close full position at take profit level
@@ -214,12 +238,41 @@ impl TripleMAStrategy {
         None
     }
 
+    /// Check partial take profit conditions for short position
+    fn check_partial_exit_short(&mut self, price: f64, bar: &Bar) -> Option<Signal> {
+        if let Some(entry) = self.short_entry_price {
+            let profit_pct = (entry - price) / entry * 100.0;
+
+            // TP: Close full position at take profit level
+            if profit_pct >= self.config.take_profit {
+                let exit_size = self.position_size;
+                self.position_size = 0.0;
+
+                // Set trailing stop after TP
+                let atr_val = self.atr.value();
+                self.trailing_stop_level = Some(self.calculate_trailing_stop_short(price, atr_val));
+
+                return Some(Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Buy,
+                    strength: exit_size,
+                    metadata: Some(format!("Take Profit: {:.1}% profit", profit_pct)),
+                });
+            }
+        }
+        None
+    }
+
     /// Reset strategy state
     fn reset_state(&mut self) {
-        self.entry_price = None;
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
         self.highest_since_entry = None;
+        self.lowest_since_entry = None;
         self.trailing_stop_level = None;
-        self.position_size = 1.0;
+        self.position_size = 0.0;
     }
 }
 
@@ -258,7 +311,11 @@ impl MetadataStrategy for TripleMAStrategy {
             ),
             hypothesis_path: "hypotheses/trend_following/triple_ma.md".to_string(),
             required_indicators,
-            expected_regimes: vec![MarketRegime::Bull, MarketRegime::Trending],
+            expected_regimes: vec![
+                MarketRegime::Bull,
+                MarketRegime::Bear,
+                MarketRegime::Trending,
+            ],
             risk_profile: RiskProfile {
                 max_drawdown_expected: 0.25,
                 volatility_level: VolatilityLevel::Medium,
@@ -305,11 +362,17 @@ impl Strategy for TripleMAStrategy {
         let price = bar.close;
 
         // EXIT LOGIC FIRST (priority: partial TP > trailing stop > SL > alignment break)
-        if let Some(entry) = self.entry_price {
+        if self.position != PositionState::Flat {
             let mut signals = Vec::new();
 
             // Check partial take profit first
-            if let Some(tp_signal) = self.check_partial_exit(price, bar) {
+            let tp_signal = if self.position == PositionState::Long {
+                self.check_partial_exit_long(price, bar)
+            } else {
+                self.check_partial_exit_short(price, bar)
+            };
+
+            if let Some(tp_signal) = tp_signal {
                 signals.push(tp_signal);
 
                 // If position closed completely, reset state and return
@@ -322,21 +385,68 @@ impl Strategy for TripleMAStrategy {
                 }
             }
 
-            // Update highest price for trailing stop
-            self.highest_since_entry = Some(self.highest_since_entry.unwrap_or(entry).max(price));
+            // === LONG POSITION EXIT LOGIC ===
+            if self.position == PositionState::Long {
+                // Update highest price for trailing stop
+                if let Some(long_entry) = self.long_entry_price {
+                    self.highest_since_entry =
+                        Some(self.highest_since_entry.unwrap_or(long_entry).max(price));
+                }
 
-            // Calculate and update trailing stop
-            let atr_val = self.atr.value();
-            let new_trailing_stop = self.calculate_trailing_stop(price, atr_val);
-            self.trailing_stop_level = Some(
-                self.trailing_stop_level
-                    .unwrap_or(new_trailing_stop)
-                    .max(new_trailing_stop),
-            );
+                // Calculate and update trailing stop
+                let atr_val = self.atr.value();
+                let new_trailing_stop = self.calculate_trailing_stop(price, atr_val);
+                self.trailing_stop_level = Some(
+                    self.trailing_stop_level
+                        .unwrap_or(new_trailing_stop)
+                        .max(new_trailing_stop),
+                );
 
-            // Check trailing stop
-            if let Some(trailing_stop) = self.trailing_stop_level {
-                if price <= trailing_stop && self.position_size > 0.0 {
+                // Check trailing stop
+                if let Some(trailing_stop) = self.trailing_stop_level {
+                    if price <= trailing_stop && self.position_size > 0.0 {
+                        let remaining_size = self.position_size.max(0.1);
+                        self.reset_state();
+                        self.last_fast = Some(fast);
+                        self.last_medium = Some(medium);
+                        self.last_slow = Some(slow);
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: remaining_size,
+                            metadata: Some(format!(
+                                "Trailing Stop Triggered: Price {:.2} <= Stop {:.2}",
+                                price, trailing_stop
+                            )),
+                        });
+                        return Some(signals);
+                    }
+                }
+
+                // Check initial stop loss (if no trailing stop yet)
+                if let Some(entry) = self.long_entry_price {
+                    let profit_pct = (price - entry) / entry * 100.0;
+                    if profit_pct <= -self.config.stop_loss && self.position_size > 0.0 {
+                        let remaining_size = self.position_size.max(0.1);
+                        self.reset_state();
+                        self.last_fast = Some(fast);
+                        self.last_medium = Some(medium);
+                        self.last_slow = Some(slow);
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: remaining_size,
+                            metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+                }
+
+                // Check if bullish alignment is broken (exit signal)
+                if !self.is_bullish_alignment(fast, medium, slow) && self.position_size > 0.0 {
+                    let remaining_size = self.position_size.max(0.1);
                     self.reset_state();
                     self.last_fast = Some(fast);
                     self.last_medium = Some(medium);
@@ -345,51 +455,93 @@ impl Strategy for TripleMAStrategy {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
                         signal_type: SignalType::Sell,
-                        strength: self.position_size.max(1.0),
+                        strength: remaining_size,
                         metadata: Some(format!(
-                            "Trailing Stop Triggered: Price {:.2} <= Stop {:.2}",
-                            price, trailing_stop
+                            "Alignment Broken: Fast {:.2}, Med {:.2}, Slow {:.2}",
+                            fast, medium, slow
                         )),
                     });
                     return Some(signals);
                 }
             }
+            // === SHORT POSITION EXIT LOGIC ===
+            else if self.position == PositionState::Short {
+                // Update lowest price for trailing stop
+                if let Some(short_entry) = self.short_entry_price {
+                    self.lowest_since_entry =
+                        Some(self.lowest_since_entry.unwrap_or(short_entry).min(price));
+                }
 
-            // Check initial stop loss (if no trailing stop yet)
-            let profit_pct = (price - entry) / entry * 100.0;
-            if profit_pct <= -self.config.stop_loss && self.position_size > 0.0 {
-                self.reset_state();
-                self.last_fast = Some(fast);
-                self.last_medium = Some(medium);
-                self.last_slow = Some(slow);
-                signals.push(Signal {
-                    timestamp: bar.timestamp,
-                    symbol: "UNKNOWN".to_string(),
-                    signal_type: SignalType::Sell,
-                    strength: 1.0,
-                    metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
-                });
-                return Some(signals);
-            }
+                // Calculate and update trailing stop for short
+                let atr_val = self.atr.value();
+                let new_trailing_stop = self.calculate_trailing_stop_short(price, atr_val);
+                self.trailing_stop_level = Some(
+                    self.trailing_stop_level
+                        .unwrap_or(new_trailing_stop)
+                        .min(new_trailing_stop),
+                );
 
-            // Check if bullish alignment is broken (exit signal)
-            if !self.is_bullish_alignment(fast, medium, slow) && self.position_size > 0.0 {
-                let remaining_size = self.position_size.max(1.0);
-                self.reset_state();
-                self.last_fast = Some(fast);
-                self.last_medium = Some(medium);
-                self.last_slow = Some(slow);
-                signals.push(Signal {
-                    timestamp: bar.timestamp,
-                    symbol: "UNKNOWN".to_string(),
-                    signal_type: SignalType::Sell,
-                    strength: remaining_size,
-                    metadata: Some(format!(
-                        "Alignment Broken: Fast {:.2}, Med {:.2}, Slow {:.2}",
-                        fast, medium, slow
-                    )),
-                });
-                return Some(signals);
+                // Check trailing stop
+                if let Some(trailing_stop) = self.trailing_stop_level {
+                    if price >= trailing_stop && self.position_size > 0.0 {
+                        let remaining_size = self.position_size.max(0.1);
+                        self.reset_state();
+                        self.last_fast = Some(fast);
+                        self.last_medium = Some(medium);
+                        self.last_slow = Some(slow);
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: remaining_size,
+                            metadata: Some(format!(
+                                "Trailing Stop Triggered: Price {:.2} >= Stop {:.2}",
+                                price, trailing_stop
+                            )),
+                        });
+                        return Some(signals);
+                    }
+                }
+
+                // Check initial stop loss (if no trailing stop yet)
+                if let Some(entry) = self.short_entry_price {
+                    let profit_pct = (entry - price) / entry * 100.0;
+                    if profit_pct <= -self.config.stop_loss && self.position_size > 0.0 {
+                        let remaining_size = self.position_size.max(0.1);
+                        self.reset_state();
+                        self.last_fast = Some(fast);
+                        self.last_medium = Some(medium);
+                        self.last_slow = Some(slow);
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: remaining_size,
+                            metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+                }
+
+                // Check if bearish alignment is broken (exit signal)
+                if !self.is_bearish_alignment(fast, medium, slow) && self.position_size > 0.0 {
+                    let remaining_size = self.position_size.max(0.1);
+                    self.reset_state();
+                    self.last_fast = Some(fast);
+                    self.last_medium = Some(medium);
+                    self.last_slow = Some(slow);
+                    signals.push(Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: remaining_size,
+                        metadata: Some(format!(
+                            "Alignment Broken: Fast {:.2}, Med {:.2}, Slow {:.2}",
+                            fast, medium, slow
+                        )),
+                    });
+                    return Some(signals);
+                }
             }
 
             // Update stored values
@@ -404,57 +556,110 @@ impl Strategy for TripleMAStrategy {
             return None;
         }
 
-        // ENTRY LOGIC
-        if let (Some(prev_fast), Some(prev_medium), Some(prev_slow)) =
-            (self.last_fast, self.last_medium, self.last_slow)
-        {
-            // Check for bullish alignment formation
-            if !self.is_bullish_alignment(prev_fast, prev_medium, prev_slow)
-                && self.is_bullish_alignment(fast, medium, slow)
+        // ENTRY LOGIC - Only enter if in Flat position
+        if self.position == PositionState::Flat {
+            if let (Some(prev_fast), Some(prev_medium), Some(prev_slow)) =
+                (self.last_fast, self.last_medium, self.last_slow)
             {
-                // Apply all filters
-                if !self.check_rsi_filter() {
-                    // RSI filter failed (overbought)
+                // === LONG ENTRY: Bullish alignment ===
+                if !self.is_bullish_alignment(prev_fast, prev_medium, prev_slow)
+                    && self.is_bullish_alignment(fast, medium, slow)
+                {
+                    // Apply all filters
+                    if !self.check_rsi_filter() {
+                        // RSI filter failed (overbought)
+                        self.last_fast = Some(fast);
+                        self.last_medium = Some(medium);
+                        self.last_slow = Some(slow);
+                        return None;
+                    }
+
+                    if !self.check_adx_filter() {
+                        // ADX filter failed (not trending)
+                        self.last_fast = Some(fast);
+                        self.last_medium = Some(medium);
+                        self.last_slow = Some(slow);
+                        return None;
+                    }
+
+                    if !self.check_volume_filter(bar.volume) {
+                        // Volume filter failed
+                        self.last_fast = Some(fast);
+                        self.last_medium = Some(medium);
+                        self.last_slow = Some(slow);
+                        return None;
+                    }
+
+                    // All filters passed - Bullish alignment entry (LONG)
+                    self.position = PositionState::Long;
+                    self.long_entry_price = Some(price);
+                    self.highest_since_entry = Some(price);
+                    self.position_size = 1.0; // Full position
                     self.last_fast = Some(fast);
                     self.last_medium = Some(medium);
                     self.last_slow = Some(slow);
-                    return None;
+
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: 1.0,
+                        metadata: Some(format!(
+                            "Bullish Alignment: Fast {:.2} > Med {:.2} > Slow {:.2}",
+                            fast, medium, slow
+                        )),
+                    }]);
                 }
 
-                if !self.check_adx_filter() {
-                    // ADX filter failed (not trending)
+                // === SHORT ENTRY: Bearish alignment ===
+                if !self.is_bearish_alignment(prev_fast, prev_medium, prev_slow)
+                    && self.is_bearish_alignment(fast, medium, slow)
+                {
+                    // Apply all filters
+                    if !self.check_rsi_filter() {
+                        // RSI filter failed (oversold)
+                        self.last_fast = Some(fast);
+                        self.last_medium = Some(medium);
+                        self.last_slow = Some(slow);
+                        return None;
+                    }
+
+                    if !self.check_adx_filter() {
+                        // ADX filter failed (not trending)
+                        self.last_fast = Some(fast);
+                        self.last_medium = Some(medium);
+                        self.last_slow = Some(slow);
+                        return None;
+                    }
+
+                    if !self.check_volume_filter(bar.volume) {
+                        // Volume filter failed
+                        self.last_fast = Some(fast);
+                        self.last_medium = Some(medium);
+                        self.last_slow = Some(slow);
+                        return None;
+                    }
+
+                    // All filters passed - Bearish alignment entry (SHORT)
+                    self.position = PositionState::Short;
+                    self.short_entry_price = Some(price);
+                    self.lowest_since_entry = Some(price);
+                    self.position_size = 1.0; // Full position
                     self.last_fast = Some(fast);
                     self.last_medium = Some(medium);
                     self.last_slow = Some(slow);
-                    return None;
+
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Sell,
+                        strength: 1.0,
+                        metadata: Some(format!(
+                            "Bearish Alignment: Fast {:.2} < Med {:.2} < Slow {:.2}",
+                            fast, medium, slow
+                        )),
+                    }]);
                 }
-
-                if !self.check_volume_filter(bar.volume) {
-                    // Volume filter failed
-                    self.last_fast = Some(fast);
-                    self.last_medium = Some(medium);
-                    self.last_slow = Some(slow);
-                    return None;
-                }
-
-                // All filters passed - Bullish alignment entry
-                self.entry_price = Some(price);
-                self.highest_since_entry = Some(price);
-                self.position_size = 1.0; // Full position
-                self.last_fast = Some(fast);
-                self.last_medium = Some(medium);
-                self.last_slow = Some(slow);
-
-                return Some(vec![Signal {
-                    timestamp: bar.timestamp,
-                    symbol: "UNKNOWN".to_string(),
-                    signal_type: SignalType::Buy,
-                    strength: 1.0,
-                    metadata: Some(format!(
-                        "Bullish Alignment: Fast {:.2} > Med {:.2} > Slow {:.2}",
-                        fast, medium, slow
-                    )),
-                }]);
             }
         }
 
