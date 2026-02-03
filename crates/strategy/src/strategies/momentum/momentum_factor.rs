@@ -8,7 +8,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::{Indicator, Rsi};
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
@@ -104,8 +104,9 @@ pub struct MomentumFactorStrategy {
     rsi: Rsi,
     prices: VecDeque<f64>,
     volumes: VecDeque<f64>,
-    last_position: SignalType,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
 }
 
 impl Default for MomentumFactorStrategy {
@@ -143,13 +144,21 @@ impl MomentumFactorStrategy {
             prices: VecDeque::with_capacity(config.lookback_period + 1),
             volumes: VecDeque::with_capacity(config.lookback_period + 1),
             config,
-            last_position: SignalType::Hold,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
         }
     }
 
     pub fn config(&self) -> &MomentumFactorConfig {
         &self.config
+    }
+
+    /// Reset all position-related state
+    fn reset_state(&mut self) {
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
     }
 
     /// Calculate momentum factors
@@ -211,7 +220,7 @@ impl MetadataStrategy for MomentumFactorStrategy {
                 "Volume_Momentum".to_string(),
                 "RSI".to_string(),
             ],
-            expected_regimes: vec![MarketRegime::Bull, MarketRegime::Trending],
+            expected_regimes: vec![MarketRegime::Bull, MarketRegime::Trending, MarketRegime::Bear],
             risk_profile: RiskProfile {
                 max_drawdown_expected: 0.20,
                 volatility_level: VolatilityLevel::Medium,
@@ -252,77 +261,156 @@ impl Strategy for MomentumFactorStrategy {
         // Calculate factors
         let factors = self.calculate_factors(price, volume, rsi_val);
         let positive_count = self.count_positive_factors(factors);
+        let negative_count = 3 - positive_count; // Negative factors
 
         // EXIT LOGIC FIRST (only when in position)
-        if self.last_position == SignalType::Buy {
-            if let Some(entry) = self.entry_price {
-                let profit_pct = (price - entry) / entry * 100.0;
+        if self.position != PositionState::Flat {
+            let mut signals = Vec::new();
 
-                // Take Profit
-                if profit_pct >= self.config.take_profit {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
-                    }]);
+            // === LONG POSITION EXIT LOGIC ===
+            if self.position == PositionState::Long {
+                if let Some(entry) = self.long_entry_price {
+                    let profit_pct = (price - entry) / entry * 100.0;
+
+                    // Take Profit
+                    if profit_pct >= self.config.take_profit {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: 1.0,
+                            metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Stop Loss
+                    if profit_pct <= -self.config.stop_loss {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: 1.0,
+                            metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Exit on factor degradation
+                    if positive_count < self.config.min_factors {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: 0.7,
+                            metadata: Some(format!(
+                                "Factor Degradation Exit: {}/{} factors positive",
+                                positive_count, 3
+                            )),
+                        });
+                        return Some(signals);
+                    }
                 }
+            }
+            // === SHORT POSITION EXIT LOGIC ===
+            else if self.position == PositionState::Short {
+                if let Some(entry) = self.short_entry_price {
+                    let profit_pct = (entry - price) / entry * 100.0;
 
-                // Stop Loss
-                if profit_pct <= -self.config.stop_loss {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
-                    }]);
-                }
+                    // Take Profit
+                    if profit_pct >= self.config.take_profit {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
 
-                // Exit on factor degradation
-                if positive_count < self.config.min_factors {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 0.7,
-                        metadata: Some(format!(
-                            "Factor Degradation Exit: {}/{} factors positive",
-                            positive_count, 3
-                        )),
-                    }]);
+                    // Stop Loss
+                    if profit_pct <= -self.config.stop_loss {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Exit on factor degradation (negative factors drop below threshold)
+                    if negative_count < self.config.min_factors {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 0.7,
+                            metadata: Some(format!(
+                                "Factor Degradation Exit: {}/{} factors negative",
+                                negative_count, 3
+                            )),
+                        });
+                        return Some(signals);
+                    }
                 }
             }
         }
 
-        // ENTRY LOGIC - Enough factors are positive
-        if self.last_position != SignalType::Buy && positive_count >= self.config.min_factors {
-            // Calculate signal strength based on number of positive factors
-            let strength = positive_count as f64 / 3.0;
+        // ENTRY LOGIC - Only enter if in Flat position
+        if self.position == PositionState::Flat {
+            // === LONG ENTRY: Enough factors are positive ===
+            if positive_count >= self.config.min_factors {
+                // Calculate signal strength based on number of positive factors
+                let strength = positive_count as f64 / 3.0;
 
-            self.last_position = SignalType::Buy;
-            self.entry_price = Some(price);
-            return Some(vec![Signal {
-                timestamp: bar.timestamp,
-                symbol: "UNKNOWN".to_string(),
-                signal_type: SignalType::Buy,
-                strength,
-                metadata: Some(format!(
-                    "Multi-Factor Entry: {}/{} factors positive (Price:{}, Vol:{}, RSI:{})",
-                    positive_count,
-                    3,
-                    if factors.0 { "✓" } else { "✗" },
-                    if factors.1 { "✓" } else { "✗" },
-                    if factors.2 { "✓" } else { "✗" }
-                )),
-            }]);
+                self.position = PositionState::Long;
+                self.long_entry_price = Some(price);
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Buy,
+                    strength,
+                    metadata: Some(format!(
+                        "Multi-Factor Entry: {}/{} factors positive (Price:{}, Vol:{}, RSI:{})",
+                        positive_count,
+                        3,
+                        if factors.0 { "✓" } else { "✗" },
+                        if factors.1 { "✓" } else { "✗" },
+                        if factors.2 { "✓" } else { "✗" }
+                    )),
+                }]);
+            }
+            // === SHORT ENTRY: Enough factors are negative ===
+            else if negative_count >= self.config.min_factors {
+                // Calculate signal strength based on number of negative factors
+                let strength = negative_count as f64 / 3.0;
+
+                self.position = PositionState::Short;
+                self.short_entry_price = Some(price);
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Sell,
+                    strength,
+                    metadata: Some(format!(
+                        "Multi-Factor Entry: {}/{} factors negative (Price:{}, Vol:{}, RSI:{})",
+                        negative_count,
+                        3,
+                        if factors.0 { "✗" } else { "✓" },
+                        if factors.1 { "✗" } else { "✓" },
+                        if factors.2 { "✗" } else { "✓" }
+                    )),
+                }]);
+            }
         }
 
         None

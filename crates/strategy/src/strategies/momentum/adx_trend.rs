@@ -8,7 +8,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::Adx;
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -105,8 +105,9 @@ impl fmt::Display for AdxTrendConfig {
 pub struct AdxTrendStrategy {
     config: AdxTrendConfig,
     adx: Adx,
-    last_position: SignalType,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
     last_adx: Option<f64>,
     last_close: Option<f64>,
     trend_direction: Option<i8>, // +1 for up, -1 for down, 0 for neutral
@@ -145,8 +146,9 @@ impl AdxTrendStrategy {
         Self {
             adx: Adx::new(config.adx_period),
             config,
-            last_position: SignalType::Hold,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
             last_adx: None,
             last_close: None,
             trend_direction: None,
@@ -168,6 +170,13 @@ impl AdxTrendStrategy {
             // else keep previous direction
         }
         self.last_close = Some(close);
+    }
+
+    /// Reset all position-related state
+    fn reset_state(&mut self) {
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
     }
 }
 
@@ -192,6 +201,7 @@ impl MetadataStrategy for AdxTrendStrategy {
             expected_regimes: vec![
                 MarketRegime::Trending,
                 MarketRegime::Bull,
+                MarketRegime::Bear,
             ],
             risk_profile: RiskProfile {
                 max_drawdown_expected: 0.22,
@@ -226,94 +236,183 @@ impl Strategy for AdxTrendStrategy {
         self.last_adx = Some(adx_val);
 
         // EXIT LOGIC FIRST (only when in position)
-        if self.last_position == SignalType::Buy {
-            if let Some(entry) = self.entry_price {
-                let profit_pct = (price - entry) / entry * 100.0;
+        if self.position != PositionState::Flat {
+            let mut signals = Vec::new();
 
-                // Take Profit
-                if profit_pct >= self.config.take_profit {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
-                    }]);
-                }
+            // === LONG POSITION EXIT LOGIC ===
+            if self.position == PositionState::Long {
+                if let Some(entry) = self.long_entry_price {
+                    let profit_pct = (price - entry) / entry * 100.0;
 
-                // Stop Loss
-                if profit_pct <= -self.config.stop_loss {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
-                    }]);
-                }
-
-                // Exit on weak trend: ADX crosses below weak threshold
-                if let Some(prev) = prev_adx {
-                    if prev >= self.config.weak_trend_threshold
-                        && adx_val < self.config.weak_trend_threshold
-                    {
-                        self.last_position = SignalType::Hold;
-                        self.entry_price = None;
-                        return Some(vec![Signal {
+                    // Take Profit
+                    if profit_pct >= self.config.take_profit {
+                        self.reset_state();
+                        signals.push(Signal {
                             timestamp: bar.timestamp,
                             symbol: "UNKNOWN".to_string(),
                             signal_type: SignalType::Sell,
-                            strength: 0.8,
-                            metadata: Some(format!(
-                                "Weak Trend Exit: ADX {:.2} crossed below {}",
-                                adx_val, self.config.weak_trend_threshold
-                            )),
-                        }]);
+                            strength: 1.0,
+                            metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Stop Loss
+                    if profit_pct <= -self.config.stop_loss {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: 1.0,
+                            metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Exit on weak trend: ADX crosses below weak threshold
+                    if let Some(prev) = prev_adx {
+                        if prev >= self.config.weak_trend_threshold
+                            && adx_val < self.config.weak_trend_threshold
+                        {
+                            self.reset_state();
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Sell,
+                                strength: 0.8,
+                                metadata: Some(format!(
+                                    "Weak Trend Exit: ADX {:.2} crossed below {}",
+                                    adx_val, self.config.weak_trend_threshold
+                                )),
+                            });
+                            return Some(signals);
+                        }
+                    }
+
+                    // Exit on trend reversal (price direction changes)
+                    if let Some(direction) = self.trend_direction {
+                        if direction == -1 {
+                            // Downtrend detected while in long position
+                            self.reset_state();
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Sell,
+                                strength: 0.9,
+                                metadata: Some("Trend Reversal Exit".to_string()),
+                            });
+                            return Some(signals);
+                        }
                     }
                 }
+            }
+            // === SHORT POSITION EXIT LOGIC ===
+            else if self.position == PositionState::Short {
+                if let Some(entry) = self.short_entry_price {
+                    let profit_pct = (entry - price) / entry * 100.0;
 
-                // Exit on trend reversal (price direction changes)
-                if let Some(direction) = self.trend_direction {
-                    if direction == -1 {
-                        // Downtrend detected while in long position
-                        self.last_position = SignalType::Hold;
-                        self.entry_price = None;
-                        return Some(vec![Signal {
+                    // Take Profit
+                    if profit_pct >= self.config.take_profit {
+                        self.reset_state();
+                        signals.push(Signal {
                             timestamp: bar.timestamp,
                             symbol: "UNKNOWN".to_string(),
-                            signal_type: SignalType::Sell,
-                            strength: 0.9,
-                            metadata: Some("Trend Reversal Exit".to_string()),
-                        }]);
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Stop Loss
+                    if profit_pct <= -self.config.stop_loss {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Exit on weak trend: ADX crosses below weak threshold
+                    if let Some(prev) = prev_adx {
+                        if prev >= self.config.weak_trend_threshold
+                            && adx_val < self.config.weak_trend_threshold
+                        {
+                            self.reset_state();
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Buy,
+                                strength: 0.8,
+                                metadata: Some(format!(
+                                    "Weak Trend Exit: ADX {:.2} crossed below {}",
+                                    adx_val, self.config.weak_trend_threshold
+                                )),
+                            });
+                            return Some(signals);
+                        }
+                    }
+
+                    // Exit on trend reversal (price direction changes)
+                    if let Some(direction) = self.trend_direction {
+                        if direction == 1 {
+                            // Uptrend detected while in short position
+                            self.reset_state();
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Buy,
+                                strength: 0.9,
+                                metadata: Some("Trend Reversal Exit".to_string()),
+                            });
+                            return Some(signals);
+                        }
                     }
                 }
             }
         }
 
-        // ENTRY LOGIC - ADX crosses above strong trend threshold in uptrend
-        if self.last_position != SignalType::Buy {
+        // ENTRY LOGIC - Only enter if in Flat position
+        if self.position == PositionState::Flat {
             if let Some(prev) = prev_adx {
                 // ADX must cross above strong trend threshold
                 if prev <= self.config.strong_trend_threshold
                     && adx_val > self.config.strong_trend_threshold
                 {
-                    // Only enter if in uptrend
+                    // Only enter if we have a clear trend direction
                     if let Some(direction) = self.trend_direction {
-                        if direction == 1 {
-                            // Calculate signal strength based on ADX magnitude
-                            let strength = ((adx_val - self.config.strong_trend_threshold) / 20.0)
-                                .clamp(0.6, 1.0);
+                        // Calculate signal strength based on ADX magnitude
+                        let strength =
+                            ((adx_val - self.config.strong_trend_threshold) / 20.0).clamp(0.6, 1.0);
 
-                            self.last_position = SignalType::Buy;
-                            self.entry_price = Some(price);
+                        // === LONG ENTRY: ADX crosses above strong threshold in uptrend ===
+                        if direction == 1 {
+                            self.position = PositionState::Long;
+                            self.long_entry_price = Some(price);
                             return Some(vec![Signal {
                                 timestamp: bar.timestamp,
                                 symbol: "UNKNOWN".to_string(),
                                 signal_type: SignalType::Buy,
+                                strength,
+                                metadata: Some(format!(
+                                    "Strong Trend Entry: ADX {:.2} crossed above {}",
+                                    adx_val, self.config.strong_trend_threshold
+                                )),
+                            }]);
+                        }
+                        // === SHORT ENTRY: ADX crosses above strong threshold in downtrend ===
+                        else if direction == -1 {
+                            self.position = PositionState::Short;
+                            self.short_entry_price = Some(price);
+                            return Some(vec![Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Sell,
                                 strength,
                                 metadata: Some(format!(
                                     "Strong Trend Entry: ADX {:.2} crossed above {}",

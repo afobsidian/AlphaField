@@ -11,7 +11,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::{Atr, Indicator, Sma};
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
@@ -117,8 +117,9 @@ pub struct ATRBreakoutStrategy {
     trend_ma: Option<Sma>,
     price_history: VecDeque<f64>,
     volume_history: VecDeque<f64>,
-    last_position: SignalType,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
 }
 
 impl ATRBreakoutStrategy {
@@ -149,13 +150,21 @@ impl ATRBreakoutStrategy {
             price_history: VecDeque::with_capacity(config.lookback_period),
             volume_history: VecDeque::with_capacity(20),
             config,
-            last_position: SignalType::Hold,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
         }
     }
 
     pub fn config(&self) -> &ATRBreakoutConfig {
         &self.config
+    }
+
+    /// Reset all position-related state
+    fn reset_state(&mut self) {
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
     }
 
     /// Calculate upper breakout level
@@ -262,7 +271,7 @@ impl MetadataStrategy for ATRBreakoutStrategy {
             ),
             hypothesis_path: "hypotheses/volatility/atr_breakout.md".to_string(),
             required_indicators,
-            expected_regimes: vec![MarketRegime::Bull, MarketRegime::Trending, MarketRegime::Ranging],
+            expected_regimes: vec![MarketRegime::Bull, MarketRegime::Trending, MarketRegime::Ranging, MarketRegime::Bear],
             risk_profile: RiskProfile {
                 max_drawdown_expected: 0.25,
                 volatility_level: VolatilityLevel::Medium,
@@ -303,8 +312,8 @@ impl Strategy for ATRBreakoutStrategy {
             self.volume_history.pop_front();
         }
 
-        // ENTRY LOGIC (only when not in position)
-        if self.last_position == SignalType::Hold {
+        // ENTRY LOGIC (only when in Flat position)
+        if self.position == PositionState::Flat {
             if let (Some(lookback_high), Some(lookback_low)) =
                 (self.get_lookback_high(), self.get_lookback_low())
             {
@@ -313,12 +322,12 @@ impl Strategy for ATRBreakoutStrategy {
 
                 // Calculate breakout levels
                 let buy_level = lookback_high + (atr_value * self.config.atr_multiplier);
-                let _sell_level = lookback_low - (atr_value * self.config.atr_multiplier);
+                let sell_level = lookback_low - (atr_value * self.config.atr_multiplier);
 
-                // Buy breakout
+                // === LONG ENTRY: Buy breakout ===
                 if price > buy_level && volume_confirmed && trend_ok {
-                    self.last_position = SignalType::Buy;
-                    self.entry_price = Some(price);
+                    self.position = PositionState::Long;
+                    self.long_entry_price = Some(price);
 
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
@@ -332,42 +341,91 @@ impl Strategy for ATRBreakoutStrategy {
                     }]);
                 }
 
-                // Sell breakout (long-only, so we won't actually short, but this is the logic)
-                // For now, we're long-only as per project rules
+                // === SHORT ENTRY: Sell breakout ===
+                if price < sell_level && volume_confirmed && trend_ok {
+                    self.position = PositionState::Short;
+                    self.short_entry_price = Some(price);
+
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Sell,
+                        strength: 1.0,
+                        metadata: Some(format!(
+                            "ATR Sell Breakout: Price {:.2} < Sell Level {:.2} (Low {:.2} - ATR*{:.1}), Volume: {:.0}",
+                            price, sell_level, lookback_low, self.config.atr_multiplier, bar.volume
+                        )),
+                    }]);
+                }
             }
         }
 
         // EXIT LOGIC (only when in position)
-        if self.last_position == SignalType::Buy {
-            if let Some(entry) = self.entry_price {
-                let profit_pct = (price - entry) / entry * 100.0;
+        if self.position != PositionState::Flat {
+            let mut signals = Vec::new();
 
-                // Take Profit
-                if profit_pct >= self.config.take_profit {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+            // === LONG POSITION EXIT LOGIC ===
+            if self.position == PositionState::Long {
+                if let Some(entry) = self.long_entry_price {
+                    let profit_pct = (price - entry) / entry * 100.0;
 
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!("Take Profit: {:.1}% profit", profit_pct)),
-                    }]);
+                    // Take Profit
+                    if profit_pct >= self.config.take_profit {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: 1.0,
+                            metadata: Some(format!("Take Profit: {:.1}% profit", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Stop Loss
+                    if profit_pct <= -self.config.stop_loss {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: 1.0,
+                            metadata: Some(format!("Stop Loss: {:.1}% loss", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
                 }
+            }
+            // === SHORT POSITION EXIT LOGIC ===
+            else if self.position == PositionState::Short {
+                if let Some(entry) = self.short_entry_price {
+                    let profit_pct = (entry - price) / entry * 100.0;
 
-                // Stop Loss
-                if profit_pct <= -self.config.stop_loss {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    // Take Profit
+                    if profit_pct >= self.config.take_profit {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!("Take Profit: {:.1}% profit", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
 
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!("Stop Loss: {:.1}% loss", profit_pct)),
-                    }]);
+                    // Stop Loss
+                    if profit_pct <= -self.config.stop_loss {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!("Stop Loss: {:.1}% loss", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
                 }
             }
         }
@@ -516,7 +574,8 @@ mod tests {
     #[test]
     fn test_atr_breakout_new_instance_clean_state() {
         let strategy = ATRBreakoutStrategy::new(14, 1.5, 20);
-        assert_eq!(strategy.last_position, SignalType::Hold);
-        assert!(strategy.entry_price.is_none());
+        assert_eq!(strategy.position, PositionState::Flat);
+        assert!(strategy.long_entry_price.is_none());
+        assert!(strategy.short_entry_price.is_none());
     }
 }

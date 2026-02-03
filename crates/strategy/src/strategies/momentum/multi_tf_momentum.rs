@@ -8,7 +8,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::{Ema, Indicator};
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -99,8 +99,9 @@ pub struct MultiTfMomentumStrategy {
     config: MultiTfMomentumConfig,
     fast_ema: Ema,
     slow_ema: Ema,
-    last_position: SignalType,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
     last_price_above_fast: Option<bool>,
     last_fast_above_slow: Option<bool>,
 }
@@ -133,8 +134,9 @@ impl MultiTfMomentumStrategy {
             fast_ema: Ema::new(config.fast_ema_period),
             slow_ema: Ema::new(config.slow_ema_period),
             config,
-            last_position: SignalType::Hold,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
             last_price_above_fast: None,
             last_fast_above_slow: None,
         }
@@ -144,11 +146,25 @@ impl MultiTfMomentumStrategy {
         &self.config
     }
 
+    /// Reset all position-related state
+    fn reset_state(&mut self) {
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
+    }
+
     /// Check if all timeframes are aligned for bullish momentum
     /// This helper is test-only and not needed in non-test builds.
     #[cfg(test)]
     fn is_aligned_bullish(&self, price: f64, fast_ema: f64, slow_ema: f64) -> bool {
         price > fast_ema && fast_ema > slow_ema
+    }
+
+    /// Check if all timeframes are aligned for bearish momentum
+    /// This helper is test-only and not needed in non-test builds.
+    #[cfg(test)]
+    fn is_aligned_bearish(&self, price: f64, fast_ema: f64, slow_ema: f64) -> bool {
+        price < fast_ema && fast_ema < slow_ema
     }
 }
 
@@ -170,7 +186,11 @@ impl MetadataStrategy for MultiTfMomentumStrategy {
             ),
             hypothesis_path: "hypotheses/momentum/multi_tf_momentum.md".to_string(),
             required_indicators: vec!["Fast_EMA".to_string(), "Slow_EMA".to_string()],
-            expected_regimes: vec![MarketRegime::Bull, MarketRegime::Trending],
+            expected_regimes: vec![
+                MarketRegime::Bull,
+                MarketRegime::Trending,
+                MarketRegime::Bear,
+            ],
             risk_profile: RiskProfile {
                 max_drawdown_expected: 0.18,
                 volatility_level: VolatilityLevel::Low,
@@ -210,88 +230,162 @@ impl Strategy for MultiTfMomentumStrategy {
         self.last_fast_above_slow = Some(fast_above_slow);
 
         // EXIT LOGIC FIRST (only when in position)
-        if self.last_position == SignalType::Buy {
-            if let Some(entry) = self.entry_price {
-                let profit_pct = (price - entry) / entry * 100.0;
+        if self.position != PositionState::Flat {
+            let mut signals = Vec::new();
 
-                // Take Profit
-                if profit_pct >= self.config.take_profit {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
-                    }]);
-                }
+            // === LONG POSITION EXIT LOGIC ===
+            if self.position == PositionState::Long {
+                if let Some(entry) = self.long_entry_price {
+                    let profit_pct = (price - entry) / entry * 100.0;
 
-                // Stop Loss
-                if profit_pct <= -self.config.stop_loss {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
-                    }]);
-                }
-
-                // Exit on alignment break: price crosses below fast EMA
-                if let Some(was_above) = prev_price_above_fast {
-                    if was_above && !price_above_fast {
-                        self.last_position = SignalType::Hold;
-                        self.entry_price = None;
-                        return Some(vec![Signal {
+                    // Take Profit
+                    if profit_pct >= self.config.take_profit {
+                        self.reset_state();
+                        signals.push(Signal {
                             timestamp: bar.timestamp,
                             symbol: "UNKNOWN".to_string(),
                             signal_type: SignalType::Sell,
-                            strength: 0.9,
-                            metadata: Some(format!(
-                                "Short-term Alignment Break: Price {:.2} crossed below Fast EMA {:.2}",
-                                price, fast_ema_val
-                            )),
-                        }]);
+                            strength: 1.0,
+                            metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Stop Loss
+                    if profit_pct <= -self.config.stop_loss {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: 1.0,
+                            metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Exit on alignment break: price crosses below fast EMA
+                    if let Some(was_above) = prev_price_above_fast {
+                        if was_above && !price_above_fast {
+                            self.reset_state();
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Sell,
+                                strength: 0.9,
+                                metadata: Some(format!(
+                                    "Short-term Alignment Break: Price {:.2} crossed below Fast EMA {:.2}",
+                                    price, fast_ema_val
+                                )),
+                            });
+                            return Some(signals);
+                        }
+                    }
+
+                    // Exit on alignment break: fast EMA crosses below slow EMA
+                    if let Some(was_above) = prev_fast_above_slow {
+                        if was_above && !fast_above_slow {
+                            self.reset_state();
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Sell,
+                                strength: 0.9,
+                                metadata: Some(format!(
+                                    "Long-term Alignment Break: Fast EMA {:.2} crossed below Slow EMA {:.2}",
+                                    fast_ema_val, slow_ema_val
+                                )),
+                            });
+                            return Some(signals);
+                        }
                     }
                 }
+            }
+            // === SHORT POSITION EXIT LOGIC ===
+            else if self.position == PositionState::Short {
+                if let Some(entry) = self.short_entry_price {
+                    let profit_pct = (entry - price) / entry * 100.0;
 
-                // Exit on alignment break: fast EMA crosses below slow EMA
-                if let Some(was_above) = prev_fast_above_slow {
-                    if was_above && !fast_above_slow {
-                        self.last_position = SignalType::Hold;
-                        self.entry_price = None;
-                        return Some(vec![Signal {
+                    // Take Profit
+                    if profit_pct >= self.config.take_profit {
+                        self.reset_state();
+                        signals.push(Signal {
                             timestamp: bar.timestamp,
                             symbol: "UNKNOWN".to_string(),
-                            signal_type: SignalType::Sell,
-                            strength: 0.9,
-                            metadata: Some(format!(
-                                "Long-term Alignment Break: Fast EMA {:.2} crossed below Slow EMA {:.2}",
-                                fast_ema_val, slow_ema_val
-                            )),
-                        }]);
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Stop Loss
+                    if profit_pct <= -self.config.stop_loss {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Exit on alignment break: price crosses above fast EMA
+                    if let Some(was_above) = prev_price_above_fast {
+                        if !was_above && price_above_fast {
+                            self.reset_state();
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Buy,
+                                strength: 0.9,
+                                metadata: Some(format!(
+                                    "Short-term Alignment Break: Price {:.2} crossed above Fast EMA {:.2}",
+                                    price, fast_ema_val
+                                )),
+                            });
+                            return Some(signals);
+                        }
+                    }
+
+                    // Exit on alignment break: fast EMA crosses above slow EMA
+                    if let Some(was_above) = prev_fast_above_slow {
+                        if !was_above && fast_above_slow {
+                            self.reset_state();
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Buy,
+                                strength: 0.9,
+                                metadata: Some(format!(
+                                    "Long-term Alignment Break: Fast EMA {:.2} crossed above Slow EMA {:.2}",
+                                    fast_ema_val, slow_ema_val
+                                )),
+                            });
+                            return Some(signals);
+                        }
                     }
                 }
             }
         }
 
-        // ENTRY LOGIC - All timeframes align bullish
-        if self.last_position != SignalType::Buy {
+        // ENTRY LOGIC - Only enter if in Flat position
+        if self.position == PositionState::Flat {
             // Check for alignment establishment (price crosses above fast EMA while fast > slow)
             if let (Some(was_above_fast), Some(was_fast_above_slow)) =
                 (prev_price_above_fast, prev_fast_above_slow)
             {
+                // === LONG ENTRY: All timeframes align bullish ===
                 // Entry when price crosses above fast EMA and fast EMA is already above slow EMA
                 if !was_above_fast && price_above_fast && fast_above_slow {
                     // Calculate signal strength based on separation between EMAs
                     let ema_separation = (fast_ema_val - slow_ema_val) / slow_ema_val;
                     let strength = (ema_separation * 100.0).clamp(0.6, 1.0);
 
-                    self.last_position = SignalType::Buy;
-                    self.entry_price = Some(price);
+                    self.position = PositionState::Long;
+                    self.long_entry_price = Some(price);
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
@@ -304,12 +398,12 @@ impl Strategy for MultiTfMomentumStrategy {
                     }]);
                 }
 
-                // Alternative entry: fast EMA crosses above slow EMA while price is already above fast
+                // Alternative long entry: fast EMA crosses above slow EMA while price is already above fast
                 if price_above_fast && !was_fast_above_slow && fast_above_slow {
                     let strength = 0.8; // Slightly weaker signal
 
-                    self.last_position = SignalType::Buy;
-                    self.entry_price = Some(price);
+                    self.position = PositionState::Long;
+                    self.long_entry_price = Some(price);
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
@@ -317,6 +411,45 @@ impl Strategy for MultiTfMomentumStrategy {
                         strength,
                         metadata: Some(format!(
                             "Long-term Alignment Entry: Fast EMA {:.2} crossed above Slow EMA {:.2}",
+                            fast_ema_val, slow_ema_val
+                        )),
+                    }]);
+                }
+
+                // === SHORT ENTRY: All timeframes align bearish ===
+                // Entry when price crosses below fast EMA and fast EMA is already below slow EMA
+                if was_above_fast && !price_above_fast && !fast_above_slow {
+                    // Calculate signal strength based on separation between EMAs
+                    let ema_separation = (slow_ema_val - fast_ema_val) / slow_ema_val;
+                    let strength = (ema_separation * 100.0).clamp(0.6, 1.0);
+
+                    self.position = PositionState::Short;
+                    self.short_entry_price = Some(price);
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Sell,
+                        strength,
+                        metadata: Some(format!(
+                            "Multi-TF Alignment Entry: Price {:.2} < Fast EMA {:.2} < Slow EMA {:.2}",
+                            price, fast_ema_val, slow_ema_val
+                        )),
+                    }]);
+                }
+
+                // Alternative short entry: fast EMA crosses below slow EMA while price is already below fast
+                if !price_above_fast && was_fast_above_slow && !fast_above_slow {
+                    let strength = 0.8; // Slightly weaker signal
+
+                    self.position = PositionState::Short;
+                    self.short_entry_price = Some(price);
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Sell,
+                        strength,
+                        metadata: Some(format!(
+                            "Long-term Alignment Entry: Fast EMA {:.2} crossed below Slow EMA {:.2}",
                             fast_ema_val, slow_ema_val
                         )),
                     }]);
@@ -379,6 +512,15 @@ mod tests {
 
         // Not aligned: 95 < 105 (price < fast)
         assert!(!strategy.is_aligned_bullish(95.0, 105.0, 100.0));
+
+        // Bearish aligned: 90 < 95 < 100
+        assert!(strategy.is_aligned_bearish(90.0, 95.0, 100.0));
+
+        // Not bearish aligned: 90 < 100 but 100 > 95 (fast > slow)
+        assert!(!strategy.is_aligned_bearish(90.0, 100.0, 95.0));
+
+        // Not bearish aligned: 105 > 95 (price > fast)
+        assert!(!strategy.is_aligned_bearish(105.0, 95.0, 100.0));
     }
 
     #[test]

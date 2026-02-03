@@ -8,7 +8,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::{Ema, Indicator};
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
@@ -105,8 +105,9 @@ pub struct VolumeMomentumStrategy {
     config: VolumeMomentumConfig,
     price_ema: Ema,
     volumes: VecDeque<f64>,
-    last_position: SignalType,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
     last_price_above_ema: Option<bool>,
     last_volume: Option<f64>,
 }
@@ -145,8 +146,9 @@ impl VolumeMomentumStrategy {
             price_ema: Ema::new(config.price_ema_period),
             volumes: VecDeque::with_capacity(config.volume_period + 1),
             config,
-            last_position: SignalType::Hold,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
             last_price_above_ema: None,
             last_volume: None,
         }
@@ -154,6 +156,13 @@ impl VolumeMomentumStrategy {
 
     pub fn config(&self) -> &VolumeMomentumConfig {
         &self.config
+    }
+
+    /// Reset all position-related state
+    fn reset_state(&mut self) {
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
     }
 
     /// Calculate average volume
@@ -206,6 +215,7 @@ impl MetadataStrategy for VolumeMomentumStrategy {
             expected_regimes: vec![
                 MarketRegime::Bull,
                 MarketRegime::Trending,
+                MarketRegime::Bear,
             ],
             risk_profile: RiskProfile {
                 max_drawdown_expected: 0.18,
@@ -250,85 +260,157 @@ impl Strategy for VolumeMomentumStrategy {
         self.last_volume = Some(volume);
 
         // EXIT LOGIC FIRST (only when in position)
-        if self.last_position == SignalType::Buy {
-            if let Some(entry) = self.entry_price {
-                let profit_pct = (price - entry) / entry * 100.0;
+        if self.position != PositionState::Flat {
+            let mut signals = Vec::new();
 
-                // Take Profit
-                if profit_pct >= self.config.take_profit {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
-                    }]);
-                }
+            // === LONG POSITION EXIT LOGIC ===
+            if self.position == PositionState::Long {
+                if let Some(entry) = self.long_entry_price {
+                    let profit_pct = (price - entry) / entry * 100.0;
 
-                // Stop Loss
-                if profit_pct <= -self.config.stop_loss {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
-                    }]);
-                }
-
-                // Exit on price crossing below EMA
-                if let Some(was_above) = prev_price_above_ema {
-                    if was_above && !price_above_ema {
-                        self.last_position = SignalType::Hold;
-                        self.entry_price = None;
-                        return Some(vec![Signal {
+                    // Take Profit
+                    if profit_pct >= self.config.take_profit {
+                        self.reset_state();
+                        signals.push(Signal {
                             timestamp: bar.timestamp,
                             symbol: "UNKNOWN".to_string(),
                             signal_type: SignalType::Sell,
-                            strength: 0.9,
+                            strength: 1.0,
+                            metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Stop Loss
+                    if profit_pct <= -self.config.stop_loss {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: 1.0,
+                            metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Exit on price crossing below EMA
+                    if let Some(was_above) = prev_price_above_ema {
+                        if was_above && !price_above_ema {
+                            self.reset_state();
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Sell,
+                                strength: 0.9,
+                                metadata: Some(format!(
+                                    "Trend Break Exit: Price {:.2} crossed below EMA {:.2}",
+                                    price, ema_val
+                                )),
+                            });
+                            return Some(signals);
+                        }
+                    }
+
+                    // Exit on volume decline (loss of momentum confirmation)
+                    if !volume_confirmed {
+                        self.reset_state();
+                        let avg_vol = self.calculate_avg_volume().unwrap_or(0.0);
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: 0.7,
                             metadata: Some(format!(
-                                "Trend Break Exit: Price {:.2} crossed below EMA {:.2}",
-                                price, ema_val
+                                "Volume Decline Exit: Vol {:.0} < {:.1}x avg {:.0}",
+                                volume, self.config.volume_multiplier, avg_vol
                             )),
-                        }]);
+                        });
+                        return Some(signals);
                     }
                 }
+            }
+            // === SHORT POSITION EXIT LOGIC ===
+            else if self.position == PositionState::Short {
+                if let Some(entry) = self.short_entry_price {
+                    let profit_pct = (entry - price) / entry * 100.0;
 
-                // Exit on volume decline (loss of momentum confirmation)
-                if !volume_confirmed {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    let avg_vol = self.calculate_avg_volume().unwrap_or(0.0);
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 0.7,
-                        metadata: Some(format!(
-                            "Volume Decline Exit: Vol {:.0} < {:.1}x avg {:.0}",
-                            volume, self.config.volume_multiplier, avg_vol
-                        )),
-                    }]);
+                    // Take Profit
+                    if profit_pct >= self.config.take_profit {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Stop Loss
+                    if profit_pct <= -self.config.stop_loss {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Exit on price crossing above EMA
+                    if let Some(was_above) = prev_price_above_ema {
+                        if !was_above && price_above_ema {
+                            self.reset_state();
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Buy,
+                                strength: 0.9,
+                                metadata: Some(format!(
+                                    "Trend Break Exit: Price {:.2} crossed above EMA {:.2}",
+                                    price, ema_val
+                                )),
+                            });
+                            return Some(signals);
+                        }
+                    }
+
+                    // Exit on volume decline (loss of momentum confirmation)
+                    if !volume_confirmed {
+                        self.reset_state();
+                        let avg_vol = self.calculate_avg_volume().unwrap_or(0.0);
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 0.7,
+                            metadata: Some(format!(
+                                "Volume Decline Exit: Vol {:.0} < {:.1}x avg {:.0}",
+                                volume, self.config.volume_multiplier, avg_vol
+                            )),
+                        });
+                        return Some(signals);
+                    }
                 }
             }
         }
 
-        // ENTRY LOGIC - Price crosses above EMA with strong volume
-        if self.last_position != SignalType::Buy {
+        // ENTRY LOGIC - Only enter if in Flat position
+        if self.position == PositionState::Flat {
             if let Some(was_above) = prev_price_above_ema {
-                // Price must cross above EMA
+                // === LONG ENTRY: Price crosses above EMA with strong volume ===
                 if !was_above && price_above_ema {
                     // Volume must confirm momentum
                     if volume_confirmed {
                         // Calculate signal strength based on volume strength and increase
                         let strength = if volume_inc { 1.0 } else { 0.8 };
 
-                        self.last_position = SignalType::Buy;
-                        self.entry_price = Some(price);
+                        self.position = PositionState::Long;
+                        self.long_entry_price = Some(price);
                         let avg_vol = self.calculate_avg_volume().unwrap_or(0.0);
                         return Some(vec![Signal {
                             timestamp: bar.timestamp,
@@ -337,6 +419,33 @@ impl Strategy for VolumeMomentumStrategy {
                             strength,
                             metadata: Some(format!(
                                 "Volume Momentum Entry: Price {:.2} > EMA {:.2}, Vol {:.0} ({:.1}x avg {:.0}){}",
+                                price,
+                                ema_val,
+                                volume,
+                                volume / avg_vol,
+                                avg_vol,
+                                if volume_inc { " increasing" } else { "" }
+                            )),
+                        }]);
+                    }
+                }
+                // === SHORT ENTRY: Price crosses below EMA with strong volume ===
+                else if was_above && !price_above_ema {
+                    // Volume must confirm momentum
+                    if volume_confirmed {
+                        // Calculate signal strength based on volume strength and increase
+                        let strength = if volume_inc { 1.0 } else { 0.8 };
+
+                        self.position = PositionState::Short;
+                        self.short_entry_price = Some(price);
+                        let avg_vol = self.calculate_avg_volume().unwrap_or(0.0);
+                        return Some(vec![Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength,
+                            metadata: Some(format!(
+                                "Volume Momentum Entry: Price {:.2} < EMA {:.2}, Vol {:.0} ({:.1}x avg {:.0}){}",
                                 price,
                                 ema_val,
                                 volume,

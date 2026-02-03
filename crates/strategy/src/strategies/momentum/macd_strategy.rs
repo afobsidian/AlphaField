@@ -7,7 +7,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::{Ema, Indicator, Macd};
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -120,8 +120,9 @@ pub struct MomentumStrategy {
     config: MomentumConfig,
     ema: Ema,
     macd: Macd,
-    last_position: SignalType,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
     // State tracking for crossover detection
     last_macd: Option<f64>,
     last_signal: Option<f64>,
@@ -144,8 +145,9 @@ impl MomentumStrategy {
             ema: Ema::new(config.ema_period),
             macd: Macd::new(config.macd_fast, config.macd_slow, config.macd_signal),
             config,
-            last_position: SignalType::Hold,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
             last_macd: None,
             last_signal: None,
             last_price_above_ema: None,
@@ -154,6 +156,13 @@ impl MomentumStrategy {
 
     pub fn config(&self) -> &MomentumConfig {
         &self.config
+    }
+
+    /// Reset all position-related state
+    fn reset_state(&mut self) {
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
     }
 }
 
@@ -178,7 +187,7 @@ impl MetadataStrategy for MomentumStrategy {
             ),
             hypothesis_path: "hypotheses/momentum/macd_strategy.md".to_string(),
             required_indicators: vec!["EMA".to_string(), "MACD".to_string(), "Price".to_string()],
-            expected_regimes: vec![MarketRegime::Bull, MarketRegime::Trending, MarketRegime::HighVolatility],
+            expected_regimes: vec![MarketRegime::Bull, MarketRegime::Trending, MarketRegime::HighVolatility, MarketRegime::Bear],
             risk_profile: RiskProfile {
                 max_drawdown_expected: 0.30,
                 volatility_level: VolatilityLevel::High,
@@ -216,91 +225,189 @@ impl Strategy for MomentumStrategy {
         self.last_price_above_ema = Some(price_above_ema);
 
         // EXIT LOGIC FIRST (only when in position)
-        if self.last_position == SignalType::Buy {
-            if let Some(entry) = self.entry_price {
-                let profit_pct = (price - entry) / entry * 100.0;
+        if self.position != PositionState::Flat {
+            let mut signals = Vec::new();
 
-                // TP
-                if profit_pct >= self.config.take_profit {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
-                    }]);
-                }
+            // === LONG POSITION EXIT LOGIC ===
+            if self.position == PositionState::Long {
+                if let Some(entry) = self.long_entry_price {
+                    let profit_pct = (price - entry) / entry * 100.0;
 
-                // SL
-                if profit_pct <= -self.config.stop_loss {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
-                    }]);
-                }
-
-                // Exit on MACD crossover below signal (actual crossover, not just condition)
-                if let (Some(pm), Some(ps)) = (prev_macd, prev_signal) {
-                    if pm >= ps && macd_line < signal_line {
-                        self.last_position = SignalType::Hold;
-                        self.entry_price = None;
-                        return Some(vec![Signal {
+                    // TP
+                    if profit_pct >= self.config.take_profit {
+                        self.reset_state();
+                        signals.push(Signal {
                             timestamp: bar.timestamp,
                             symbol: "UNKNOWN".to_string(),
                             signal_type: SignalType::Sell,
-                            strength: 0.8,
-                            metadata: Some(format!(
-                                "MACD Crossover Exit: MACD {:.4} crossed below Signal {:.4}",
-                                macd_line, signal_line
-                            )),
-                        }]);
+                            strength: 1.0,
+                            metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // SL
+                    if profit_pct <= -self.config.stop_loss {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: 1.0,
+                            metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Exit on MACD crossover below signal (actual crossover, not just condition)
+                    if let (Some(pm), Some(ps)) = (prev_macd, prev_signal) {
+                        if pm >= ps && macd_line < signal_line {
+                            self.reset_state();
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Sell,
+                                strength: 0.8,
+                                metadata: Some(format!(
+                                    "MACD Crossover Exit: MACD {:.4} crossed below Signal {:.4}",
+                                    macd_line, signal_line
+                                )),
+                            });
+                            return Some(signals);
+                        }
+                    }
+
+                    // Exit on trend break (price crosses below EMA - actual crossover)
+                    if let Some(was_above) = prev_price_above_ema {
+                        if was_above && !price_above_ema {
+                            self.reset_state();
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Sell,
+                                strength: 0.9,
+                                metadata: Some(format!(
+                                    "Trend Break Exit: Price {:.2} crossed below EMA {:.2}",
+                                    price, ema_val
+                                )),
+                            });
+                            return Some(signals);
+                        }
                     }
                 }
+            }
+            // === SHORT POSITION EXIT LOGIC ===
+            else if self.position == PositionState::Short {
+                if let Some(entry) = self.short_entry_price {
+                    let profit_pct = (entry - price) / entry * 100.0;
 
-                // Exit on trend break (price crosses below EMA - actual crossover)
-                if let Some(was_above) = prev_price_above_ema {
-                    if was_above && !price_above_ema {
-                        self.last_position = SignalType::Hold;
-                        self.entry_price = None;
+                    // TP
+                    if profit_pct >= self.config.take_profit {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // SL
+                    if profit_pct <= -self.config.stop_loss {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Exit on MACD crossover above signal (actual crossover, not just condition)
+                    if let (Some(pm), Some(ps)) = (prev_macd, prev_signal) {
+                        if pm <= ps && macd_line > signal_line {
+                            self.reset_state();
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Buy,
+                                strength: 0.8,
+                                metadata: Some(format!(
+                                    "MACD Crossover Exit: MACD {:.4} crossed above Signal {:.4}",
+                                    macd_line, signal_line
+                                )),
+                            });
+                            return Some(signals);
+                        }
+                    }
+
+                    // Exit on trend break (price crosses above EMA - actual crossover)
+                    if let Some(was_above) = prev_price_above_ema {
+                        if !was_above && price_above_ema {
+                            self.reset_state();
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Buy,
+                                strength: 0.9,
+                                metadata: Some(format!(
+                                    "Trend Break Exit: Price {:.2} crossed above EMA {:.2}",
+                                    price, ema_val
+                                )),
+                            });
+                            return Some(signals);
+                        }
+                    }
+                }
+            }
+        }
+
+        // ENTRY LOGIC - Only enter if in Flat position
+        if self.position == PositionState::Flat {
+            // === LONG ENTRY: MACD crosses above signal AND price above EMA ===
+            if price_above_ema {
+                if let (Some(pm), Some(ps)) = (prev_macd, prev_signal) {
+                    // MACD must cross above signal (not just be above)
+                    if pm <= ps && macd_line > signal_line {
+                        self.position = PositionState::Long;
+                        self.long_entry_price = Some(price);
                         return Some(vec![Signal {
                             timestamp: bar.timestamp,
                             symbol: "UNKNOWN".to_string(),
-                            signal_type: SignalType::Sell,
-                            strength: 0.9,
+                            signal_type: SignalType::Buy,
+                            strength: ((macd_line - signal_line) / macd_line.abs()).abs().min(1.0),
                             metadata: Some(format!(
-                                "Trend Break Exit: Price {:.2} crossed below EMA {:.2}",
+                                "Bullish Entry: Price {:.2} > EMA {:.2}, MACD crossed above Signal",
                                 price, ema_val
                             )),
                         }]);
                     }
                 }
             }
-        }
-
-        // Entry: Requires MACD crossover above signal AND price above EMA
-        if self.last_position != SignalType::Buy && price_above_ema {
-            if let (Some(pm), Some(ps)) = (prev_macd, prev_signal) {
-                // MACD must cross above signal (not just be above)
-                if pm <= ps && macd_line > signal_line {
-                    self.last_position = SignalType::Buy;
-                    self.entry_price = Some(price);
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Buy,
-                        strength: ((macd_line - signal_line) / macd_line.abs()).abs().min(1.0),
-                        metadata: Some(format!(
-                            "Bullish Entry: Price {:.2} > EMA {:.2}, MACD crossed above Signal",
-                            price, ema_val
-                        )),
-                    }]);
+            // === SHORT ENTRY: MACD crosses below signal AND price below EMA ===
+            else if !price_above_ema {
+                if let (Some(pm), Some(ps)) = (prev_macd, prev_signal) {
+                    // MACD must cross below signal (not just be below)
+                    if pm >= ps && macd_line < signal_line {
+                        self.position = PositionState::Short;
+                        self.short_entry_price = Some(price);
+                        return Some(vec![Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: ((signal_line - macd_line) / signal_line.abs())
+                                .abs()
+                                .min(1.0),
+                            metadata: Some(format!(
+                                "Bearish Entry: Price {:.2} < EMA {:.2}, MACD crossed below Signal",
+                                price, ema_val
+                            )),
+                        }]);
+                    }
                 }
             }
         }

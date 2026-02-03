@@ -10,7 +10,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::{Atr, Indicator, Sma};
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
@@ -116,10 +116,12 @@ pub struct ATRTrailingStrategy {
     atr: Atr,
     fast_sma: Sma,
     slow_sma: Sma,
-    last_position: SignalType,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
     trailing_stop: Option<f64>,
     highest_since_entry: Option<f64>, // Track highest price to trail stop
+    lowest_since_entry: Option<f64>,  // Track lowest price to trail stop for shorts
 }
 
 impl ATRTrailingStrategy {
@@ -149,10 +151,12 @@ impl ATRTrailingStrategy {
             fast_sma: Sma::new(config.fast_period),
             slow_sma: Sma::new(config.slow_period),
             config,
-            last_position: SignalType::Hold,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
             trailing_stop: None,
             highest_since_entry: None,
+            lowest_since_entry: None,
         }
     }
 
@@ -162,7 +166,7 @@ impl ATRTrailingStrategy {
 
     /// Calculate dynamic trailing stop based on ATR
     fn calculate_trailing_stop(&self, price: f64, atr_value: f64) -> f64 {
-        // ATR-based stop
+        // ATR-based stop for long position
         let atr_stop = price - (atr_value * self.config.atr_multiplier);
 
         // Percentage-based minimum stop
@@ -172,7 +176,19 @@ impl ATRTrailingStrategy {
         atr_stop.max(pct_stop)
     }
 
-    /// Update trailing stop (only moves up, never down)
+    /// Calculate trailing stop for short position
+    fn calculate_trailing_stop_short(&self, price: f64, atr_value: f64) -> f64 {
+        // ATR-based stop for short position
+        let atr_stop = price + (atr_value * self.config.atr_multiplier);
+
+        // Percentage-based minimum stop
+        let pct_stop = price * (1.0 + self.config.min_trailing_pct / 100.0);
+
+        // Use the lower (more conservative) stop for shorts
+        atr_stop.min(pct_stop)
+    }
+
+    /// Update trailing stop (only moves up for long, never down)
     fn update_trailing_stop(&mut self, price: f64, atr_value: Option<f64>) {
         if let Some(atr) = atr_value {
             let new_stop = self.calculate_trailing_stop(price, atr);
@@ -187,37 +203,69 @@ impl ATRTrailingStrategy {
             }
         }
     }
+
+    /// Update trailing stop for short position (only moves down, never up)
+    fn update_trailing_stop_short(&mut self, price: f64, atr_value: Option<f64>) {
+        if let Some(atr) = atr_value {
+            let new_stop = self.calculate_trailing_stop_short(price, atr);
+
+            // Only move stop down (lock in profits), never up
+            if let Some(current_stop) = self.trailing_stop {
+                if new_stop < current_stop {
+                    self.trailing_stop = Some(new_stop);
+                }
+            } else {
+                self.trailing_stop = Some(new_stop);
+            }
+        }
+    }
 }
 
 impl Default for ATRTrailingStrategy {
     fn default() -> Self {
-        // Default: 14-period ATR, 2.0x multiplier, 10/30 fast/slow SMA, 1% min trailing, 10% TP
+        // Default: 14 ATR, 2.0 multiplier, 10/50 SMA, 2% minimum trailing, 10% TP
         Self::from_config(ATRTrailingConfig::default_config())
+    }
+}
+
+impl ATRTrailingStrategy {
+    /// Reset all position-related state
+    fn reset_state(&mut self) {
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
+        self.trailing_stop = None;
+        self.highest_since_entry = None;
+        self.lowest_since_entry = None;
     }
 }
 
 impl MetadataStrategy for ATRTrailingStrategy {
     fn metadata(&self) -> StrategyMetadata {
         StrategyMetadata {
-            name: "ATR Trailing Stop".to_string(),
+            name: "ATR Trailing".to_string(),
             category: StrategyCategory::VolatilityBased,
-            sub_type: Some("atr_trailing".to_string()),
+            sub_type: Some("atr_trailing_stop".to_string()),
             description: format!(
-                "ATR-based trailing stop strategy using {} period ATR with {:.1}x multiplier. \
-                Enters on {} / {} SMA crossover (golden cross). \
-                Trailing stop adapts to volatility: stop = price - (ATR * {:.1}). \
-                Minimum trailing distance: {:.1}%. Take profit: {:.1}%.",
+                "ATR-based trailing stop strategy using {} period ATR with {:.1}x multiplier.
+                Uses {}-period and {}-period SMA for trend filtering.
+                Trailing stop only moves up for longs (never down) to lock in profits.
+                Trailing stop only moves down for shorts (never up) to lock in profits.
+                Minimum trailing distance is {:.1}%. Take profit is {:.1}%.",
                 self.config.atr_period,
                 self.config.atr_multiplier,
                 self.config.fast_period,
                 self.config.slow_period,
-                self.config.atr_multiplier,
                 self.config.min_trailing_pct,
                 self.config.take_profit
             ),
             hypothesis_path: "hypotheses/volatility/atr_trailing.md".to_string(),
             required_indicators: vec!["ATR".to_string(), "SMA".to_string()],
-            expected_regimes: vec![MarketRegime::Bull, MarketRegime::Trending],
+            expected_regimes: vec![
+                MarketRegime::Trending,
+                MarketRegime::Bull,
+                MarketRegime::Bear,
+            ],
             risk_profile: RiskProfile {
                 max_drawdown_expected: 0.15,
                 volatility_level: VolatilityLevel::Medium,
@@ -245,22 +293,26 @@ impl Strategy for ATRTrailingStrategy {
         let slow_ma = self.slow_sma.update(price)?;
         let atr_value = self.atr.update(bar)?;
 
-        // Track highest price since entry
-        if self.last_position == SignalType::Buy {
+        // Track highest/lowest price since entry
+        if self.position == PositionState::Long {
             self.highest_since_entry = Some(self.highest_since_entry.unwrap_or(price).max(price));
+        } else if self.position == PositionState::Short {
+            self.lowest_since_entry = Some(self.lowest_since_entry.unwrap_or(price).min(price));
         }
 
-        // ENTRY LOGIC (only when not in position)
-        if self.last_position == SignalType::Hold {
+        // ENTRY LOGIC (only when in Flat position)
+        if self.position == PositionState::Flat {
             // Check for golden cross (fast SMA crosses above slow SMA)
             let prev_fast = self.fast_sma.value()? - (self.fast_sma.value()? - fast_ma); // approximation
             let prev_slow = self.slow_sma.value()? - (self.slow_sma.value()? - slow_ma);
 
             // Detect crossover
+            // === LONG ENTRY: Golden Cross ===
             if prev_fast <= prev_slow && fast_ma > slow_ma {
-                self.last_position = SignalType::Buy;
-                self.entry_price = Some(price);
+                self.position = PositionState::Long;
+                self.long_entry_price = Some(price);
                 self.highest_since_entry = Some(price);
+                self.lowest_since_entry = Some(price);
 
                 // Calculate initial trailing stop
                 self.trailing_stop = Some(self.calculate_trailing_stop(price, atr_value));
@@ -278,76 +330,150 @@ impl Strategy for ATRTrailingStrategy {
                     )),
                 }]);
             }
+
+            // === SHORT ENTRY: Death Cross ===
+            if prev_fast >= prev_slow && fast_ma < slow_ma {
+                self.position = PositionState::Short;
+                self.short_entry_price = Some(price);
+                self.highest_since_entry = Some(price);
+                self.lowest_since_entry = Some(price);
+
+                // Calculate initial trailing stop
+                self.trailing_stop = Some(self.calculate_trailing_stop_short(price, atr_value));
+
+                return Some(vec![Signal {
+                    timestamp: bar.timestamp,
+                    symbol: "UNKNOWN".to_string(),
+                    signal_type: SignalType::Sell,
+                    strength: 1.0,
+                    metadata: Some(format!(
+                        "Death Cross Entry: Fast MA ({:.2}) < Slow MA ({:.2}), Stop: {:.2}",
+                        fast_ma,
+                        slow_ma,
+                        self.trailing_stop.unwrap()
+                    )),
+                }]);
+            }
         }
 
         // EXIT LOGIC (only when in position)
-        if self.last_position == SignalType::Buy {
-            if let Some(entry) = self.entry_price {
-                let profit_pct = (price - entry) / entry * 100.0;
+        if self.position != PositionState::Flat {
+            // === LONG POSITION EXIT LOGIC ===
+            if self.position == PositionState::Long {
+                if let Some(entry) = self.long_entry_price {
+                    let profit_pct = (price - entry) / entry * 100.0;
 
-                // Update trailing stop based on current price
-                self.update_trailing_stop(
-                    self.highest_since_entry.unwrap_or(price),
-                    Some(atr_value),
-                );
+                    // Update trailing stop based on current highest price
+                    self.update_trailing_stop(
+                        self.highest_since_entry.unwrap_or(price),
+                        Some(atr_value),
+                    );
 
-                // Exit 1: Trailing stop hit
-                if let Some(stop) = self.trailing_stop {
-                    if price <= stop {
-                        self.last_position = SignalType::Hold;
-                        self.entry_price = None;
-                        self.trailing_stop = None;
-                        self.highest_since_entry = None;
+                    // Exit 1: Trailing stop hit
+                    if let Some(stop) = self.trailing_stop {
+                        if price <= stop {
+                            self.reset_state();
+                            return Some(vec![Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Sell,
+                                strength: 1.0,
+                                metadata: Some(format!(
+                                    "Trailing Stop Exit: {:.2}% profit, Stop at {:.2}",
+                                    profit_pct, stop
+                                )),
+                            }]);
+                        }
+                    }
 
+                    // Exit 2: Take profit (if enabled)
+                    if self.config.take_profit > 0.0 && profit_pct >= self.config.take_profit {
+                        self.reset_state();
+                        return Some(vec![Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: 1.0,
+                            metadata: Some(format!("Take Profit Exit: {:.1}% profit", profit_pct)),
+                        }]);
+                    }
+
+                    // Exit 3: Death cross (fast SMA crosses below slow SMA)
+                    let prev_fast = self.fast_sma.value()? - (self.fast_sma.value()? - fast_ma);
+                    let prev_slow = self.slow_sma.value()? - (self.slow_sma.value()? - slow_ma);
+
+                    if prev_fast >= prev_slow && fast_ma < slow_ma {
+                        self.reset_state();
                         return Some(vec![Signal {
                             timestamp: bar.timestamp,
                             symbol: "UNKNOWN".to_string(),
                             signal_type: SignalType::Sell,
                             strength: 1.0,
                             metadata: Some(format!(
-                                "Trailing Stop Exit: {:.2}% profit, Stop at {:.2}",
-                                profit_pct, stop
+                                "Death Cross Exit: {:.1}% profit, Fast MA ({:.2}) < Slow MA ({:.2})",
+                                profit_pct, fast_ma, slow_ma
                             )),
                         }]);
                     }
                 }
+            }
+            // === SHORT POSITION EXIT LOGIC ===
+            else if self.position == PositionState::Short {
+                if let Some(entry) = self.short_entry_price {
+                    let profit_pct = (entry - price) / entry * 100.0;
 
-                // Exit 2: Take profit (if enabled)
-                if self.config.take_profit > 0.0 && profit_pct >= self.config.take_profit {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    self.trailing_stop = None;
-                    self.highest_since_entry = None;
+                    // Update trailing stop based on current lowest price
+                    self.update_trailing_stop_short(
+                        self.lowest_since_entry.unwrap_or(price),
+                        Some(atr_value),
+                    );
 
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!("Take Profit Exit: {:.1}% profit", profit_pct)),
-                    }]);
-                }
+                    // Exit 1: Trailing stop hit
+                    if let Some(stop) = self.trailing_stop {
+                        if price >= stop {
+                            self.reset_state();
+                            return Some(vec![Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Buy,
+                                strength: 1.0,
+                                metadata: Some(format!(
+                                    "Trailing Stop Exit: {:.2}% profit, Stop at {:.2}",
+                                    profit_pct, stop
+                                )),
+                            }]);
+                        }
+                    }
 
-                // Exit 3: Death cross (fast SMA crosses below slow SMA)
-                let prev_fast = self.fast_sma.value()? - (self.fast_sma.value()? - fast_ma);
-                let prev_slow = self.slow_sma.value()? - (self.slow_sma.value()? - slow_ma);
+                    // Exit 2: Take profit (if enabled)
+                    if self.config.take_profit > 0.0 && profit_pct >= self.config.take_profit {
+                        self.reset_state();
+                        return Some(vec![Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!("Take Profit Exit: {:.1}% profit", profit_pct)),
+                        }]);
+                    }
 
-                if prev_fast >= prev_slow && fast_ma < slow_ma {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    self.trailing_stop = None;
-                    self.highest_since_entry = None;
+                    // Exit 3: Golden cross (fast SMA crosses above slow SMA)
+                    let prev_fast = self.fast_sma.value()? - (self.fast_sma.value()? - fast_ma);
+                    let prev_slow = self.slow_sma.value()? - (self.slow_sma.value()? - slow_ma);
 
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!(
-                            "Death Cross Exit: {:.1}% profit, Fast MA ({:.2}) < Slow MA ({:.2})",
-                            profit_pct, fast_ma, slow_ma
-                        )),
-                    }]);
+                    if prev_fast <= prev_slow && fast_ma > slow_ma {
+                        self.reset_state();
+                        return Some(vec![Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!(
+                                "Golden Cross Exit: {:.1}% profit, Fast MA ({:.2}) > Slow MA ({:.2})",
+                                profit_pct, fast_ma, slow_ma
+                            )),
+                        }]);
+                    }
                 }
             }
         }
@@ -418,7 +544,7 @@ mod tests {
     fn test_atr_trailing_metadata() {
         let strategy = ATRTrailingStrategy::new(14, 2.0, 10, 30);
         let metadata = strategy.metadata();
-        assert_eq!(metadata.name, "ATR Trailing Stop");
+        assert_eq!(metadata.name, "ATR Trailing");
         assert_eq!(metadata.category, StrategyCategory::VolatilityBased);
     }
 
@@ -461,8 +587,9 @@ mod tests {
     #[test]
     fn test_atr_trailing_new_instance_clean_state() {
         let strategy1 = ATRTrailingStrategy::new(14, 2.0, 10, 30);
-        assert_eq!(strategy1.last_position, SignalType::Hold);
-        assert!(strategy1.entry_price.is_none());
+        assert_eq!(strategy1.position, PositionState::Flat);
+        assert!(strategy1.long_entry_price.is_none());
+        assert!(strategy1.short_entry_price.is_none());
         assert!(strategy1.trailing_stop.is_none());
     }
 }

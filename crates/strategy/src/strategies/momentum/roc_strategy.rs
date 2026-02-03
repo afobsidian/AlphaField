@@ -7,7 +7,7 @@ use crate::framework::{
     CorrelationSensitivity, MarketRegime, MetadataStrategy, RiskProfile, StrategyCategory,
     StrategyMetadata, VolatilityLevel,
 };
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
@@ -100,8 +100,9 @@ impl fmt::Display for RocConfig {
 pub struct RocStrategy {
     config: RocConfig,
     prices: VecDeque<f64>,
-    last_position: SignalType,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
     last_roc: Option<f64>,
 }
 
@@ -138,14 +139,22 @@ impl RocStrategy {
         Self {
             prices: VecDeque::with_capacity(config.roc_period + 1),
             config,
-            last_position: SignalType::Hold,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
             last_roc: None,
         }
     }
 
     pub fn config(&self) -> &RocConfig {
         &self.config
+    }
+
+    /// Reset all position-related state
+    fn reset_state(&mut self) {
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
     }
 
     /// Calculate Rate of Change
@@ -185,6 +194,7 @@ impl MetadataStrategy for RocStrategy {
             expected_regimes: vec![
                 MarketRegime::Bull,
                 MarketRegime::Trending,
+                MarketRegime::Bear,
             ],
             risk_profile: RiskProfile {
                 max_drawdown_expected: 0.20,
@@ -222,65 +232,125 @@ impl Strategy for RocStrategy {
         self.last_roc = Some(roc_val);
 
         // EXIT LOGIC FIRST (only when in position)
-        if self.last_position == SignalType::Buy {
-            if let Some(entry) = self.entry_price {
-                let profit_pct = (price - entry) / entry * 100.0;
+        if self.position != PositionState::Flat {
+            let mut signals = Vec::new();
 
-                // Take Profit
-                if profit_pct >= self.config.take_profit {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
-                    }]);
-                }
+            // === LONG POSITION EXIT LOGIC ===
+            if self.position == PositionState::Long {
+                if let Some(entry) = self.long_entry_price {
+                    let profit_pct = (price - entry) / entry * 100.0;
 
-                // Stop Loss
-                if profit_pct <= -self.config.stop_loss {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
-                        strength: 1.0,
-                        metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
-                    }]);
-                }
-
-                // Exit on ROC crossing below exit threshold
-                if let Some(prev) = prev_roc {
-                    if prev >= self.config.exit_threshold && roc_val < self.config.exit_threshold {
-                        self.last_position = SignalType::Hold;
-                        self.entry_price = None;
-                        return Some(vec![Signal {
+                    // Take Profit
+                    if profit_pct >= self.config.take_profit {
+                        self.reset_state();
+                        signals.push(Signal {
                             timestamp: bar.timestamp,
                             symbol: "UNKNOWN".to_string(),
                             signal_type: SignalType::Sell,
-                            strength: 0.8,
-                            metadata: Some(format!(
-                                "ROC Exit: ROC {:.2}% crossed below {:.1}%",
-                                roc_val, self.config.exit_threshold
-                            )),
-                        }]);
+                            strength: 1.0,
+                            metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Stop Loss
+                    if profit_pct <= -self.config.stop_loss {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: 1.0,
+                            metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Exit on ROC crossing below exit threshold
+                    if let Some(prev) = prev_roc {
+                        if prev >= self.config.exit_threshold
+                            && roc_val < self.config.exit_threshold
+                        {
+                            self.reset_state();
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Sell,
+                                strength: 0.8,
+                                metadata: Some(format!(
+                                    "ROC Exit: ROC {:.2}% crossed below {:.1}%",
+                                    roc_val, self.config.exit_threshold
+                                )),
+                            });
+                            return Some(signals);
+                        }
+                    }
+                }
+            }
+            // === SHORT POSITION EXIT LOGIC ===
+            else if self.position == PositionState::Short {
+                if let Some(entry) = self.short_entry_price {
+                    let profit_pct = (entry - price) / entry * 100.0;
+
+                    // Take Profit
+                    if profit_pct >= self.config.take_profit {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!("Take Profit: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Stop Loss
+                    if profit_pct <= -self.config.stop_loss {
+                        self.reset_state();
+                        signals.push(Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Buy,
+                            strength: 1.0,
+                            metadata: Some(format!("Stop Loss: {:.1}%", profit_pct)),
+                        });
+                        return Some(signals);
+                    }
+
+                    // Exit on ROC crossing above -exit_threshold (positive momentum)
+                    if let Some(prev) = prev_roc {
+                        if prev <= -self.config.exit_threshold
+                            && roc_val > -self.config.exit_threshold
+                        {
+                            self.reset_state();
+                            signals.push(Signal {
+                                timestamp: bar.timestamp,
+                                symbol: "UNKNOWN".to_string(),
+                                signal_type: SignalType::Buy,
+                                strength: 0.8,
+                                metadata: Some(format!(
+                                    "ROC Exit: ROC {:.2}% crossed above {:.1}%",
+                                    roc_val, -self.config.exit_threshold
+                                )),
+                            });
+                            return Some(signals);
+                        }
                     }
                 }
             }
         }
 
-        // ENTRY LOGIC - ROC crosses above entry threshold
-        if self.last_position != SignalType::Buy {
+        // ENTRY LOGIC - Only enter if in Flat position
+        if self.position == PositionState::Flat {
             if let Some(prev) = prev_roc {
+                // === LONG ENTRY: ROC crosses above entry threshold ===
                 if prev <= self.config.entry_threshold && roc_val > self.config.entry_threshold {
                     // Calculate signal strength based on ROC magnitude
                     let strength = (roc_val / (self.config.entry_threshold * 2.0)).clamp(0.5, 1.0);
 
-                    self.last_position = SignalType::Buy;
-                    self.entry_price = Some(price);
+                    self.position = PositionState::Long;
+                    self.long_entry_price = Some(price);
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
@@ -289,6 +359,27 @@ impl Strategy for RocStrategy {
                         metadata: Some(format!(
                             "ROC Entry: ROC {:.2}% crossed above {:.1}%",
                             roc_val, self.config.entry_threshold
+                        )),
+                    }]);
+                }
+                // === SHORT ENTRY: ROC crosses below -entry threshold ===
+                else if prev >= -self.config.entry_threshold
+                    && roc_val < -self.config.entry_threshold
+                {
+                    // Calculate signal strength based on ROC magnitude
+                    let strength =
+                        (roc_val.abs() / (self.config.entry_threshold * 2.0)).clamp(0.5, 1.0);
+
+                    self.position = PositionState::Short;
+                    self.short_entry_price = Some(price);
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Sell,
+                        strength,
+                        metadata: Some(format!(
+                            "ROC Entry: ROC {:.2}% crossed below {:.1}%",
+                            roc_val, -self.config.entry_threshold
                         )),
                     }]);
                 }
