@@ -10,7 +10,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::{Atr, BollingerBands, Ema, Indicator, Sma};
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
@@ -134,8 +134,9 @@ pub struct VolSqueezeStrategy {
     kk_ema: Ema,
     atr: Atr,
     volume_sma: Sma,
-    last_position: SignalType,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
     volume_history: VecDeque<f64>,
     in_squeeze: bool,
     last_price: Option<f64>,
@@ -182,8 +183,9 @@ impl VolSqueezeStrategy {
             atr: Atr::new(config.kk_period),
             volume_sma: Sma::new(20),
             config,
-            last_position: SignalType::Hold,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
             volume_history: VecDeque::with_capacity(20),
             in_squeeze: false,
             last_price: None,
@@ -192,6 +194,13 @@ impl VolSqueezeStrategy {
             last_kk_upper: None,
             last_kk_lower: None,
         }
+    }
+
+    /// Reset all position-related state
+    fn reset_state(&mut self) {
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
     }
 
     pub fn config(&self) -> &VolSqueezeConfig {
@@ -295,14 +304,17 @@ impl Strategy for VolSqueezeStrategy {
         let _squeeze_just_ended = !current_squeeze && self.in_squeeze;
         self.in_squeeze = current_squeeze;
 
-        // ENTRY LOGIC (only when not in position)
-        if self.last_position == SignalType::Hold {
+        // ENTRY LOGIC (only when in Flat position)
+        if self.position == PositionState::Flat {
             // Store previous bar values for crossover detection
             let prev_bb_upper = self.last_bb_upper;
             let _prev_bb_lower = self.last_bb_lower;
             let _prev_kk_upper = self.last_kk_upper;
             let _prev_kk_lower = self.last_kk_lower;
-            let prev_price = self.last_price;
+            let prev_long_entry_price = self.long_entry_price;
+            let prev_short_entry_price = self.short_entry_price;
+            let prev_long_entry_price = self.long_entry_price;
+            let prev_short_entry_price = self.short_entry_price;
 
             // Check for breakout from squeeze
             if let Some(prev) = prev_price {
@@ -312,8 +324,8 @@ impl Strategy for VolSqueezeStrategy {
                 if volume_confirmed {
                     if let Some(prev_bb_u) = prev_bb_upper {
                         if prev <= prev_bb_u && price > bb_upper {
-                            self.last_position = SignalType::Buy;
-                            self.entry_price = Some(price);
+                            self.position = PositionState::Long;
+                                self.long_entry_price = Some(price);
 
                             return Some(vec![Signal {
                                 timestamp: bar.timestamp,
@@ -332,13 +344,15 @@ impl Strategy for VolSqueezeStrategy {
         }
 
         // EXIT LOGIC (only when in position)
-        if self.last_position == SignalType::Buy {
-            if let Some(entry) = self.entry_price {
-                let profit_pct = (price - entry) / entry * 100.0;
+        if self.position != PositionState::Flat {
+            // === LONG POSITION EXIT LOGIC ===
+            if self.position == PositionState::Long {
+                if let Some(entry) = self.long_entry_price {
+                    let profit_pct = (price - entry) / entry * 100.0;
 
                 // Take Profit
                 if profit_pct >= self.config.take_profit {
-                    self.last_position = SignalType::Hold;
+                    self.reset_state();
                     self.entry_price = None;
 
                     return Some(vec![Signal {
@@ -352,8 +366,7 @@ impl Strategy for VolSqueezeStrategy {
 
                 // Stop Loss
                 if profit_pct <= -self.config.stop_loss {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    self.reset_state();
 
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
@@ -366,8 +379,7 @@ impl Strategy for VolSqueezeStrategy {
 
                 // Exit if price re-enters squeeze (false breakout)
                 if self.in_squeeze && price < bb_middle {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
+                    self.reset_state();
 
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
@@ -492,10 +504,12 @@ mod tests {
     }
 
     #[test]
-    fn test_vol_squeeze_new_instance_clean_state() {
+     fn test_vol_squeeze_new_instance_clean_state() {
         let strategy = VolSqueezeStrategy::new(20, 2.0, 20, 1.5, 0.1);
-        assert_eq!(strategy.last_position, SignalType::Hold);
-        assert!(strategy.entry_price.is_none());
+        assert_eq!(strategy.position, PositionState::Flat);
+        assert_eq!(strategy.long_entry_price.is_none());
+        assert_eq!(strategy.short_entry_price.is_none());
+        assert_eq!(strategy.short_entry_price.is_none());
         assert!(!strategy.in_squeeze);
     }
 

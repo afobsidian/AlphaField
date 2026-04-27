@@ -14,7 +14,7 @@ use crate::framework::{
     StrategyMetadata, VolatilityLevel,
 };
 use crate::indicators::{Atr, Indicator, Sma};
-use alphafield_core::{Bar, Signal, SignalType, Strategy};
+use alphafield_core::{Bar, PositionState, Signal, SignalType, Strategy};
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fmt;
@@ -157,8 +157,9 @@ pub struct VolSizingStrategy {
     atr_history: VecDeque<f64>,
     fast_sma: Sma,
     slow_sma: Sma,
-    last_position: SignalType,
-    entry_price: Option<f64>,
+    position: PositionState,
+    long_entry_price: Option<f64>,
+    short_entry_price: Option<f64>,
     entry_size_pct: Option<f64>,
 }
 
@@ -199,6 +200,14 @@ impl VolSizingStrategy {
 
     pub fn config(&self) -> &VolSizingConfig {
         &self.config
+    }
+
+    /// Reset all position-related state
+    fn reset_state(&mut self) {
+        self.position = PositionState::Flat;
+        self.long_entry_price = None;
+        self.short_entry_price = None;
+        self.entry_size_pct = None;
     }
 
     /// Calculate volatility-adjusted position size
@@ -299,16 +308,16 @@ impl Strategy for VolSizingStrategy {
         // Calculate current position size based on volatility
         let current_size_pct = self.calculate_position_size(atr_value);
 
-        // ENTRY LOGIC (only when not in position)
-        if self.last_position == SignalType::Hold {
+        // ENTRY LOGIC (only when in Flat position)
+        if self.position == PositionState::Flat {
             // Check for golden cross (fast SMA crosses above slow SMA)
             // Simple crossover detection
             let prev_fast = self.fast_sma.value()? - (self.fast_sma.value()? - fast_ma);
             let prev_slow = self.slow_sma.value()? - (self.slow_sma.value()? - slow_ma);
 
             if prev_fast <= prev_slow && fast_ma > slow_ma {
-                self.last_position = SignalType::Buy;
-                self.entry_price = Some(price);
+                self.position = PositionState::Long;
+                self.long_entry_price = Some(price);
                 self.entry_size_pct = Some(current_size_pct);
 
                 return Some(vec![Signal {
@@ -330,8 +339,12 @@ impl Strategy for VolSizingStrategy {
         }
 
         // EXIT LOGIC (only when in position)
-        if self.last_position == SignalType::Buy {
-            if let Some(entry) = self.entry_price {
+        if self.position != PositionState::Flat {
+        // === LONG POSITION EXIT LOGIC ===
+            if self.position == PositionState::Long {
+            // === SHORT POSITION EXIT LOGIC ===
+                else if self.position == PositionState::Short {
+                    if let Some(entry) = self.long_entry_price {
                 let profit_pct = (price - entry) / entry * 100.0;
 
                 // Take Profit
@@ -385,7 +398,7 @@ impl Strategy for VolSizingStrategy {
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
                         symbol: "UNKNOWN".to_string(),
-                        signal_type: SignalType::Sell,
+                        signal_type: if self.position == PositionState::Long { SignalType::Sell } else { SignalType::Buy },
                         strength: exit_size / 100.0,
                         metadata: Some(format!(
                             "Death Cross Exit: {:.1}% profit, Fast MA ({:.2}) < Slow MA ({:.2}) (Position was {:.1}%)",
@@ -395,8 +408,6 @@ impl Strategy for VolSizingStrategy {
                 }
             }
         }
-
-        None
     }
 }
 
@@ -545,8 +556,9 @@ mod tests {
     #[test]
     fn test_vol_sizing_new_instance_clean_state() {
         let strategy = VolSizingStrategy::new(14, 10.0, 100);
-        assert_eq!(strategy.last_position, SignalType::Hold);
-        assert!(strategy.entry_price.is_none());
+        assert_eq!(strategy.position, PositionState::Flat);
+        assert_eq!(strategy.long_entry_price.is_none());
+        assert_eq!(strategy.short_entry_price.is_none());
         assert!(strategy.entry_size_pct.is_none());
         assert!(strategy.atr_baseline.is_none());
     }
