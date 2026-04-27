@@ -405,11 +405,9 @@ pub fn initialize_registry() -> Arc<StrategyRegistry> {
     }
 
     // Register VIX-Style strategy
-    let vix_style = Arc::new(
-        alphafield_strategy::strategies::volatility::VIXStyleStrategy::new(
-            14, 100, 0.90, 0.10, 1.5, 10.0, 5.0,
-        ),
-    ) as Arc<dyn StrategyWithMetadata>;
+    let vix_style =
+        Arc::new(alphafield_strategy::strategies::volatility::VIXStyleStrategy::new(14, 100))
+            as Arc<dyn StrategyWithMetadata>;
     if let Err(e) = registry.register(vix_style) {
         eprintln!("Failed to register VIX-Style strategy: {}", e);
     }

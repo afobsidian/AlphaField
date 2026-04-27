@@ -192,8 +192,9 @@ impl VolSizingStrategy {
             fast_sma: Sma::new(config.fast_period),
             slow_sma: Sma::new(config.slow_period),
             config,
-            last_position: SignalType::Hold,
-            entry_price: None,
+            position: PositionState::Flat,
+            long_entry_price: None,
+            short_entry_price: None,
             entry_size_pct: None,
         }
     }
@@ -293,6 +294,8 @@ impl Strategy for VolSizingStrategy {
 
     fn on_bar(&mut self, bar: &Bar) -> Option<Vec<Signal>> {
         let price = bar.close;
+        let prev_fast_ma = self.fast_sma.value();
+        let prev_slow_ma = self.slow_sma.value();
 
         // Update indicators
         let fast_ma = self.fast_sma.update(price)?;
@@ -311,48 +314,40 @@ impl Strategy for VolSizingStrategy {
         // ENTRY LOGIC (only when in Flat position)
         if self.position == PositionState::Flat {
             // Check for golden cross (fast SMA crosses above slow SMA)
-            // Simple crossover detection
-            let prev_fast = self.fast_sma.value()? - (self.fast_sma.value()? - fast_ma);
-            let prev_slow = self.slow_sma.value()? - (self.slow_sma.value()? - slow_ma);
+            if let (Some(prev_fast), Some(prev_slow)) = (prev_fast_ma, prev_slow_ma) {
+                if prev_fast <= prev_slow && fast_ma > slow_ma {
+                    self.position = PositionState::Long;
+                    self.long_entry_price = Some(price);
+                    self.entry_size_pct = Some(current_size_pct);
 
-            if prev_fast <= prev_slow && fast_ma > slow_ma {
-                self.position = PositionState::Long;
-                self.long_entry_price = Some(price);
-                self.entry_size_pct = Some(current_size_pct);
-
-                return Some(vec![Signal {
-                    timestamp: bar.timestamp,
-                    symbol: "UNKNOWN".to_string(),
-                    signal_type: SignalType::Buy,
-                    strength: current_size_pct / 100.0, // Normalize to 0-1 range
-                    metadata: Some(format!(
-                        "Golden Cross Entry: Fast MA ({:.2}) > Slow MA ({:.2}), \
-                        Position Size: {:.1}% (ATR: {:.2}, Baseline: {:.2})",
-                        fast_ma,
-                        slow_ma,
-                        current_size_pct,
-                        atr_value,
-                        self.atr_baseline.unwrap_or(atr_value)
-                    )),
-                }]);
+                    return Some(vec![Signal {
+                        timestamp: bar.timestamp,
+                        symbol: "UNKNOWN".to_string(),
+                        signal_type: SignalType::Buy,
+                        strength: current_size_pct / 100.0, // Normalize to 0-1 range
+                        metadata: Some(format!(
+                            "Golden Cross Entry: Fast MA ({:.2}) > Slow MA ({:.2}), \
+                            Position Size: {:.1}% (ATR: {:.2}, Baseline: {:.2})",
+                            fast_ma,
+                            slow_ma,
+                            current_size_pct,
+                            atr_value,
+                            self.atr_baseline.unwrap_or(atr_value)
+                        )),
+                    }]);
+                }
             }
         }
 
         // EXIT LOGIC (only when in position)
-        if self.position != PositionState::Flat {
-        // === LONG POSITION EXIT LOGIC ===
-            if self.position == PositionState::Long {
-            // === SHORT POSITION EXIT LOGIC ===
-                else if self.position == PositionState::Short {
-                    if let Some(entry) = self.long_entry_price {
+        if self.position == PositionState::Long {
+            if let Some(entry) = self.long_entry_price {
                 let profit_pct = (price - entry) / entry * 100.0;
 
                 // Take Profit
                 if profit_pct >= self.config.take_profit {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
                     let exit_size = self.entry_size_pct.unwrap_or(self.config.base_size_pct);
-                    self.entry_size_pct = None;
+                    self.reset_state();
 
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
@@ -368,10 +363,8 @@ impl Strategy for VolSizingStrategy {
 
                 // Stop Loss
                 if profit_pct <= -self.config.stop_loss {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
                     let exit_size = self.entry_size_pct.unwrap_or(self.config.base_size_pct);
-                    self.entry_size_pct = None;
+                    self.reset_state();
 
                     return Some(vec![Signal {
                         timestamp: bar.timestamp,
@@ -386,28 +379,27 @@ impl Strategy for VolSizingStrategy {
                 }
 
                 // Death cross (fast SMA crosses below slow SMA)
-                let prev_fast = self.fast_sma.value()? - (self.fast_sma.value()? - fast_ma);
-                let prev_slow = self.slow_sma.value()? - (self.slow_sma.value()? - slow_ma);
+                if let (Some(prev_fast), Some(prev_slow)) = (prev_fast_ma, prev_slow_ma) {
+                    if prev_fast >= prev_slow && fast_ma < slow_ma {
+                        let exit_size = self.entry_size_pct.unwrap_or(self.config.base_size_pct);
+                        self.reset_state();
 
-                if prev_fast >= prev_slow && fast_ma < slow_ma {
-                    self.last_position = SignalType::Hold;
-                    self.entry_price = None;
-                    let exit_size = self.entry_size_pct.unwrap_or(self.config.base_size_pct);
-                    self.entry_size_pct = None;
-
-                    return Some(vec![Signal {
-                        timestamp: bar.timestamp,
-                        symbol: "UNKNOWN".to_string(),
-                        signal_type: if self.position == PositionState::Long { SignalType::Sell } else { SignalType::Buy },
-                        strength: exit_size / 100.0,
-                        metadata: Some(format!(
-                            "Death Cross Exit: {:.1}% profit, Fast MA ({:.2}) < Slow MA ({:.2}) (Position was {:.1}%)",
-                            profit_pct, fast_ma, slow_ma, exit_size
-                        )),
-                    }]);
+                        return Some(vec![Signal {
+                            timestamp: bar.timestamp,
+                            symbol: "UNKNOWN".to_string(),
+                            signal_type: SignalType::Sell,
+                            strength: exit_size / 100.0,
+                            metadata: Some(format!(
+                                "Death Cross Exit: {:.1}% profit, Fast MA ({:.2}) < Slow MA ({:.2}) (Position was {:.1}%)",
+                                profit_pct, fast_ma, slow_ma, exit_size
+                            )),
+                        }]);
+                    }
                 }
             }
         }
+
+        None
     }
 }
 
@@ -557,8 +549,8 @@ mod tests {
     fn test_vol_sizing_new_instance_clean_state() {
         let strategy = VolSizingStrategy::new(14, 10.0, 100);
         assert_eq!(strategy.position, PositionState::Flat);
-        assert_eq!(strategy.long_entry_price.is_none());
-        assert_eq!(strategy.short_entry_price.is_none());
+        assert!(strategy.long_entry_price.is_none());
+        assert!(strategy.short_entry_price.is_none());
         assert!(strategy.entry_size_pct.is_none());
         assert!(strategy.atr_baseline.is_none());
     }
